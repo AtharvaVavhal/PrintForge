@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   Category,
+  CustomizationField,
   Prisma,
   Product,
   ProductImage,
@@ -20,15 +21,19 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
+import { CreateCustomizationFieldDto } from './dto/create-customization-field.dto';
+import { UpdateCustomizationFieldDto } from './dto/update-customization-field.dto';
 
 const PRODUCT_DETAIL_INCLUDE = {
   variants: true,
   images: { orderBy: { sortOrder: 'asc' as const } },
+  customizationFields: { orderBy: { sortOrder: 'asc' as const } },
 } satisfies Prisma.ProductInclude;
 
 type ProductWithRelations = Product & {
   variants: ProductVariant[];
   images: ProductImage[];
+  customizationFields: CustomizationField[];
 };
 
 @Injectable()
@@ -145,7 +150,7 @@ export class ProductsService {
             Prisma.InputJsonValue | undefined,
         },
       });
-      return { ...created, variants: [], images: [] };
+      return { ...created, variants: [], images: [], customizationFields: [] };
     } catch (err) {
       this.mapUniqueConstraintError(
         err,
@@ -252,6 +257,72 @@ export class ProductsService {
       throw new NotFoundException('Variant not found for this product');
     }
     return variant;
+  }
+
+  // ─── Customization fields (admin writes) ─────────────────────────────
+  // Public read is folded into GET /products/:slug (PRODUCT_DETAIL_INCLUDE
+  // above), not a separate endpoint — §20 groups "customization-fields"
+  // into the same admin-CRUD notes as variants/products, and §29 has
+  // Atharva shipping the GET /products/:slug contract as the thing Harshad's
+  // customization form UI consumes. Per-value validation and surcharge
+  // pricing live in customizations/customization-validation.(util|service).ts,
+  // for Cart (Phase 4) to call — not exposed here.
+
+  async createCustomizationField(
+    productId: string,
+    dto: CreateCustomizationFieldDto,
+  ): Promise<CustomizationField> {
+    await this.getProductOrThrow(productId);
+    return this.prisma.customizationField.create({
+      data: {
+        productId,
+        label: dto.label,
+        type: dto.type,
+        isRequired: dto.isRequired,
+        sortOrder: dto.sortOrder,
+        helpText: dto.helpText,
+        constraints: dto.constraints as Prisma.InputJsonValue | undefined,
+        surchargeType: dto.surchargeType,
+        surchargeAmount: dto.surchargeAmount,
+      },
+    });
+  }
+
+  async updateCustomizationField(
+    productId: string,
+    fieldId: string,
+    dto: UpdateCustomizationFieldDto,
+  ): Promise<CustomizationField> {
+    const field = await this.getCustomizationFieldOrThrow(productId, fieldId);
+    return this.prisma.customizationField.update({
+      where: { id: field.id },
+      data: {
+        label: dto.label,
+        type: dto.type,
+        isRequired: dto.isRequired,
+        sortOrder: dto.sortOrder,
+        helpText: dto.helpText,
+        constraints: dto.constraints as Prisma.InputJsonValue | undefined,
+        surchargeType: dto.surchargeType,
+        surchargeAmount: dto.surchargeAmount,
+      },
+    });
+  }
+
+  private async getCustomizationFieldOrThrow(
+    productId: string,
+    fieldId: string,
+  ): Promise<CustomizationField> {
+    await this.getProductOrThrow(productId);
+    const field = await this.prisma.customizationField.findUnique({
+      where: { id: fieldId },
+    });
+    if (!field || field.productId !== productId) {
+      throw new NotFoundException(
+        'Customization field not found for this product',
+      );
+    }
+    return field;
   }
 
   // ─── Images (admin writes) ───────────────────────────────────────────
