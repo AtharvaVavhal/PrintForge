@@ -21,6 +21,8 @@ import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { CreateCustomizationFieldDto } from './dto/create-customization-field.dto';
+import { UpdateCustomizationFieldDto } from './dto/update-customization-field.dto';
 
 /**
  * Owns (§20): GET /products, GET /products/:slug (Public); admin CRUD for
@@ -97,6 +99,33 @@ export class ProductsController {
     @Body() dto: UpdateVariantDto,
   ) {
     return this.productsService.updateVariant(id, variantId, dto);
+  }
+
+  /**
+   * Public read of a product's customization fields is not a separate
+   * endpoint — it's folded into GET /products/:slug above (§20 groups
+   * "customization-fields" with the admin-CRUD notes for products/variants;
+   * §29 has this module shipping the GET /products/:slug contract as the
+   * dynamic-form data source). Only admin create/update live here.
+   */
+  @Roles(Role.ADMIN)
+  @Post(':id/customization-fields')
+  @HttpCode(HttpStatus.CREATED)
+  async addCustomizationField(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateCustomizationFieldDto,
+  ) {
+    return this.productsService.createCustomizationField(id, dto);
+  }
+
+  @Roles(Role.ADMIN)
+  @Patch(':id/customization-fields/:fieldId')
+  async updateCustomizationField(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fieldId', ParseUUIDPipe) fieldId: string,
+    @Body() dto: UpdateCustomizationFieldDto,
+  ) {
+    return this.productsService.updateCustomizationField(id, fieldId, dto);
   }
 
   @Roles(Role.ADMIN)
