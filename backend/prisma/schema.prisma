@@ -1,0 +1,523 @@
+// PrintForge — Prisma schema
+// Architecture frozen v1.2 — docs/architecture/BLUEPRINT-v1.2.md §15 (Complete Schema),
+// §12 (Payment Architecture), §14 (Order State Machine).
+// Single database, single deployable (§16). Do not add tables/fields beyond
+// what §15 specifies without an Architecture Change Request.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum CustomizationFieldType {
+  TEXT
+  LOGO_UPLOAD
+  IMAGE_UPLOAD
+  DESIGN_FILE_UPLOAD
+  COLOR_SELECT
+  INSTRUCTIONS
+}
+
+enum SurchargeType {
+  NONE
+  FLAT
+  PER_CHARACTER
+}
+
+// Business state — §14's 9-value graph. Every transition is a
+// compare-and-swap; see orders/state-machine/order-state-machine.ts.
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PAYMENT_FAILED
+  CONFIRMED
+  IN_PRODUCTION
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+// Payment-infrastructure state, per attempt — §12.1. Distinct from OrderStatus.
+enum PaymentAttemptStatus {
+  INITIATED
+  CAPTURED
+  FAILED
+  ABANDONED
+}
+
+// §12.3 — durably-received / processed ledger for the two-phase webhook design.
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  PROCESSING_FAILED
+  IGNORED
+}
+
+// §12.2 — transactional outbox.
+enum OutboxEventType {
+  ORDER_PAID
+  ORDER_STATUS_CHANGED
+  PASSWORD_RESET_REQUESTED
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+// ─── Identity & Auth ────────────────────────────────────────────────────
+
+// Single-address MVP folded directly onto users — no addresses table
+// [RECONCILED, §15]. Never hard-deleted while owning any order (orders.userId
+// is RESTRICT). tokenVersion only ever increments (§23).
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  passwordHash String
+
+  role      Role     @default(CUSTOMER)
+  tokenVersion Int   @default(0)
+
+  failedLoginAttempts    Int       @default(0)
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String?
+  phone        String?
+
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  uploadedFiles       UploadedFile[]
+  cart                Cart?
+  orders              Order[]
+  orderStatusChanges  OrderStatusHistory[]
+  idempotencyKeys     IdempotencyKey[]
+
+  @@map("users")
+}
+
+// Session persistence, rotation, revocation — §23. Never updated after
+// revokedAt except by the chain-revocation sweep on reuse detection.
+model RefreshToken {
+  id              String    @id @default(uuid())
+  userId          String
+  tokenHash       String
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  replacedByTokenId String?
+
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// ─── Catalog ────────────────────────────────────────────────────────────
+
+// Flat, one nesting level (§8).
+model Category {
+  id              String     @id @default(uuid())
+  name            String
+  slug            String     @unique
+  parentCategoryId String?
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  parentCategory  Category?  @relation("CategoryToCategory", fields: [parentCategoryId], references: [id])
+  childCategories Category[] @relation("CategoryToCategory")
+  products        Product[]
+
+  @@index([parentCategoryId])
+  @@map("categories")
+}
+
+// Never hard-deleted once it appears in any OrderItem — isActive=false
+// instead; propagates transitively to images/variants/fields (§8).
+model Product {
+  id             String   @id @default(uuid())
+  categoryId     String
+  name           String
+  slug           String   @unique
+  basePrice      Decimal  @db.Decimal(10, 2)
+  minQuantity    Int
+  maxQuantity    Int?
+  specifications Json?
+  isActive       Boolean  @default(true)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category             Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  images               ProductImage[]
+  variants             ProductVariant[]
+  customizationFields  CustomizationField[]
+  cartItems            CartItem[]
+  orderItems           OrderItem[]
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductImage {
+  id                 String   @id @default(uuid())
+  productId          String
+  cloudinaryPublicId String
+  sortOrder          Int      @default(0)
+  isPrimary          Boolean  @default(false)
+
+  createdAt          DateTime @default(now())
+
+  product            Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+// Flat list of concrete purchasable combinations — never a generated
+// attribute matrix (§8).
+model ProductVariant {
+  id          String   @id @default(uuid())
+  productId   String
+  label       String
+  priceDelta  Decimal  @db.Decimal(10, 2) @default(0)
+  isAvailable Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product     Product     @relation(fields: [productId], references: [id])
+  cartItems   CartItem[]
+
+  @@unique([productId, label])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// Per-product field definitions (§9). Pricing-critical values are typed
+// columns, never buried in JSONB — surchargeType/surchargeAmount.
+model CustomizationField {
+  id               String                 @id @default(uuid())
+  productId        String
+  label            String
+  type             CustomizationFieldType
+  isRequired       Boolean                @default(false)
+  sortOrder        Int                    @default(0)
+  helpText         String?
+  constraints      Json?
+  surchargeType    SurchargeType          @default(NONE)
+  surchargeAmount  Decimal                @db.Decimal(10, 2) @default(0)
+
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  product          Product                       @relation(fields: [productId], references: [id])
+  cartItemValues   CartItemCustomization[]
+
+  @@index([productId])
+  @@map("customization_fields")
+}
+
+// ─── File Uploads ───────────────────────────────────────────────────────
+
+// uploadedByUserId is non-nullable by design — login precedes upload, no
+// guest-identity special case (§9/§22). Ownership re-verified on every
+// referencing write.
+model UploadedFile {
+  id                 String   @id @default(uuid())
+  cloudinaryPublicId String   @unique
+  uploadedByUserId   String
+  format             String
+  bytes              Int
+  resourceType       String
+  deliveryType       String
+
+  createdAt          DateTime @default(now())
+
+  uploadedBy         User                      @relation(fields: [uploadedByUserId], references: [id])
+  cartItemValues     CartItemCustomization[]
+  orderItemValues    OrderItemCustomization[]
+
+  @@index([uploadedByUserId])
+  @@map("uploaded_files")
+}
+
+// ─── Cart ───────────────────────────────────────────────────────────────
+
+// One open cart per user — always authenticated, no guest cart (§10).
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+
+  @@map("carts")
+}
+
+// Duplicate lines allowed by design — no line-merging on duplicate add (§10).
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  productId String
+  variantId String?
+  quantity  Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart            Cart                    @relation(fields: [cartId], references: [id])
+  product         Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant         ProductVariant?         @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  customizations  CartItemCustomization[]
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+// Ownership of uploadedFileId re-verified at write time (§9 Business Rule 12).
+model CartItemCustomization {
+  id                   String  @id @default(uuid())
+  cartItemId           String
+  customizationFieldId String
+  textValue            String?
+  uploadedFileId       String?
+
+  cartItem             CartItem            @relation(fields: [cartItemId], references: [id])
+  customizationField   CustomizationField  @relation(fields: [customizationFieldId], references: [id], onDelete: Restrict)
+  uploadedFile         UploadedFile?       @relation(fields: [uploadedFileId], references: [id])
+
+  @@map("cart_item_customizations")
+}
+
+// ─── Orders ─────────────────────────────────────────────────────────────
+
+// Never hard-deleted; status only via CAS; shipping fields immutable after
+// creation (§11, §24 invariant 6). razorpayOrderId's nullability alone
+// represents "has a Razorpay order been created" — not a separate status (§12.1).
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique
+  userId          String
+  status          OrderStatus @default(PENDING_PAYMENT)
+
+  subtotal        Decimal     @db.Decimal(10, 2)
+  total           Decimal     @db.Decimal(10, 2)
+  currency        String      @default("INR")
+
+  razorpayOrderId String?     @unique
+
+  // Immutable shipping snapshot — copied from User at creation time, never a
+  // live FK (§11 "Immutable shipping snapshot").
+  shippingRecipientName  String
+  shippingPhone          String
+  shippingAddressLine1   String
+  shippingAddressLine2   String?
+  shippingCity           String
+  shippingState          String
+  shippingPostalCode     String
+  shippingCountry        String
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items           OrderItem[]
+  paymentAttempts PaymentAttempt[]
+  statusHistory   OrderStatusHistory[]
+  idempotencyKey  IdempotencyKey?
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+
+// Snapshotted lines — never recomputed retroactively (§13.G).
+model OrderItem {
+  id                    String   @id @default(uuid())
+  orderId               String
+  productId             String?
+  productNameSnapshot   String
+  variantLabelSnapshot  String?
+  unitPriceSnapshot     Decimal  @db.Decimal(10, 2)
+  quantity              Int
+  lineTotal             Decimal  @db.Decimal(10, 2)
+
+  order          Order                     @relation(fields: [orderId], references: [id])
+  product        Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  customizations OrderItemCustomization[]
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// Referenced files never purged by the uploads orphan-cleanup poller (§24
+// invariant 7).
+model OrderItemCustomization {
+  id                 String  @id @default(uuid())
+  orderItemId        String
+  fieldLabelSnapshot String
+  textValue          String?
+  uploadedFileId     String?
+
+  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id])
+  uploadedFile  UploadedFile? @relation(fields: [uploadedFileId], references: [id], onDelete: Restrict)
+
+  @@map("order_item_customizations")
+}
+
+// Every attempt against an order — replaces `payments` (§12.1). ≤1 CAPTURED
+// attempt per order is DB-enforced via a partial unique index that Prisma's
+// schema DSL cannot express natively:
+//
+//   CREATE UNIQUE INDEX payment_attempts_order_captured_unique
+//     ON payment_attempts ("orderId") WHERE status = 'CAPTURED';
+//
+// TODO(payments): after the first `prisma migrate dev` generates the base
+// migration for this model, hand-edit the generated migration.sql to add the
+// statement above (Prisma will not regenerate/remove a manually-added SQL
+// statement on subsequent migrations as long as it isn't reintroduced by a
+// schema change to this model). Do NOT rely on application-level validation
+// alone for this invariant — see final report.
+model PaymentAttempt {
+  id                String               @id @default(uuid())
+  orderId           String
+  razorpayOrderId   String
+  razorpayPaymentId String?              @unique
+  amountPaise       BigInt
+  currency          String               @default("INR")
+  status            PaymentAttemptStatus @default(INITIATED)
+  failureCode       String?
+  failureReason     String?
+  method            String?
+  rawPayload        Json?
+
+  createdAt         DateTime             @default(now())
+  capturedAt        DateTime?
+  updatedAt         DateTime             @updatedAt
+
+  order             Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("payment_attempts")
+}
+
+// Append-only audit trail (§13.K/L).
+model OrderStatusHistory {
+  id             String       @id @default(uuid())
+  orderId        String
+  fromStatus     OrderStatus?
+  toStatus       OrderStatus
+  changedByUserId String?
+  note           String?
+
+  createdAt      DateTime     @default(now())
+
+  order          Order        @relation(fields: [orderId], references: [id])
+  changedBy      User?        @relation(fields: [changedByUserId], references: [id])
+
+  @@index([orderId])
+  @@map("order_status_history")
+}
+
+// ─── Payments infrastructure (internal-only, no REST surface — §20) ──────
+
+// Inserted only after signature verification (§12.3).
+model WebhookEvent {
+  id              String              @id @default(uuid())
+  razorpayEventId String              @unique
+  payload         Json
+  status          WebhookEventStatus  @default(RECEIVED)
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status])
+  @@map("webhook_events")
+}
+
+// Checkout dedup — claimed via INSERT...ON CONFLICT DO NOTHING (§13.G).
+model IdempotencyKey {
+  id            String    @id @default(uuid())
+  key           String    @unique
+  userId        String
+  endpoint      String
+  resultOrderId String?   @unique
+  expiresAt     DateTime
+
+  createdAt     DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id])
+  resultOrder   Order?    @relation(fields: [resultOrderId], references: [id])
+
+  @@map("idempotency_keys")
+}
+
+// Transactional outbox — inserted only in the same TXN as the state change
+// it announces (§12.2).
+model OutboxEvent {
+  id            String            @id @default(uuid())
+  eventType     OutboxEventType
+  aggregateType String
+  aggregateId   String
+  eventKey      String            @unique
+  payload       Json
+  status        OutboxEventStatus @default(PENDING)
+
+  attempts      Int               @default(0)
+  availableAt   DateTime          @default(now())
+  lastError     String?
+  processedAt   DateTime?
+
+  createdAt     DateTime          @default(now())
+
+  @@index([status, availableAt])
+  @@map("outbox_events")
+}
+
+// ─── Admin config ───────────────────────────────────────────────────────
+
+// Small admin-editable config (flat shipping fee, etc.) — no shipping-rules
+// engine in MVP (§15).
+model AppSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+// ─── Reserved, not built in MVP (§15) ─────────────────────────────────────
+// coupons, coupon_usages, reviews — intentionally absent. Adding them
+// requires an Architecture Change Request, not an ad-hoc migration.
