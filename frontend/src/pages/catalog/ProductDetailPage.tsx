@@ -5,7 +5,7 @@ import { formatPrice } from '@/utils/formatPrice'
 import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { ProductImagePlaceholder } from '@/features/catalog/ProductImagePlaceholder'
+import { ProductImage } from '@/features/catalog/ProductImage'
 import styles from './ProductDetailPage.module.css'
 
 /** Renders the product's own data only — variants, images,
@@ -42,7 +42,7 @@ export function ProductDetailPage() {
   return (
     <section className={styles.wrap}>
       <div className={styles.gallery}>
-        <ProductImagePlaceholder label={product.name} />
+        <ProductImage key={product.id} images={product.images} label={product.name} />
       </div>
 
       <div className={styles.info}>

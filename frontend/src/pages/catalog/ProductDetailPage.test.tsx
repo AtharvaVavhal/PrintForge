@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import MockAdapter from 'axios-mock-adapter'
 import { apiClient } from '@/services/api/client'
@@ -25,6 +25,8 @@ const SAMPLE_PRODUCT = {
   images: [],
   customizationFields: [],
 }
+
+const SAMPLE_IMAGE_URL = 'https://res.cloudinary.com/demo/image/upload/ceramic-mug.png'
 
 function renderAtSlug(slug: string) {
   return renderWithProviders(
@@ -59,6 +61,69 @@ describe('ProductDetailPage', () => {
     expect(screen.getByText('+₹25.00')).toBeInTheDocument()
     expect(screen.getByText('Discontinued')).toBeInTheDocument()
     expect(screen.getByText('· Unavailable')).toBeInTheDocument()
+    // SAMPLE_PRODUCT has no images — a real, expected state, not an error.
+    expect(
+      screen.getByRole('img', { name: 'Ceramic Mug — no image available' }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders a real <img> when the product has an image', async () => {
+    mock.onGet('/products/ceramic-mug').reply(200, {
+      success: true,
+      data: {
+        ...SAMPLE_PRODUCT,
+        images: [
+          {
+            id: 'img-1',
+            productId: 'prod-1',
+            cloudinaryPublicId: 'printforge/products/ceramic-mug',
+            resourceType: 'image',
+            deliveryType: 'upload',
+            url: SAMPLE_IMAGE_URL,
+            sortOrder: 0,
+            isPrimary: true,
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderAtSlug('ceramic-mug')
+
+    const img = await screen.findByRole('img', { name: 'Ceramic Mug' })
+    expect(img).toHaveAttribute('src', SAMPLE_IMAGE_URL)
+  })
+
+  it('falls back to the placeholder when the image fails to load', async () => {
+    mock.onGet('/products/ceramic-mug').reply(200, {
+      success: true,
+      data: {
+        ...SAMPLE_PRODUCT,
+        images: [
+          {
+            id: 'img-1',
+            productId: 'prod-1',
+            cloudinaryPublicId: 'printforge/products/ceramic-mug',
+            resourceType: 'image',
+            deliveryType: 'upload',
+            url: SAMPLE_IMAGE_URL,
+            sortOrder: 0,
+            isPrimary: true,
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    })
+
+    renderAtSlug('ceramic-mug')
+
+    const img = await screen.findByRole('img', { name: 'Ceramic Mug' })
+    fireEvent.error(img)
+
+    expect(screen.queryByRole('img', { name: 'Ceramic Mug' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('img', { name: 'Ceramic Mug — no image available' }),
+    ).toBeInTheDocument()
   })
 
   it('renders an error state for a product that does not exist', async () => {
