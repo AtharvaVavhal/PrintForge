@@ -185,6 +185,21 @@ export class OrdersService {
   }
 
   /**
+   * GET /admin/dashboard's recent-orders panel (§19, "minimal — no
+   * charts"). Same view assembly as the paginated admin/customer lists —
+   * one findMany, no separate count query since the dashboard has no
+   * pagination to report.
+   */
+  async adminRecentOrders(limit: number): Promise<OrderListItemView[]> {
+    const rows = await this.prisma.order.findMany({
+      include: ORDER_LIST_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    return rows.map((row) => this.toListItemView(row));
+  }
+
+  /**
    * §20: "Already-applied transition → 200; illegal → 409." Cancelling an
    * order with a captured payment flags it for manual refund (see
    * performCancellation) rather than calling Razorpay — same "record
@@ -206,6 +221,8 @@ export class OrdersService {
     const actor: Actor = { role: Role.ADMIN, actorId: adminId };
     if (dto.status === OrderStatus.CANCELLED) {
       await this.performCancellation(order, actor, dto.reason);
+    } else if (dto.status === OrderStatus.REFUNDED) {
+      await this.performRefundRecording(order, actor, dto.reason);
     } else {
       await this.prisma.$transaction((tx) =>
         this.transitionOrderWithHistory(
@@ -264,6 +281,40 @@ export class OrdersService {
         actor,
         reason,
         needsManualRefund,
+      );
+    });
+  }
+
+  /**
+   * §13.L / §32: "no in-app refund-initiation API in MVP" — a direct admin
+   * transition to REFUNDED only *records* that a refund already happened
+   * manually in the Razorpay dashboard. Closes the loop performCancellation
+   * opened: whichever Refund row it left PENDING for this order is marked
+   * PROCESSED here, in the same transaction as the order CAS + history +
+   * outbox. `updateMany` is a safe no-op if there isn't one — a direct
+   * PAID/CONFIRMED/IN_PRODUCTION/SHIPPED/DELIVERED -> REFUNDED transition
+   * with no prior cancellation never had a PENDING Refund row to begin
+   * with, and this phase doesn't invent one (no in-app refund creation).
+   */
+  private async performRefundRecording(
+    order: Order,
+    actor: Actor,
+    reason: string | undefined,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.refund.updateMany({
+        where: {
+          status: RefundStatus.PENDING,
+          paymentAttempt: { orderId: order.id },
+        },
+        data: { status: RefundStatus.PROCESSED },
+      });
+      await this.transitionOrderWithHistory(
+        tx,
+        order,
+        OrderStatus.REFUNDED,
+        actor,
+        reason,
       );
     });
   }
