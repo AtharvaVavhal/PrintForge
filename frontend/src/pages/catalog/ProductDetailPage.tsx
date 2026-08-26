@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useProduct } from '@/hooks/useProduct'
 import { getApiErrorMessage } from '@/utils/apiError'
@@ -6,15 +7,35 @@ import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { ProductImage } from '@/features/catalog/ProductImage'
+import {
+  CustomizationForm,
+  type CustomizationFormState,
+} from '@/features/customization/CustomizationForm'
 import styles from './ProductDetailPage.module.css'
 
-/** Renders the product's own data only — variants, images,
- * specifications. The customization form (customizationFields) is
- * Phase 3's job; this page reads that data's real shape (types/catalog.ts)
- * but doesn't render it as a form. */
+const EMPTY_CUSTOMIZATION_STATE: CustomizationFormState = {
+  values: [],
+  surcharge: 0,
+  isValid: true,
+}
+
+/** Renders the product's own data — variants, images, specifications —
+ * plus, since Phase 3, the dynamic customization form
+ * (features/customization/CustomizationForm). Variant selection and the
+ * actual Add to Cart request are Phase 4's job (Cart): variants below are
+ * still read-only, and the running total shown here is base price +
+ * customization surcharges only, deliberately excluding any variant
+ * priceDelta since nothing is selected yet. */
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>()
   const { data: product, isPending, isError, error } = useProduct(slug)
+  const [customization, setCustomization] = useState<CustomizationFormState>(
+    EMPTY_CUSTOMIZATION_STATE,
+  )
+
+  const handleCustomizationChange = useCallback((state: CustomizationFormState) => {
+    setCustomization(state)
+  }, [])
 
   if (isPending) {
     return (
@@ -39,6 +60,8 @@ export function ProductDetailPage() {
     )
   }
 
+  const total = Number(product.basePrice) + customization.surcharge
+
   return (
     <section className={styles.wrap}>
       <div className={styles.gallery}>
@@ -47,7 +70,7 @@ export function ProductDetailPage() {
 
       <div className={styles.info}>
         <h1>{product.name}</h1>
-        <p className={styles.price}>{formatPrice(product.basePrice)}</p>
+        <p className={styles.price}>{formatPrice(total)}</p>
         <p className={styles.quantityRange}>
           {product.maxQuantity
             ? `Order ${product.minQuantity}–${product.maxQuantity} at a time`
@@ -84,6 +107,11 @@ export function ProductDetailPage() {
             </ul>
           </div>
         )}
+
+        <CustomizationForm
+          fields={product.customizationFields}
+          onChange={handleCustomizationChange}
+        />
       </div>
     </section>
   )
