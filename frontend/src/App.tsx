@@ -9,6 +9,8 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
+import { ProductListPage } from '@/pages/catalog/ProductListPage'
+import { ProductDetailPage } from '@/pages/catalog/ProductDetailPage'
 import { AccountPage } from '@/pages/account/AccountPage'
 import { OrdersPage } from '@/pages/orders/OrdersPage'
 import { CheckoutPage } from '@/pages/checkout/CheckoutPage'
@@ -35,6 +37,8 @@ function App() {
               <Route path={ROUTES.REGISTER} element={<RegisterPage />} />
               <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
               <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
+              <Route path={ROUTES.PRODUCTS} element={<ProductListPage />} />
+              <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
 
               {/* Protected routes */}
               <Route element={<ProtectedRoute />}>

@@ -7,7 +7,15 @@ export const ROUTES = {
   REGISTER: '/register',
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',
+  PRODUCTS: '/products',
+  /** react-router pattern for the detail route — build an actual link with
+   * productDetailPath(slug) below, not this constant directly. */
+  PRODUCT_DETAIL: '/products/:slug',
   ACCOUNT: '/account',
   ORDERS: '/orders',
   CHECKOUT: '/checkout',
 } as const
+
+export function productDetailPath(slug: string): string {
+  return `/products/${encodeURIComponent(slug)}`
+}
