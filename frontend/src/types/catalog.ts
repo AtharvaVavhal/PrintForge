@@ -64,17 +64,20 @@ export interface ProductVariant {
 }
 
 /**
- * `cloudinaryPublicId` only — no computed URL ships in this response (see
- * the completion report: product images are uploaded with Cloudinary's
- * 'authenticated' delivery type, same as every other upload, so even a
- * correctly-guessed direct res.cloudinary.com URL would 401; there is no
- * VITE_CLOUDINARY_CLOUD_NAME env var yet either). Rendered as a deliberate
- * placeholder in this phase — see features/catalog/ProductImage.tsx.
+ * Backend fix (fix/atharva/product-image-delivery): product images now
+ * upload with Cloudinary's public 'upload' delivery type, and every read
+ * path (GET /products, GET /products/:slug) computes and attaches a
+ * working `url` — no more bare cloudinaryPublicId with nothing renderable.
+ * `url` can still 404/expire in principle (bad data, deleted Cloudinary
+ * asset) — always handle via <img onError>, see features/catalog/ProductImage.tsx.
  */
 export interface ProductImage {
   id: string
   productId: string
   cloudinaryPublicId: string
+  resourceType: string
+  deliveryType: string
+  url: string
   sortOrder: number
   isPrimary: boolean
   createdAt: string
