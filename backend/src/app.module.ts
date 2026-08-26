@@ -44,8 +44,13 @@ import { UsersModule } from './users/users.module';
     }),
     // TODO(common): move ttl/limit to AppConfig if per-environment tuning is
     // needed later; a static config is sufficient for scaffolding.
+    // skipIf disables throttling only under NODE_ENV=test (test/e2e/support/
+    // env.setup.ts sets this from .env.test) — every e2e request originates
+    // from the same loopback address, so without this the shared 20-req/60s
+    // IP limit trips well before it's the thing actually under test (§27).
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60_000, limit: 20 }],
+      skipIf: () => process.env.NODE_ENV === 'test',
     }),
     PrismaModule,
     HealthModule,
