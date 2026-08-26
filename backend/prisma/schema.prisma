@@ -426,9 +426,45 @@ model PaymentAttempt {
   updatedAt         DateTime             @updatedAt
 
   order             Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refunds           Refund[]
 
   @@index([orderId])
   @@map("payment_attempts")
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+// Records a refund triggered against a captured PaymentAttempt (Phase 7 —
+// order cancellation, customer or admin-initiated). §12.5 as originally
+// frozen states refunds are processed manually via the Razorpay dashboard
+// with no in-app refund-initiation API in MVP; this table and the in-app
+// trigger that writes to it are a deliberate, explicitly-authorized Phase 7
+// extension beyond that MVP scope (see the Phase 7 completion report).
+// PaymentAttempt.status intentionally stays CAPTURED (historically
+// accurate) rather than gaining a REFUNDED value — this table is the
+// source of truth for "money was returned," same separation of concerns
+// as Order.status (business state) vs PaymentAttempt.status (payment-
+// infrastructure state) in §12.1.
+model Refund {
+  id               String       @id @default(uuid())
+  paymentAttemptId String
+  razorpayRefundId String?      @unique
+  amountPaise      BigInt
+  status           RefundStatus @default(PENDING)
+  reason           String?
+  failureReason    String?
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  paymentAttempt   PaymentAttempt @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
+
+  @@index([paymentAttemptId])
+  @@map("refunds")
 }
 
 // Append-only audit trail (§13.K/L).

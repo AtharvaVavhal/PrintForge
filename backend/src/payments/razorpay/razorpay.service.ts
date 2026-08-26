@@ -17,6 +17,19 @@ export interface VerifyPaymentSignatureParams {
   razorpaySignature: string;
 }
 
+export interface CreateRefundParams {
+  razorpayPaymentId: string;
+  /** Bigint paise. Unlike createOrder, Razorpay's refund API requires a
+   * plain `number` (no string alternative) — see createRefund's guard. */
+  amountPaise: bigint;
+  reason?: string;
+}
+
+export interface RazorpayRefundResult {
+  id: string;
+  status: 'pending' | 'processed' | 'failed';
+}
+
 /**
  * Thin wrapper around the Razorpay SDK. Razorpay order is created once per
  * Order and reused across retries (§12) — never re-created on
@@ -85,6 +98,35 @@ export class RazorpayService implements OnModuleInit {
       receipt: params.receipt,
     });
     return { id: order.id };
+  }
+
+  /**
+   * Not currently called by anything (kept for a genuinely future phase —
+   * cheap to leave in place). §12.5 as originally frozen: "no in-app
+   * refund-initiation API in MVP." An initial Phase 7 pass wired
+   * order-cancellation to call this directly; that was reverted back to
+   * the frozen "record only, refund processed manually in the Razorpay
+   * dashboard" design — see OrdersService.performCancellation, which now
+   * just flags a Refund row PENDING instead. Unlike createOrder, the
+   * SDK's refund `amount` field is `number` only (no string escape
+   * hatch), so a real bigint→number conversion happens here; guarded
+   * against precision loss rather than silently trusted, even though
+   * unreachable at this app's order sizes.
+   */
+  async createRefund(
+    params: CreateRefundParams,
+  ): Promise<RazorpayRefundResult> {
+    const client = this.getClient();
+    if (params.amountPaise > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error(
+        `Refund amount ${params.amountPaise.toString()} paise exceeds safe integer precision for the Razorpay SDK`,
+      );
+    }
+    const refund = await client.payments.refund(params.razorpayPaymentId, {
+      amount: Number(params.amountPaise),
+      notes: params.reason ? { reason: params.reason } : undefined,
+    });
+    return { id: refund.id, status: refund.status };
   }
 
   /**
