@@ -88,6 +88,20 @@ export class CheckoutService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // §13.G: "SELECT cart FOR UPDATE" is the transaction's first step —
+      // this is what actually makes #14 (two simultaneous checkout tabs on
+      // the same cart, *different* Idempotency-Keys) race-safe. The
+      // idempotency claim below only dedupes two requests sharing the same
+      // key; without this lock, two concurrent transactions with different
+      // keys would both read the same cart items before either deleted
+      // them and both create an order. Locking first (rather than after
+      // the claim) also means a same-key retry that loses this lock race
+      // resumes only after the winner has committed its claim, so the
+      // raced-claim lookup below reliably sees the winner's resultOrderId.
+      const [lockedCart] = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM carts WHERE "userId" = ${userId} FOR UPDATE
+      `;
+
       const claim = await this.idempotencyService.claim(tx, {
         key: idempotencyKey,
         userId,
@@ -108,8 +122,12 @@ export class CheckoutService {
         );
       }
 
+      if (!lockedCart) {
+        throw new BadRequestException('Your cart is empty');
+      }
+
       const cart = await tx.cart.findUnique({
-        where: { userId },
+        where: { id: lockedCart.id },
         include: {
           items: {
             orderBy: { createdAt: 'asc' },
