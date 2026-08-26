@@ -1,11 +1,26 @@
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import * as Sentry from '@sentry/node';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AppConfig } from './common/config/configuration';
 import { API_PREFIX } from './common/constants/app.constants';
+
+// §30 "Sentry (both apps)" — initialized before Nest bootstraps (so it's
+// live for any error during module init too), guarded by SENTRY_DSN: a
+// no-op when unset, so local dev and the e2e suite (.env.test never sets
+// this) are unaffected. Error tracking only — no tracesSampleRate, so no
+// performance/tracing data is collected. Read from process.env directly
+// (not ConfigService) because the Nest DI container doesn't exist yet at
+// this point in bootstrap.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? 'development',
+  });
+}
 
 async function bootstrap(): Promise<void> {
   // rawBody: true — POST /payments/webhook needs the exact undecoded bytes
