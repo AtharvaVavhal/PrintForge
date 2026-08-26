@@ -1,0 +1,38 @@
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f7f7f8;
+  --color-border: #e2e2e6;
+  --color-text: #3a3a42;
+  --color-text-strong: #16161a;
+  --color-text-muted: #6b6b75;
+
+  --color-accent: #d8452c;
+  --color-accent-hover: #b8371f;
+  --color-accent-contrast: #ffffff;
+  --color-accent-ring: rgb(216 69 44 / 20%);
+
+  --color-danger: #c0341f;
+  --color-danger-bg: #fdf0ee;
+  --color-danger-ring: rgb(192 52 31 / 25%);
+
+  --color-success: #1c7c4d;
+  --color-success-bg: #eef8f1;
+  --color-success-ring: rgb(28 124 77 / 25%);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --container-max: 1120px;
+  --container-padding: 1.5rem;
+
+  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  color-scheme: light;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --container-padding: 1rem;
+  }
+}
