@@ -14,15 +14,20 @@ import { Role } from '../common/enums/role.enum';
 import { OrdersService } from '../orders/orders.service';
 import { AdminService } from './admin.service';
 import { ListAdminOrdersQueryDto } from './dto/list-admin-orders-query.dto';
+import { ListAdminCustomersQueryDto } from './dto/list-admin-customers-query.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
 /**
  * Owns (§19/§20): GET /admin/orders, GET /admin/orders/:id, PATCH
  * /admin/orders/:id/status (CAS-idempotent — already-applied transition
- * → 200, illegal → 409). GET /admin/dashboard, GET /admin/customers[/:id]
- * remain unimplemented (out of this phase's scope). Order CRUD delegates
- * to OrdersService — same pattern as CategoriesController sharing
- * ProductsService in Phase 2 — not duplicated into AdminService.
+ * → 200, illegal → 409, and a target status of REFUNDED also closes out
+ * the order's PENDING Refund row — see OrdersService.performRefundRecording
+ * — §13.L/§32's "record only, no in-app refund-initiation API"), GET
+ * /admin/dashboard (minimal — no charts), GET /admin/customers[/:id]
+ * (read-only). Order CRUD delegates to OrdersService — same pattern as
+ * CategoriesController sharing ProductsService in Phase 2 — not
+ * duplicated into AdminService; dashboard/customer aggregation is
+ * AdminService's own logic, per the admin.module.ts dependency-graph note.
  *
  * Route guards are UX-only on the frontend — every route here independently
  * enforces the role check server-side via RolesGuard (§18).
@@ -52,5 +57,20 @@ export class AdminController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.adminTransitionStatus(admin.id, id, dto);
+  }
+
+  @Get('dashboard')
+  async dashboard() {
+    return this.adminService.getDashboard();
+  }
+
+  @Get('customers')
+  async listCustomers(@Query() query: ListAdminCustomersQueryDto) {
+    return this.adminService.listCustomers(query);
+  }
+
+  @Get('customers/:id')
+  async customerDetail(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.getCustomerDetail(id);
   }
 }
