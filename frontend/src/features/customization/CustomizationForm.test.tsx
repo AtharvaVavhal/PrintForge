@@ -128,17 +128,25 @@ describe('CustomizationForm', () => {
     })
   })
 
-  it('rejects a file whose extension is outside constraints.allowedFormats without calling the API', async () => {
+  it('rejects an oversized file against constraints.maxFileSizeMb without calling the API', async () => {
+    // Deliberately correctly-typed (matches accept=".png,.jpeg") — a
+    // mismatched extension can't be used to exercise this path at all,
+    // since @testing-library/user-event's upload() respects the input's
+    // `accept` attribute the same way a real OS file picker would and
+    // silently refuses to select a non-matching file (event.target.files
+    // stays empty, handleFileChange never runs). File size isn't
+    // filtered by `accept`, so this is the one local-rejection rule that
+    // can actually be driven through a real upload() interaction.
     const user = userEvent.setup()
     renderWithProviders(<CustomizationForm fields={[LOGO_FIELD]} />)
 
-    const file = new File(['fake-pdf-bytes'], 'logo.pdf', { type: 'application/pdf' })
+    const oversizedFile = new File([new Uint8Array(6 * 1024 * 1024)], 'huge-logo.png', {
+      type: 'image/png',
+    })
     const input = screen.getByLabelText('Logo *', { selector: 'input' })
-    await user.upload(input, file)
+    await user.upload(input, oversizedFile)
 
-    expect(
-      await screen.findByText('Logo must be one of: png, jpeg'),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Logo must be at most 5MB')).toBeInTheDocument()
     expect(apiMock.history.post.length).toBe(0)
   })
 })
