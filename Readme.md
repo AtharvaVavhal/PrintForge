@@ -5,8 +5,8 @@
 **Custom printing, engineered like infrastructure.**
 
 [![Architecture](https://img.shields.io/badge/architecture-frozen%20v1.2-black)]()
-[![Backend](https://img.shields.io/badge/backend-live-brightgreen)]()
-[![Frontend](https://img.shields.io/badge/frontend-in%20development-orange)]()
+[![Backend](https://img.shields.io/badge/backend-scaffolded-yellow)]()
+[![Frontend](https://img.shields.io/badge/frontend-not%20started-lightgrey)]()
 [![License](https://img.shields.io/badge/license-proprietary-black)]()
 
 </div>
@@ -19,7 +19,7 @@ PrintForge is a modular commerce platform for custom printing. It takes a custom
 
 The system is built as a **modular monolith**: one deployable backend, clean domain boundaries, and PostgreSQL as the single source of truth for correctness. There are no microservices, no message brokers, and no distributed infrastructure that the current scale does not justify. Reliability comes from transactions, constraints, and idempotency — not from additional moving parts.
 
-This README documents the actual system: what exists, what is deliberately deferred, and why.
+This README documents the frozen architecture and the actual implementation state against it: what's built, what's scaffolded but empty, what's deliberately deferred, and why. See [Project Status](#project-status) for the honest line between "designed" and "implemented."
 
 ---
 
@@ -353,10 +353,10 @@ Razorpay (payments) · Cloudinary (media) · Resend (transactional email) · Sen
 
 **Production topology**
 
-| Layer | Domain | Host |
-|---|---|---|
-| Backend | `api.printforge.in` (DNS cutover pending) | Render |
-| Frontend | `www.printforge.in` (not yet deployed) | Vercel / Netlify |
+| Layer | Domain | Host | Status |
+|---|---|---|---|
+| Backend | `api.printforge.in` | Render | Planned — not yet deployed |
+| Frontend | `www.printforge.in` | Vercel / Netlify | Planned — not yet built |
 
 ---
 
@@ -364,12 +364,11 @@ Razorpay (payments) · Cloudinary (media) · Resend (transactional email) · Sen
 
 ```
 PrintForge/
-├── backend/                       # NestJS + Prisma API
+├── backend/                       # NestJS + Prisma API — scaffolded, see Project Status
 │   ├── src/
 │   ├── prisma/
 │   └── test/
-├── frontend/                      # React + TypeScript SPA
-│   └── src/
+├── frontend/                      # React + TypeScript SPA — not yet created
 ├── docs/
 │   └── architecture/
 │       └── BLUEPRINT-v1.2.md      # Canonical architecture specification
@@ -422,15 +421,12 @@ cd PrintForge
 cd backend
 cp .env.example .env
 npm install
+npx prisma generate      # required before build/tests — see Project Status
 npx prisma migrate dev
 npm run start:dev
-
-# frontend
-cd ../frontend
-cp .env.example .env
-npm install
-npm run dev
 ```
+
+There is no `frontend/` directory yet — frontend work has not started. The setup steps above will be added here once it exists.
 
 ### Environment Configuration
 
@@ -535,13 +531,17 @@ Nothing in this repository should be read as tax or legal guidance.
 
 ## Project Status
 
-Only the architecture is frozen; everything below reflects actual implementation state, not intent.
+Only the architecture is frozen; everything below reflects actual implementation state, not intent. Nothing in this repository is deployed.
 
-**Backend — complete.** Auth, catalog, customization, cart, checkout, payments, orders, customer account, and admin are implemented and covered by the full must-pass release suite. Deployed and live, with health checks, error tracking, and automated migrations on every deploy.
+**Backend — scaffolded, no business logic yet.** What's real: the full module/controller/service structure for all 9 domains (`auth`, `users`, `products`, `uploads`, `cart`, `checkout`, `payments`, `orders`, `notifications`, `admin`), wired through real NestJS dependency injection along the acyclic module graph in §17; the complete Prisma schema (20 models, 8 enums) matching §15 exactly, including FK `onDelete` semantics and indexes; the response envelope (`ResponseInterceptor` / `HttpExceptionFilter`); JWT auth (`JwtStrategy`, `JwtAuthGuard`, `RolesGuard`) with `tokenVersion`-based revocation; the full 9-state order state machine; and `main.ts` bootstrap (global prefix, Helmet, CORS, validation pipe).
 
-**Frontend — in progress.** Foundation (auth, routing, API client) and catalog browsing are implemented. Customization, cart, checkout, Razorpay integration, order history, customer account, and the admin UI are not yet built.
+What's not real yet: every domain service is a wired-but-empty stub — each one has a `TODO` comment citing the exact spec section it will implement, and zero route handlers or business logic exist. Nothing has been tested against a real database.
 
-**Remaining before production launch:** frontend build-out, a live payment and email smoke test, production credentials for Razorpay/Cloudinary/Resend, DNS cutover to `printforge.in`, and email domain authentication (SPF/DKIM/DMARC).
+**Blocking issue:** `npx prisma generate` cannot complete in the environment this was scaffolded in — `binaries.prisma.sh` is unreachable behind that environment's network egress allowlist (403 on the engine download, confirmed repeatedly, including with `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1`). Until `prisma generate` runs successfully against a real `DATABASE_URL` in an unrestricted environment, the Prisma Client types don't exist, `npm run build` fails (currently: `OrderStatus` not exported from `@prisma/client`), and `npx eslint` reports the same failure cascading through files that reference Prisma types.
+
+**Frontend — not started.** No `frontend/` directory or React code exists in this repository yet.
+
+**Remaining before any of the above claims can move up a tier:** run `prisma generate` / `migrate dev` in a normal (non-sandboxed) shell, hand-add the partial unique index Prisma's DSL can't express (`payment_attempts` — see the schema comment above the `PaymentAttempt` model), implement the actual business logic behind each TODO, then everything currently deferred for a real production launch: frontend build-out, a live payment and email smoke test, production credentials for Razorpay/Cloudinary/Resend, DNS cutover to `printforge.in`, and email domain authentication (SPF/DKIM/DMARC).
 
 ---
 
