@@ -1,7 +1,21 @@
+import { createHmac, timingSafeEqual } from 'crypto';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Razorpay from 'razorpay';
 import { AppConfig } from '../../common/config/configuration';
+
+export interface CreateRazorpayOrderParams {
+  /** Bigint paise — converted to a decimal string, never a float (see completion report). */
+  amountPaise: bigint;
+  currency: string;
+  receipt: string;
+}
+
+export interface VerifyPaymentSignatureParams {
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
 
 /**
  * Thin wrapper around the Razorpay SDK. Razorpay order is created once per
@@ -49,8 +63,75 @@ export class RazorpayService implements OnModuleInit {
     return this.client;
   }
 
-  // TODO(payments): createOrder(), verifySignature() (HMAC using
-  // RAZORPAY_KEY_SECRET), verifyWebhookSignature() (HMAC using
-  // RAZORPAY_WEBHOOK_SECRET — a distinct secret, §12). Each must call
-  // getClient() rather than referencing `client` directly.
+  /** Public key id — safe to hand to the frontend's Checkout.js widget. */
+  getKeyId(): string {
+    const config = this.configService.get('razorpay', { infer: true });
+    if (!config.keyId) {
+      throw new Error('RAZORPAY_KEY_ID is not configured.');
+    }
+    return config.keyId;
+  }
+
+  async createOrder(
+    params: CreateRazorpayOrderParams,
+  ): Promise<{ id: string }> {
+    const client = this.getClient();
+    // Passed as a decimal STRING, never Number(bigint) — the SDK's `amount`
+    // field accepts `number | string`; a string sidesteps any bigint→float
+    // precision question entirely (see completion report).
+    const order = await client.orders.create({
+      amount: params.amountPaise.toString(),
+      currency: params.currency,
+      receipt: params.receipt,
+    });
+    return { id: order.id };
+  }
+
+  /**
+   * Frontend-callback path (§12.1): `hmac_sha256(orderId|paymentId,
+   * key_secret)`. A valid signature is itself the proof of a successful
+   * capture — only Razorpay's servers, holding key_secret, can produce it.
+   */
+  verifySignature(params: VerifyPaymentSignatureParams): boolean {
+    const config = this.configService.get('razorpay', { infer: true });
+    if (!config.keySecret) {
+      throw new Error('RAZORPAY_KEY_SECRET is not configured.');
+    }
+    const expected = this.hmacSha256Hex(
+      `${params.razorpayOrderId}|${params.razorpayPaymentId}`,
+      config.keySecret,
+    );
+    return this.timingSafeEqualHex(expected, params.razorpaySignature);
+  }
+
+  /**
+   * Webhook path (§12.3): `hmac_sha256(rawRequestBody, webhook_secret)` —
+   * a distinct secret from key_secret. `rawBody` must be the exact
+   * undecoded bytes Razorpay signed (see main.ts's `rawBody: true`), not a
+   * re-serialized JSON.stringify of the parsed body.
+   */
+  verifyWebhookSignature(rawBody: string, signature: string): boolean {
+    const config = this.configService.get('razorpay', { infer: true });
+    if (!config.webhookSecret) {
+      throw new Error(
+        'RAZORPAY_WEBHOOK_SECRET is not configured — cannot verify webhook signatures.',
+      );
+    }
+    const expected = this.hmacSha256Hex(rawBody, config.webhookSecret);
+    return this.timingSafeEqualHex(expected, signature);
+  }
+
+  private hmacSha256Hex(message: string, secret: string): string {
+    return createHmac('sha256', secret).update(message).digest('hex');
+  }
+
+  /** Constant-time comparison — the SDK's own equivalent uses plain `===`. */
+  private timingSafeEqualHex(expectedHex: string, actualHex: string): boolean {
+    const expected = Buffer.from(expectedHex, 'utf8');
+    const actual = Buffer.from(actualHex, 'utf8');
+    if (expected.length !== actual.length) {
+      return false;
+    }
+    return timingSafeEqual(expected, actual);
+  }
 }
