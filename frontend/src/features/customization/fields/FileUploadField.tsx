@@ -94,8 +94,12 @@ export function FileUploadField({ field, value, onChange, error }: FileUploadFie
     }
   }
 
+  // localError (client-side format/size pre-check) takes priority over
+  // error (RHF/zod, e.g. "required") — once a rejected file clears the
+  // field back to blank, the required error would otherwise mask the
+  // more specific reason the file was rejected in the first place.
   const displayError =
-    error ?? localError ?? (upload.isError ? getApiErrorMessage(upload.error) : undefined)
+    localError ?? error ?? (upload.isError ? getApiErrorMessage(upload.error) : undefined)
   const showUploaded = Boolean(value) && Boolean(fileName) && !upload.isPending
 
   return (
