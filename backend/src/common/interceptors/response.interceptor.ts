@@ -9,6 +9,7 @@ import { map } from 'rxjs/operators';
 import {
   ApiSuccessResponse,
   PaginatedResult,
+  ResultWithMeta,
 } from '../types/api-response.interface';
 
 function isPaginatedResult(value: unknown): value is PaginatedResult<unknown> {
@@ -23,6 +24,18 @@ function isPaginatedResult(value: unknown): value is PaginatedResult<unknown> {
   );
 }
 
+function isResultWithMeta(value: unknown): value is ResultWithMeta<unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Partial<ResultWithMeta<unknown>>;
+  return (
+    'data' in candidate &&
+    typeof candidate.meta === 'object' &&
+    candidate.meta !== null
+  );
+}
+
 /**
  * Wraps every successful controller return value in the frozen
  * {success, data, meta} envelope (§21). Error shaping is the mirror-image
@@ -31,7 +44,10 @@ function isPaginatedResult(value: unknown): value is PaginatedResult<unknown> {
  * A handler returning a `PaginatedResult<T>` (`{items, meta}`) is detected
  * here and its `meta` is lifted to the envelope's top level, with `items`
  * becoming `data` — so list endpoints still return a plain array under
- * `data`, per §21.
+ * `data`, per §21. A handler returning a `ResultWithMeta<T>` (`{data,
+ * meta}`) gets the same top-level `meta` lift for a single-resource
+ * response that also needs side-channel summary data (e.g. a cart-item
+ * mutation returning the item plus the cart's current subtotal/itemCount).
  */
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<
@@ -48,6 +64,13 @@ export class ResponseInterceptor<T> implements NestInterceptor<
           return {
             success: true as const,
             data: result.items as T,
+            meta: result.meta,
+          };
+        }
+        if (isResultWithMeta(result)) {
+          return {
+            success: true as const,
+            data: result.data as T,
             meta: result.meta,
           };
         }

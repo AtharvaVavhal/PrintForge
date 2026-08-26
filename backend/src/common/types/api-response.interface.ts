@@ -36,3 +36,17 @@ export interface PaginatedResult<T> {
   items: T[];
   meta: PaginationMeta;
 }
+
+/**
+ * A handler returns this shape when the response body is a single
+ * resource (not a list) but the caller also needs some side-channel
+ * summary data alongside it — e.g. a cart-item mutation returning the
+ * item under `data` plus the cart's current subtotal/itemCount under
+ * `meta`, so the client doesn't need a follow-up GET. ResponseInterceptor
+ * detects it the same way it detects PaginatedResult and lifts `meta` to
+ * the envelope top level.
+ */
+export interface ResultWithMeta<T> {
+  data: T;
+  meta: Record<string, unknown>;
+}
