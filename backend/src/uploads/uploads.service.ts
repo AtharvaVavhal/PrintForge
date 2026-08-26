@@ -47,10 +47,18 @@ export class UploadsService {
     const purpose: 'product' | 'customization' =
       uploader?.role === Role.ADMIN ? 'product' : 'customization';
 
+    // §22's signed/authenticated delivery protects the confidentiality of
+    // private customer customization files — it has no purpose for public
+    // storefront product photos, which should be plain, cheaply
+    // CDN-cacheable URLs instead of gated behind a signed request every
+    // time. Customization uploads are unaffected: still 'authenticated'.
+    const deliveryType: 'upload' | 'authenticated' =
+      purpose === 'product' ? 'upload' : 'authenticated';
+
     const result = await this.cloudinary.uploadBuffer(file.buffer, {
       purpose,
       userId,
-      deliveryType: 'authenticated',
+      deliveryType,
     });
 
     return this.prisma.uploadedFile.create({
@@ -60,7 +68,7 @@ export class UploadsService {
         format: result.format ?? detectedMime.split('/')[1],
         bytes: result.bytes ?? file.size,
         resourceType: result.resource_type,
-        deliveryType: 'authenticated',
+        deliveryType,
       },
     });
   }
@@ -70,10 +78,30 @@ export class UploadsService {
   }
 
   getSignedUrl(file: UploadedFile): string {
-    return this.cloudinary.signedUrl(
+    return this.resolveUrl(
       file.cloudinaryPublicId,
       file.resourceType,
       file.deliveryType,
+    );
+  }
+
+  /**
+   * The generic form of getSignedUrl — for callers (ProductsService) that
+   * have a denormalized (publicId, resourceType, deliveryType) triple
+   * rather than a full UploadedFile row. Despite the name (kept as-is on
+   * CloudinaryService, see its own doc comment), this produces a plain
+   * unsigned URL when deliveryType is 'upload' and only signs for
+   * 'authenticated' — correct for both product and customization images.
+   */
+  resolveUrl(
+    cloudinaryPublicId: string,
+    resourceType: string,
+    deliveryType: string,
+  ): string {
+    return this.cloudinary.signedUrl(
+      cloudinaryPublicId,
+      resourceType,
+      deliveryType,
     );
   }
 }

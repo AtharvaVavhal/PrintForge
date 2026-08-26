@@ -30,9 +30,15 @@ const PRODUCT_DETAIL_INCLUDE = {
   customizationFields: { orderBy: { sortOrder: 'asc' as const } },
 } satisfies Prisma.ProductInclude;
 
+/** `url` is computed on every read (withImageUrl/withImageUrls below), never
+ * persisted — Cloudinary URL construction needs the API secret, which must
+ * never reach the browser, so the raw ProductImage row is never returned
+ * as-is from any endpoint. */
+type ProductImageWithUrl = ProductImage & { url: string };
+
 type ProductWithRelations = Product & {
   variants: ProductVariant[];
-  images: ProductImage[];
+  images: ProductImageWithUrl[];
   customizationFields: CustomizationField[];
 };
 
@@ -110,7 +116,7 @@ export class ProductsService {
     ]);
 
     return {
-      items,
+      items: items.map((item) => this.withImageUrls(item)),
       meta: {
         page,
         limit,
@@ -130,7 +136,7 @@ export class ProductsService {
       // never distinguishable from a nonexistent one via this endpoint.
       throw new NotFoundException('Product not found');
     }
-    return product;
+    return this.withImageUrls(product);
   }
 
   // ─── Products (admin writes) ─────────────────────────────────────────
@@ -150,7 +156,12 @@ export class ProductsService {
             Prisma.InputJsonValue | undefined,
         },
       });
-      return { ...created, variants: [], images: [], customizationFields: [] };
+      return {
+        ...created,
+        variants: [],
+        images: [] as ProductImageWithUrl[],
+        customizationFields: [],
+      };
     } catch (err) {
       this.mapUniqueConstraintError(
         err,
@@ -168,7 +179,7 @@ export class ProductsService {
       await this.getCategoryOrThrow(dto.categoryId);
     }
     try {
-      return await this.prisma.product.update({
+      const updated = await this.prisma.product.update({
         where: { id },
         data: {
           categoryId: dto.categoryId,
@@ -182,6 +193,7 @@ export class ProductsService {
         },
         include: PRODUCT_DETAIL_INCLUDE,
       });
+      return this.withImageUrls(updated);
     } catch (err) {
       this.mapUniqueConstraintError(
         err,
@@ -330,7 +342,7 @@ export class ProductsService {
   async addImage(
     productId: string,
     dto: CreateProductImageDto,
-  ): Promise<ProductImage> {
+  ): Promise<ProductImageWithUrl> {
     await this.getProductOrThrow(productId);
 
     const uploadedFile = await this.uploadsService.findById(dto.uploadedFileId);
@@ -338,14 +350,20 @@ export class ProductsService {
       throw new NotFoundException('Uploaded file not found');
     }
 
-    return this.prisma.productImage.create({
+    // resourceType/deliveryType are denormalized from the actual upload,
+    // not assumed — see the ProductImage model's own doc comment
+    // (schema.prisma) for why.
+    const created = await this.prisma.productImage.create({
       data: {
         productId,
         cloudinaryPublicId: uploadedFile.cloudinaryPublicId,
+        resourceType: uploadedFile.resourceType,
+        deliveryType: uploadedFile.deliveryType,
         sortOrder: dto.sortOrder ?? 0,
         isPrimary: dto.isPrimary ?? false,
       },
     });
+    return this.withImageUrl(created);
   }
 
   async removeImage(productId: string, imageId: string): Promise<void> {
@@ -360,6 +378,29 @@ export class ProductsService {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────
+
+  /** Computes a working delivery URL for every image on a product — see
+   * ProductImageWithUrl's doc comment for why this is always computed on
+   * read, never persisted. */
+  private withImageUrls<T extends { images: ProductImage[] }>(
+    product: T,
+  ): Omit<T, 'images'> & { images: ProductImageWithUrl[] } {
+    return {
+      ...product,
+      images: product.images.map((image) => this.withImageUrl(image)),
+    };
+  }
+
+  private withImageUrl(image: ProductImage): ProductImageWithUrl {
+    return {
+      ...image,
+      url: this.uploadsService.resolveUrl(
+        image.cloudinaryPublicId,
+        image.resourceType,
+        image.deliveryType,
+      ),
+    };
+  }
 
   private mapUniqueConstraintError(err: unknown, message: string): never {
     if (
