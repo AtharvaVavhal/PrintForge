@@ -5,8 +5,8 @@
 **Custom printing, engineered like infrastructure.**
 
 [![Architecture](https://img.shields.io/badge/architecture-frozen%20v1.2-black)]()
-[![Backend](https://img.shields.io/badge/backend-NestJS%20%2B%20PostgreSQL-black)]()
-[![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-black)]()
+[![Backend](https://img.shields.io/badge/backend-live-brightgreen)]()
+[![Frontend](https://img.shields.io/badge/frontend-in%20development-orange)]()
 [![License](https://img.shields.io/badge/license-proprietary-black)]()
 
 </div>
@@ -20,6 +20,28 @@ PrintForge is a modular commerce platform for custom printing. It takes a custom
 The system is built as a **modular monolith**: one deployable backend, clean domain boundaries, and PostgreSQL as the single source of truth for correctness. There are no microservices, no message brokers, and no distributed infrastructure that the current scale does not justify. Reliability comes from transactions, constraints, and idempotency — not from additional moving parts.
 
 This README documents the actual system: what exists, what is deliberately deferred, and why.
+
+---
+
+## Contents
+
+- [Product Experience](#product-experience)
+- [Architecture](#architecture)
+- [Payment Architecture](#payment-architecture)
+- [Checkout Consistency](#checkout-consistency)
+- [Order Lifecycle](#order-lifecycle)
+- [Webhook Reliability](#webhook-reliability)
+- [Transactional Outbox](#transactional-outbox)
+- [Database Architecture](#database-architecture)
+- [Security](#security)
+- [Technology Stack](#technology-stack)
+- [Repository Structure](#repository-structure)
+- [API Surface](#api-surface)
+- [Local Development](#local-development)
+- [Development Workflow](#development-workflow)
+- [Reliability / Failure Matrix](#reliability--failure-matrix)
+- [Tax & GST](#tax--gst)
+- [Project Status](#project-status)
 
 ---
 
@@ -47,8 +69,9 @@ Discover → Customize → Upload → Cart → Checkout → Payment → Producti
 | Area | Capability |
 |---|---|
 | Catalog management | Products, categories, variants, customization fields |
-| Order management | View orders, transition status, inspect payment history |
-| Operations | Platform-level settings |
+| Order management | View orders, transition status, inspect payment history, record refunds |
+| Customers | Read-only customer list and detail with order/spend context |
+| Dashboard | Order counts, revenue, and recent-order summary |
 
 ---
 
@@ -72,7 +95,6 @@ flowchart LR
     subgraph Client
         Web["React SPA<br/>www.printforge.in"]
     end
-
     subgraph Backend["NestJS Modular Monolith — api.printforge.in"]
         Auth[Auth Module]
         Catalog[Catalog Module]
@@ -83,7 +105,6 @@ flowchart LR
         Admin[Admin Module]
         Outbox[Outbox Poller]
     end
-
     DB[(PostgreSQL)]
     RZP[Razorpay]
     CLD[Cloudinary]
@@ -98,10 +119,10 @@ flowchart LR
     Orders --> DB
     Admin --> DB
     Outbox --> DB
-
     Checkout -->|Create Order| RZP
     Payments -->|Verify / Webhook| RZP
-    Catalog -->|Signed uploads| CLD
+    Catalog -->|Public delivery| CLD
+    Catalog -->|Signed delivery, customer uploads| CLD
     Outbox -->|Send email| RSD
 ```
 
@@ -119,7 +140,7 @@ Order 1 ──< PaymentAttempt N
              └─ ABANDONED
 ```
 
-**Enforced invariants:**
+**Enforced invariants**
 
 | Constraint | Enforced by |
 |---|---|
@@ -159,11 +180,9 @@ sequenceDiagram
 
 The database transaction commits **before** PrintForge talks to Razorpay. This is deliberate: the order's existence never depends on an external API call succeeding. If Razorpay order creation fails, the order remains valid in `PENDING_PAYMENT`, and `POST /checkout/orders/:id/retry-payment` repeats only the association step — not the entire checkout.
 
-The cart lock (`FOR UPDATE`) and the `INSERT ... ON CONFLICT` idempotency claim together make concurrent duplicate submissions collapse into a single order.
+The cart lock (`FOR UPDATE`) and the `INSERT ... ON CONFLICT` idempotency claim together make concurrent duplicate submissions collapse into a single order — including two different tabs racing on the same cart with two different idempotency keys, which the row lock alone resolves.
 
----
-
-## Order Shipping Snapshot
+### Order Shipping Snapshot
 
 Shipping details are copied onto the `orders` row at creation time — there is no separate `order_address_snapshots` table. Once written, these fields are immutable:
 
@@ -237,7 +256,6 @@ PENDING → PROCESSING → SENT
 A scheduled NestJS poller claims work with `SELECT ... FOR UPDATE SKIP LOCKED`, so multiple instances can run the poller safely without duplicate claims. Failed sends retry with exponential backoff, tracked via `lastError` and `availableAt`, up to 5 attempts before landing in the terminal `FAILED` state for manual inspection.
 
 **Event types:** `ORDER_PAID` · `ORDER_STATUS_CHANGED` · `PASSWORD_RESET_REQUESTED`
-
 **Provider:** Resend, sender `PrintForge <orders@printforge.in>`
 
 Email delivery failure never rolls back or corrupts order or payment state — the outbox is downstream of truth, not a dependency of it. There is one accepted edge case: if the process crashes between the provider accepting an email and the outbox row being marked `SENT`, the event is retried and the customer may receive a rare duplicate email. This is treated as acceptable — silently losing a notification is worse than an occasional duplicate.
@@ -248,17 +266,11 @@ Email delivery failure never rolls back or corrupts order or payment state — t
 
 ```
 users, refresh_tokens
-
 categories, products, product_images, product_variants, customization_fields
-
 uploaded_files
-
 carts, cart_items, cart_item_customizations
-
 orders, order_items, order_item_customizations, order_status_history
-
 payment_attempts, webhook_events, idempotency_keys, outbox_events
-
 app_settings
 ```
 
@@ -291,11 +303,10 @@ The common thread: every one of these encodes a "this must never happen twice" r
 
 **Authentication**
 
-- Short-lived JWT access tokens.
-- Refresh tokens delivered as an HttpOnly, Secure cookie:
-  `SameSite=Strict`, `Path=/api/v1/auth/refresh`, no `Domain` attribute set.
+- Short-lived JWT access tokens, held client-side in memory only — never `localStorage` or `sessionStorage`.
+- Refresh tokens delivered as an HttpOnly, Secure cookie: `SameSite=Strict`, `Path=/api/v1/auth/refresh`, no `Domain` attribute set.
 - Refresh-token rotation on every use.
-- Refresh-token reuse detection — a reused (already-rotated) token revokes the session.
+- Refresh-token reuse detection — a reused (already-rotated) token revokes the entire session chain.
 - Logout and logout-all via `tokenVersion` invalidation.
 
 **Login protection**
@@ -306,8 +317,10 @@ The common thread: every one of these encodes a "this must never happen twice" r
 
 **Transport & CORS**
 
-- CORS restricted to `https://www.printforge.in`, credentials enabled.
-- Frontend and backend share the registrable root domain `printforge.in`.
+- CORS restricted to the deployed frontend origin, credentials enabled — never a wildcard, enforced in production `NODE_ENV`.
+- Standard security headers (CSP, HSTS, X-Frame-Options, and related) applied platform-wide via Helmet.
+- Frontend and backend share the registrable root domain `printforge.in`, required for the refresh cookie's `SameSite=Strict` to survive across subdomains.
+- Errors are reported to Sentry when configured, scrubbed of request bodies and sensitive payloads before leaving the process.
 
 ### File Upload Security
 
@@ -320,7 +333,7 @@ Accepted formats: **PNG, JPEG, PDF**. Archive formats are not accepted, and the 
 | 10 MB size limit, enforced on the stream | Bound resource usage before the full file lands |
 | No archive extraction, no server-side decompression | Eliminate zip-bomb / archive-based attack surface |
 | No unnecessary server-side parsing | Cloudinary handles media processing, not the API |
-| Signed delivery URLs | Prevent unauthorized direct access to stored files |
+| Delivery type by purpose | Product catalog images are public and CDN-cacheable; customer file uploads are signed and access-gated — the two have different confidentiality needs and are treated differently |
 | Ownership verification on `uploadedFileId` | Prevent one user from referencing another user's file |
 | Per-user / per-IP upload rate limits | Bound abuse of the upload endpoint |
 | Orphan cleanup | Remove files uploaded but never attached to an order |
@@ -330,23 +343,20 @@ Accepted formats: **PNG, JPEG, PDF**. Archive formats are not accepted, and the 
 ## Technology Stack
 
 **Frontend**
-
-React · TypeScript · Vite · React Router · TanStack Query · Axios · React Hook Form · Zod · CSS Modules · CSS Variables · Lucide React
+React · TypeScript · Vite · React Router · TanStack Query · Axios · React Hook Form · Zod · CSS Modules · CSS Variables · Lucide React · Vitest + React Testing Library
 
 **Backend**
-
-NestJS · TypeScript · Prisma · PostgreSQL · REST + JSON · JWT · bcrypt · `@nestjs/schedule` · `@nestjs/throttler`
+NestJS · TypeScript · Prisma · PostgreSQL · REST + JSON · JWT · bcrypt · `@nestjs/schedule` · `@nestjs/throttler` · `@sentry/node`
 
 **Integrations**
-
-Razorpay (payments) · Cloudinary (media) · Resend (transactional email)
+Razorpay (payments) · Cloudinary (media) · Resend (transactional email) · Sentry (error tracking)
 
 **Production topology**
 
-| Layer | Domain | Suggested host |
+| Layer | Domain | Host |
 |---|---|---|
-| Frontend | `https://www.printforge.in` | Vercel / Netlify |
-| Backend | `https://api.printforge.in` | Railway / Render |
+| Backend | `api.printforge.in` (DNS cutover pending) | Render |
+| Frontend | `www.printforge.in` (not yet deployed) | Vercel / Netlify |
 
 ---
 
@@ -354,16 +364,17 @@ Razorpay (payments) · Cloudinary (media) · Resend (transactional email)
 
 ```
 PrintForge/
-├── apps/
-│   ├── web/                       # React + TypeScript frontend
-│   └── api/                       # NestJS + Prisma backend
-├── packages/                      # Shared types / config across apps
+├── backend/                       # NestJS + Prisma API
+│   ├── src/
+│   ├── prisma/
+│   └── test/
+├── frontend/                      # React + TypeScript SPA
+│   └── src/
 ├── docs/
 │   └── architecture/
 │       └── BLUEPRINT-v1.2.md      # Canonical architecture specification
-├── .github/                       # CI workflows, PR templates
-├── README.md
-└── package.json
+├── .gitignore
+└── README.md
 ```
 
 ---
@@ -372,18 +383,22 @@ PrintForge/
 
 | Domain | Responsibility |
 |---|---|
-| `/auth` | Login, logout, token refresh |
+| `/health` | Liveness and DB-connectivity probes |
+| `/auth` | Register, login, logout, token refresh, password reset |
+| `/users` | Authenticated user's own profile |
 | `/products` | Product catalog reads |
 | `/categories` | Category catalog reads |
+| `/uploads` | File uploads (product images, customization artwork) |
 | `/cart` | Cart and cart item management |
 | `/checkout` | Order creation and payment retry |
 | `/payments` | Payment verification and webhook ingestion |
-| `/orders` | Customer order reads |
-| `/admin` | Product, category, and order administration |
+| `/orders` | Customer order reads and cancellation |
+| `/admin` | Product, category, order, and customer administration |
 
 **Notable endpoints**
 
 ```
+GET    /health/deep
 POST   /checkout/orders
 POST   /checkout/orders/:id/retry-payment
 POST   /payments/verify
@@ -400,51 +415,57 @@ PATCH  /admin/orders/:id/status
 
 ```bash
 # clone
-git clone https://github.com/printforge/printforge.git
-cd printforge
-
-# install
-npm install
+git clone https://github.com/AtharvaVavhal/PrintForge.git
+cd PrintForge
 
 # backend
-cd apps/api
+cd backend
 cp .env.example .env
+npm install
 npx prisma migrate dev
 npm run start:dev
 
 # frontend
-cd apps/web
+cd ../frontend
 cp .env.example .env
+npm install
 npm run dev
 ```
 
 ### Environment Configuration
 
-**`apps/api/.env`**
+**`backend/.env`**
 
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/printforge
+NODE_ENV=development
+PORT=4000
+FRONTEND_URL=http://localhost:5173
+DATABASE_URL=postgresql://user:password@localhost:5432/printforge?schema=public
 
 JWT_ACCESS_SECRET=
-JWT_REFRESH_SECRET=
+JWT_ACCESS_EXPIRES_IN=15m
+REFRESH_TOKEN_SECRET=
+REFRESH_TOKEN_EXPIRES_IN=30d
 
 RAZORPAY_KEY_ID=
 RAZORPAY_KEY_SECRET=
 RAZORPAY_WEBHOOK_SECRET=
 
+RESEND_API_KEY=
+EMAIL_FROM_ADDRESS=no-reply@printforge.in
+
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
-RESEND_API_KEY=
-
-CORS_ORIGIN=https://www.printforge.in
+# Optional — Sentry.init is guarded by this; unset is a valid no-op locally
+SENTRY_DSN=
 ```
 
-**`apps/web/.env`**
+**`frontend/.env`**
 
 ```env
-VITE_API_BASE_URL=https://api.printforge.in
+VITE_API_BASE_URL=http://localhost:4000/api/v1
 VITE_RAZORPAY_KEY_ID=
 ```
 
@@ -452,17 +473,14 @@ VITE_RAZORPAY_KEY_ID=
 
 ## Development Workflow
 
-Feature branches only — no direct commits to `main`.
+Feature branches only — no direct commits to `main` or `develop`.
 
 ```
-feature/auth
-feature/catalog
-feature/product-page
-feature/cart
-feature/checkout
-feature/payment
-feature/orders
-feature/admin
+feature/<owner>/auth
+feature/<owner>/catalog
+feature/<owner>/checkout
+feature/<owner>/orders
+fix/<owner>/<short-description>
 ```
 
 ```
@@ -498,6 +516,7 @@ Problem → Impact Analysis → Review → Approval → Blueprint Update → Imp
 | Admin double-click on status change | Conditional update is a no-op on the second click |
 | Invalid order transition | `409 INVALID_TRANSITION` |
 | Retrying payment after a failed attempt | New `PaymentAttempt` row; same Order, same Razorpay Order ID |
+| Database connectivity lost | `/health/deep` reports it distinctly from process-alive `/health`, so a transient DB blip doesn't trigger a platform restart-loop |
 
 ---
 
@@ -514,21 +533,15 @@ Nothing in this repository should be read as tax or legal guidance.
 
 ---
 
-## Roadmap
+## Project Status
 
-**Foundation**
-Architecture freeze (Blueprint v1.2) · repository setup · database schema · backend foundation · frontend foundation
+Only the architecture is frozen; everything below reflects actual implementation state, not intent.
 
-**Product**
-Authentication · Catalog · Product customization · File uploads · Cart
+**Backend — complete.** Auth, catalog, customization, cart, checkout, payments, orders, customer account, and admin are implemented and covered by the full must-pass release suite. Deployed and live, with health checks, error tracking, and automated migrations on every deploy.
 
-**Commerce**
-Checkout · Payments · Orders · Admin
+**Frontend — in progress.** Foundation (auth, routing, API client) and catalog browsing are implemented. Customization, cart, checkout, Razorpay integration, order history, customer account, and the admin UI are not yet built.
 
-**Platform**
-Notifications · Testing · Security audit · Performance · Deployment · Production launch
-
-Only the architecture itself is marked finalized. No feature area above is represented as complete unless explicitly stated elsewhere in project tracking — this README describes the design, not a completion status.
+**Remaining before production launch:** frontend build-out, a live payment and email smoke test, production credentials for Razorpay/Cloudinary/Resend, DNS cutover to `printforge.in`, and email domain authentication (SPF/DKIM/DMARC).
 
 ---
 
