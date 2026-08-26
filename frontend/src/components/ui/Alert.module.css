@@ -1,0 +1,25 @@
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.error {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-ring);
+  color: var(--color-danger);
+}
+
+.success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-ring);
+  color: var(--color-success);
+}
+
+.info {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}

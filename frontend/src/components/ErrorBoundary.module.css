@@ -1,0 +1,7 @@
+.wrap {
+  max-width: 480px;
+  margin: 5rem auto;
+  padding: 0 var(--container-padding);
+  text-align: center;
+  color: var(--color-text-muted);
+}
