@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 import { AuthContext, type AuthContextValue } from '@/features/auth/authContext'
 
@@ -20,18 +21,36 @@ export function createMockAuthContext(
   }
 }
 
+/** A fresh, retry-disabled QueryClient per render — retry:false so a query
+ * mocked to fail reaches `isError` immediately instead of the app's real
+ * retry:1 default adding a second attempt (and latency) in every test. */
+export function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  })
+}
+
 interface RenderWithProvidersOptions {
   authValue?: AuthContextValue
   initialEntries?: string[]
+  queryClient?: QueryClient
 }
 
 export function renderWithProviders(
   ui: ReactElement,
-  { authValue = createMockAuthContext(), initialEntries = ['/'] }: RenderWithProvidersOptions = {},
+  {
+    authValue = createMockAuthContext(),
+    initialEntries = ['/'],
+    queryClient = createTestQueryClient(),
+  }: RenderWithProvidersOptions = {},
 ) {
   return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <AuthContext.Provider value={authValue}>{ui}</AuthContext.Provider>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={initialEntries}>
+        <AuthContext.Provider value={authValue}>{ui}</AuthContext.Provider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }

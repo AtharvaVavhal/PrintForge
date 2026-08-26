@@ -20,7 +20,7 @@ export function Header() {
         </NavLink>
 
         <nav className={styles.nav} aria-label="Main">
-          <NavLink to={ROUTES.HOME} end className={navLinkClassName}>
+          <NavLink to={ROUTES.PRODUCTS} className={navLinkClassName}>
             Shop
           </NavLink>
           {status === 'authenticated' && (
