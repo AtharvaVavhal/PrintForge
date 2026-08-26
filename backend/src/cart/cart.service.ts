@@ -78,6 +78,18 @@ export class CartService {
     return this.toCartView(full);
   }
 
+  /**
+   * Cart-aggregate summary only (subtotal/itemCount) — for mutation
+   * endpoints to attach to their response `meta` so the frontend doesn't
+   * need a follow-up GET /cart. One extra cart query per mutation.
+   */
+  async getCartTotals(
+    userId: string,
+  ): Promise<{ subtotal: string; itemCount: number }> {
+    const cart = await this.getCart(userId);
+    return { subtotal: cart.subtotal, itemCount: cart.itemCount };
+  }
+
   async addItem(userId: string, dto: AddCartItemDto): Promise<CartItemView> {
     const cart = await this.getOrCreateCart(userId);
     const product = await this.getActiveProductOrThrow(dto.productId);
