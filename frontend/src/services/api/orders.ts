@@ -1,8 +1,24 @@
-import type { ApiSuccessResponse } from '@/types/api'
-import type { OrderDetailView } from '@/types/orders'
+import type { ApiSuccessResponse, PaginationMeta } from '@/types/api'
+import type { ListOrdersParams, OrderDetailView, OrderListItemView } from '@/types/orders'
 import { apiClient } from './client'
 
-/** Thin wrapper over backend/src/orders/orders.controller.ts's GET /orders/:id. */
+/** Thin wrappers over backend/src/orders/orders.controller.ts. */
+
+export interface OrderListResult {
+  items: OrderListItemView[]
+  meta: PaginationMeta
+}
+
+/** GET /orders — confirmed live (curl) to be paginated identically to
+ * GET /products: {data: OrderListItemView[], meta: {page, limit, total,
+ * totalPages}}, already sorted newest-first server-side (orderBy
+ * createdAt desc, orders.service.ts). Same unwrap pattern as
+ * catalog.ts's fetchProducts. */
+export async function fetchOrders(params: ListOrdersParams = {}): Promise<OrderListResult> {
+  const res = await apiClient.get<ApiSuccessResponse<OrderListItemView[]>>('/orders', { params })
+  return { items: res.data.data, meta: res.data.meta as PaginationMeta }
+}
+
 export async function fetchOrder(orderId: string): Promise<OrderDetailView> {
   const res = await apiClient.get<ApiSuccessResponse<OrderDetailView>>(`/orders/${orderId}`)
   return res.data.data
