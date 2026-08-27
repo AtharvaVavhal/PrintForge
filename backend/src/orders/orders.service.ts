@@ -107,6 +107,35 @@ export class OrdersService {
     return `PF-${counter.padStart(6, '0')}`;
   }
 
+  /**
+   * Reviews' verified-purchase gate (PHASE-10-PROPOSAL.md §1.1/R1) — the
+   * exact OrderItem, on a DELIVERED order, that proves this user bought
+   * this specific product. Exposed here rather than ReviewsService reaching
+   * into order/order-item tables directly, matching this codebase's
+   * convention of routing a cross-module read through the owning module's
+   * service (e.g. checkout calls `generateOrderNumber` above rather than
+   * hand-rolling its own counter logic). Takes the caller's own transaction
+   * client, same reason `generateOrderNumber` does: the eligibility check
+   * has to compose atomically with whatever the caller does next inside
+   * its own transaction (here, creating the Review), not run as a separate
+   * pre-check a concurrent write could invalidate in between. Any
+   * qualifying item is sufficient — which one doesn't matter, since it's
+   * the same product either way.
+   */
+  async findDeliveredOrderItemForProduct(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    productId: string,
+  ): Promise<{ id: string } | null> {
+    return tx.orderItem.findFirst({
+      where: {
+        productId,
+        order: { userId, status: OrderStatus.DELIVERED },
+      },
+      select: { id: true },
+    });
+  }
+
   // ─── Customer-facing (GET /orders, GET /orders/:id, POST /orders/:id/cancel) ──
 
   async listOrdersForUser(
