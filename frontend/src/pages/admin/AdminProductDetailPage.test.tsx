@@ -1,0 +1,172 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
+import MockAdapter from 'axios-mock-adapter'
+import { apiClient } from '@/services/api/client'
+import { createTestQueryClient } from '@/test/test-utils'
+import type { Product } from '@/types/catalog'
+import { AdminProductDetailPage } from './AdminProductDetailPage'
+
+const CATEGORIES_RESPONSE = {
+  success: true,
+  data: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Drinkware', slug: 'drinkware', parentCategoryId: null }],
+}
+
+function buildProduct(overrides: Partial<Product> = {}): Product {
+  return {
+    id: 'prod-1',
+    categoryId: '11111111-1111-4111-8111-111111111111',
+    name: 'Ceramic Mug',
+    slug: 'ceramic-mug',
+    basePrice: '150.00',
+    minQuantity: 1,
+    maxQuantity: null,
+    specifications: null,
+    isActive: true,
+    createdAt: '2026-08-27T00:00:00.000Z',
+    updatedAt: '2026-08-27T00:00:00.000Z',
+    variants: [],
+    images: [],
+    customizationFields: [],
+    ...overrides,
+  }
+}
+
+function renderAt(pathname: string, state?: unknown) {
+  const queryClient = createTestQueryClient()
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[{ pathname, state }]}>
+        <Routes>
+          <Route path="/admin/products/:id" element={<AdminProductDetailPage />} />
+          <Route path="/admin/products" element={<p>Products list page</p>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+describe('AdminProductDetailPage', () => {
+  let mock: MockAdapter
+
+  beforeEach(() => {
+    mock = new MockAdapter(apiClient)
+    mock.onGet('/categories').reply(200, CATEGORIES_RESPONSE)
+  })
+
+  afterEach(() => {
+    mock.restore()
+  })
+
+  it('create mode (/admin/products/new): renders an empty form and POSTs on submit', async () => {
+    const user = userEvent.setup()
+    mock.onPost('/products').reply(201, { success: true, data: buildProduct({ id: 'prod-new' }) })
+
+    renderAt('/admin/products/new')
+
+    expect(await screen.findByRole('heading', { name: 'New product' })).toBeInTheDocument()
+    await user.selectOptions(await screen.findByLabelText('Category'), '11111111-1111-4111-8111-111111111111')
+    await user.type(screen.getByLabelText('Name'), 'Ceramic Mug')
+    await user.type(screen.getByLabelText('Slug'), 'ceramic-mug')
+    await user.type(screen.getByLabelText('Base price'), '150')
+    await user.clear(screen.getByLabelText('Minimum quantity'))
+    await user.type(screen.getByLabelText('Minimum quantity'), '1')
+    await user.click(screen.getByRole('button', { name: 'Create product' }))
+
+    await waitFor(() => expect(mock.history.post.length).toBe(1))
+    const body = JSON.parse(mock.history.post[0].data as string) as Record<string, unknown>
+    expect(body).toEqual({
+      categoryId: '11111111-1111-4111-8111-111111111111',
+      name: 'Ceramic Mug',
+      slug: 'ceramic-mug',
+      basePrice: 150,
+      minQuantity: 1,
+    })
+  })
+
+  it('edit mode with the product handed over via router state: pre-fills the form and PATCHes on save', async () => {
+    const user = userEvent.setup()
+    const product = buildProduct()
+    mock.onPatch('/products/prod-1').reply(200, {
+      success: true,
+      data: { ...product, name: 'Ceramic Mug (Large Batch)' },
+    })
+
+    renderAt('/admin/products/prod-1', { product })
+
+    expect(await screen.findByRole('heading', { name: 'Ceramic Mug' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Name')).toHaveValue('Ceramic Mug')
+    expect(screen.getByLabelText('Base price')).toHaveValue(150)
+
+    const nameField = screen.getByLabelText('Name')
+    await user.clear(nameField)
+    await user.type(nameField, 'Ceramic Mug (Large Batch)')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mock.history.patch.length).toBe(1))
+    expect(await screen.findByRole('heading', { name: 'Ceramic Mug (Large Batch)' })).toBeInTheDocument()
+  })
+
+  it('without router state (direct navigation), shows a message pointing back to the list instead of erroring', async () => {
+    renderAt('/admin/products/prod-1')
+
+    expect(
+      await screen.findByText(/needs to be opened from the products list/i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to products' })).toHaveAttribute(
+      'href',
+      '/admin/products',
+    )
+  })
+
+  it('deactivating a product DELETEs it and navigates back to the products list', async () => {
+    const user = userEvent.setup()
+    const product = buildProduct()
+    mock.onDelete('/products/prod-1').reply(200, { success: true, data: { message: 'Product deactivated' } })
+
+    renderAt('/admin/products/prod-1', { product })
+
+    await user.click(await screen.findByRole('button', { name: 'Deactivate' }))
+
+    await waitFor(() => expect(mock.history.delete.length).toBe(1))
+    expect(await screen.findByText('Products list page')).toBeInTheDocument()
+  })
+
+  it('an already-inactive product shows no Deactivate button', async () => {
+    const product = buildProduct({ isActive: false })
+    renderAt('/admin/products/prod-1', { product })
+
+    await screen.findByRole('heading', { name: 'Ceramic Mug' })
+    expect(screen.getByText('Inactive')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+  })
+
+  it('adding a variant POSTs to /products/:id/variants and reflects it without a page refetch', async () => {
+    const user = userEvent.setup()
+    const product = buildProduct()
+    mock.onPost('/products/prod-1/variants').reply(201, {
+      success: true,
+      data: {
+        id: 'var-1',
+        productId: 'prod-1',
+        label: 'Large',
+        priceDelta: '25.00',
+        isAvailable: true,
+        createdAt: '2026-08-27T00:00:00.000Z',
+        updatedAt: '2026-08-27T00:00:00.000Z',
+      },
+    })
+
+    renderAt('/admin/products/prod-1', { product })
+
+    await screen.findByRole('heading', { name: 'Ceramic Mug' })
+    await user.click(screen.getByRole('button', { name: 'Add variant' }))
+    await user.type(screen.getByLabelText('Label'), 'Large')
+    await user.click(screen.getByRole('button', { name: 'Add variant' }))
+
+    await waitFor(() => expect(mock.history.post.length).toBe(1))
+    expect(await screen.findByText('Large')).toBeInTheDocument()
+  })
+})

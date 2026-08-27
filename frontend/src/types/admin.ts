@@ -11,6 +11,7 @@
  * fields layered on top.
  */
 import type { OrderListItemView, OrderStatus } from './orders'
+import type { CustomizationFieldType, SurchargeType } from './catalog'
 
 export interface OrderStatusCount {
   status: OrderStatus
@@ -74,3 +75,61 @@ export interface AdminCustomerDetailView extends AdminCustomerListItemView {
   totalSpend: string
   recentOrders: OrderListItemView[]
 }
+
+/**
+ * Catalog admin-write payloads — mirror backend/src/products/dto/*.ts
+ * exactly (confirmed against the actual DTO source, not the "name,
+ * description, basePrice..." shorthand from the phase brief: there is no
+ * `description` field on Product, per types/catalog.ts's own note, and
+ * `isActive` is never PATCHable — only DELETE /products/:id flips it, and
+ * there is no reactivate endpoint at all).
+ */
+export interface CreateProductPayload {
+  categoryId: string
+  name: string
+  slug: string
+  basePrice: number
+  minQuantity: number
+  maxQuantity?: number
+  specifications?: Record<string, unknown>
+}
+
+/** Deliberately excludes `isActive` — same reason UpdateProductDto does. */
+export type UpdateProductPayload = Partial<CreateProductPayload>
+
+export interface CreateVariantPayload {
+  label: string
+  priceDelta?: number
+  isAvailable?: boolean
+}
+
+export type UpdateVariantPayload = Partial<CreateVariantPayload>
+
+export interface CreateCustomizationFieldPayload {
+  label: string
+  type: CustomizationFieldType
+  isRequired?: boolean
+  sortOrder?: number
+  helpText?: string
+  constraints?: Record<string, unknown>
+  surchargeType?: SurchargeType
+  surchargeAmount?: number
+}
+
+export type UpdateCustomizationFieldPayload = Partial<CreateCustomizationFieldPayload>
+
+/** POST /products/:id/images references an existing POST /uploads result
+ * — never a raw file body on this endpoint. */
+export interface CreateProductImagePayload {
+  uploadedFileId: string
+  sortOrder?: number
+  isPrimary?: boolean
+}
+
+export interface CreateCategoryPayload {
+  name: string
+  slug: string
+  parentCategoryId?: string
+}
+
+export type UpdateCategoryPayload = Partial<CreateCategoryPayload>
