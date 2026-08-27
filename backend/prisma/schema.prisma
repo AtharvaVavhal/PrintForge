@@ -340,6 +340,12 @@ model Order {
   status          OrderStatus @default(PENDING_PAYMENT)
 
   subtotal        Decimal     @db.Decimal(10, 2)
+  // Stored, not derived — checkout.service.ts used to compute this on read
+  // as `total - subtotal`, which was only correct while discount was
+  // hardcoded to zero (no coupons yet). Written once at order-creation time
+  // from the same getShippingFeePaise() value that feeds computeOrderTotal,
+  // and read back verbatim thereafter (docs/architecture/PHASE-10-PROPOSAL.md §2.5).
+  shippingFee     Decimal     @db.Decimal(10, 2)
   total           Decimal     @db.Decimal(10, 2)
   currency        String      @default("INR")
 

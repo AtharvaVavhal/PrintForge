@@ -31,8 +31,12 @@ export interface OrderView {
   orderNumber: string;
   status: OrderStatus;
   subtotal: string;
-  /** Derived (total − subtotal) for display — §15's Order model has no
-   * stored shippingFee column; discount is always 0 in MVP (§32). */
+  /** Read from the stored `orders.shippingFee` column (added post-MVP,
+   * docs/architecture/PHASE-10-PROPOSAL.md §2.5) — no longer derived as
+   * `total - subtotal` on read. That derivation was only correct while
+   * discount was hardcoded to zero; it silently breaks the moment a
+   * non-zero discount exists, since total = subtotal - discount +
+   * shippingFee, not subtotal + shippingFee. */
   shippingFee: string;
   total: string;
   currency: string;
