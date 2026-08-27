@@ -1,0 +1,36 @@
+.wrap {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 2.5rem var(--container-padding) 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.header h1 {
+  margin: 0;
+}
+
+.inactiveFlag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.skeletonBlock {
+  height: 12rem;
+  width: 100%;
+  max-width: 40rem;
+}
