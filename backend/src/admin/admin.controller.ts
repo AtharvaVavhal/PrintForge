@@ -12,6 +12,8 @@ import type { AuthenticatedUser } from '../common/decorators/current-user.decora
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
 import { OrdersService } from '../orders/orders.service';
+import { ReviewsService } from '../reviews/reviews.service';
+import { UpdateReviewStatusDto } from '../reviews/dto/update-review-status.dto';
 import { AdminService } from './admin.service';
 import { ListAdminOrdersQueryDto } from './dto/list-admin-orders-query.dto';
 import { ListAdminCustomersQueryDto } from './dto/list-admin-customers-query.dto';
@@ -24,9 +26,12 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
  * the order's PENDING Refund row — see OrdersService.performRefundRecording
  * — §13.L/§32's "record only, no in-app refund-initiation API"), GET
  * /admin/dashboard (minimal — no charts), GET /admin/customers[/:id]
- * (read-only). Order CRUD delegates to OrdersService — same pattern as
- * CategoriesController sharing ProductsService in Phase 2 — not
- * duplicated into AdminService; dashboard/customer aggregation is
+ * (read-only), and — as of Phase 10's Reviews half — PATCH
+ * /admin/reviews/:id/status (moderation; unlike order status there's no
+ * transition graph to enforce, any ReviewStatus to any ReviewStatus is
+ * valid). Order/review mutation delegates to OrdersService/ReviewsService —
+ * same pattern as CategoriesController sharing ProductsService in Phase 2 —
+ * not duplicated into AdminService; dashboard/customer aggregation is
  * AdminService's own logic, per the admin.module.ts dependency-graph note.
  *
  * Route guards are UX-only on the frontend — every route here independently
@@ -38,6 +43,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly ordersService: OrdersService,
+    private readonly reviewsService: ReviewsService,
   ) {}
 
   @Get('orders')
@@ -72,5 +78,13 @@ export class AdminController {
   @Get('customers/:id')
   async customerDetail(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.getCustomerDetail(id);
+  }
+
+  @Patch('reviews/:id/status')
+  async updateReviewStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateReviewStatusDto,
+  ) {
+    return this.reviewsService.adminUpdateStatus(id, dto);
   }
 }

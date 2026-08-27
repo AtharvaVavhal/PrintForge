@@ -115,6 +115,7 @@ model User {
   orders              Order[]
   orderStatusChanges  OrderStatusHistory[]
   idempotencyKeys     IdempotencyKey[]
+  reviews             Review[]
 
   @@map("users")
 }
@@ -171,6 +172,14 @@ model Product {
   specifications Json?
   isActive       Boolean  @default(true)
 
+  // Denormalized from `reviews` — recomputed via a scoped aggregate inside
+  // the same transaction as any review create/edit/status-change, never
+  // computed at read time (PHASE-10-PROPOSAL.md §1.1/R7). avgRating stays
+  // null until the first PUBLISHED review exists, so a product page can
+  // render "No reviews yet" rather than a misleading 0.00.
+  avgRating      Decimal? @db.Decimal(3, 2)
+  reviewCount    Int      @default(0)
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -180,6 +189,7 @@ model Product {
   customizationFields  CustomizationField[]
   cartItems            CartItem[]
   orderItems           OrderItem[]
+  reviews              Review[]
 
   @@index([categoryId])
   @@map("products")
@@ -390,6 +400,7 @@ model OrderItem {
   order          Order                     @relation(fields: [orderId], references: [id])
   product        Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
   customizations OrderItemCustomization[]
+  reviews        Review[]
 
   @@index([orderId])
   @@map("order_items")
@@ -569,6 +580,49 @@ model AppSetting {
   @@map("app_settings")
 }
 
+// ─── Reviews (Phase 10, docs/architecture/PHASE-10-PROPOSAL.md Part A) ────
+
+enum ReviewStatus {
+  PUBLISHED
+  REJECTED
+  REMOVED
+}
+
+// One review per (product, user) — the unique constraint below, not just
+// app-level logic (§1.1/R6). `orderItemId` is the verified-purchase anchor
+// (§1.1/R1/R4): the exact OrderItem, on a DELIVERED order, that proves this
+// user bought this specific product — never trusted from the client, always
+// resolved server-side (ReviewsService.findEligibleOrderItem). Anchoring on
+// `orderItemId` rather than `orderId` matters because a single order can
+// contain items for several different products; `orderId` alone would let a
+// review of Product B piggyback on an order that only actually contained
+// Product A. `status` defaults PUBLISHED (§1.5/R3 — publish immediately,
+// moderate after the fact) but exists from day one so pre-moderation is a
+// one-line default change later, not a migration.
+model Review {
+  id          String       @id @default(uuid())
+  productId   String
+  userId      String
+  orderItemId String
+  rating      Int
+  bodyText    String?
+  status      ReviewStatus @default(PUBLISHED)
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, userId])
+  @@index([productId])
+  @@index([status])
+  @@map("reviews")
+}
+
 // ─── Reserved, not built in MVP (§15) ─────────────────────────────────────
-// coupons, coupon_usages, reviews — intentionally absent. Adding them
-// requires an Architecture Change Request, not an ad-hoc migration.
+// coupons, coupon_usages remain reserved-schema-only — adding them requires
+// an Architecture Change Request, not an ad-hoc migration. `reviews` above
+// is the Phase 10 Reviews half, implemented per PHASE-10-PROPOSAL.md Part A
+// (Coupons, Part B, is separate and still reserved).
