@@ -9,19 +9,8 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { formatPrice } from '@/utils/formatPrice'
 import { getApiErrorMessage } from '@/utils/apiError'
 import type { OrderStatus } from '@/types/orders'
+import { ORDER_STATUS_LABELS, orderStatusTone } from '@/features/orders/orderStatus'
 import styles from './OrderDetailPage.module.css'
-
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  PENDING_PAYMENT: 'Awaiting payment',
-  PAID: 'Payment confirmed',
-  PAYMENT_FAILED: 'Payment failed',
-  CONFIRMED: 'Confirmed',
-  IN_PRODUCTION: 'In production',
-  SHIPPED: 'Shipped',
-  DELIVERED: 'Delivered',
-  CANCELLED: 'Cancelled',
-  REFUNDED: 'Refunded',
-}
 
 const RETRYABLE_STATUSES = new Set<OrderStatus>(['PENDING_PAYMENT', 'PAYMENT_FAILED'])
 
@@ -90,15 +79,14 @@ export function OrderDetailPage() {
     )
   }
 
-  const isPaid = order.status !== 'PENDING_PAYMENT' && order.status !== 'PAYMENT_FAILED' && order.status !== 'CANCELLED'
   const canRetryPayment = RETRYABLE_STATUSES.has(order.status)
 
   return (
     <section className={styles.wrap}>
       <div className={styles.header}>
         <h1>Order {order.orderNumber}</h1>
-        <span className={styles.statusBadge} data-tone={isPaid ? 'success' : order.status === 'PAYMENT_FAILED' ? 'error' : 'info'}>
-          {STATUS_LABELS[order.status]}
+        <span className={styles.statusBadge} data-tone={orderStatusTone(order.status)}>
+          {ORDER_STATUS_LABELS[order.status]}
         </span>
       </div>
 

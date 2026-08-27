@@ -76,6 +76,14 @@ export interface OrderListItemView {
   createdAt: string
 }
 
+/** GET /orders only accepts page/limit/status (ListOrdersQueryDto) — no
+ * search/sort param exists server-side; results are always newest-first. */
+export interface ListOrdersParams {
+  page?: number
+  limit?: number
+  status?: OrderStatus
+}
+
 export interface OrderDetailView extends OrderListItemView {
   subtotal: string
   shippingRecipientName: string
