@@ -126,4 +126,30 @@ describe('OrderDetailPage', () => {
     expect(razorpayInstances[0].options.order_id).toBe('order_rzp_1')
     expect(mock.history.post.filter((r) => r.url === '/checkout/orders/order-1/retry-payment')).toHaveLength(1)
   })
+
+  it('does not fire two concurrent retry-payment requests on a synchronous double-click of Retry Payment', async () => {
+    mock.onGet('/orders/order-1').reply(200, { success: true, data: buildOrder('PAYMENT_FAILED') })
+    mock.onPost('/checkout/orders/order-1/retry-payment').reply(200, { success: true, data: PAYMENT_VIEW })
+
+    renderOrderDetail()
+
+    const button = await screen.findByRole('button', { name: 'Retry payment' })
+
+    // Deliberately NOT testing-library's fireEvent — it auto-wraps every
+    // dispatch in act(), which synchronously flushes the disabled-button
+    // DOM attribute before this function returns, masking the actual race
+    // (a real browser gives no such synchronous-flush guarantee between two
+    // rapid physical clicks). Raw native events let React handle them via
+    // its normal scheduling, which is what genuinely reproduces the race —
+    // see CheckoutPage.test.tsx's equivalent test for the verified proof.
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+    await waitFor(() => expect(razorpayInstances).toHaveLength(1))
+    // Give a would-be extra race call time to land before asserting it didn't.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(razorpayInstances).toHaveLength(1)
+    expect(mock.history.post.filter((r) => r.url === '/checkout/orders/order-1/retry-payment')).toHaveLength(1)
+  })
 })

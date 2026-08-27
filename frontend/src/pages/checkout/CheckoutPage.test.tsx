@@ -224,4 +224,43 @@ describe('CheckoutPage', () => {
     // Retrying never re-submits a whole new checkout.
     expect(mock.history.post.filter((r) => r.url === '/checkout/orders')).toHaveLength(1)
   })
+
+  it('does not fire two concurrent retry-payment requests on a synchronous double-click of Retry Payment', async () => {
+    const user = userEvent.setup()
+    mock.onPost('/checkout/orders').reply(201, { success: true, data: ORDER_VIEW })
+    mock.onPost('/checkout/orders/order-1/retry-payment').reply(200, { success: true, data: PAYMENT_VIEW })
+
+    renderCheckout()
+    await screen.findByLabelText('Recipient name')
+    await fillShippingForm(user)
+    await user.click(screen.getByRole('button', { name: 'Pay now' }))
+
+    // Auto-opened attempt settles, then gets dismissed so the button is
+    // clickable again for the double-click below.
+    await waitFor(() => expect(razorpayInstances).toHaveLength(1))
+    razorpayInstances[0].options.modal?.ondismiss?.()
+    const button = await screen.findByRole('button', { name: 'Retry payment' })
+
+    // Deliberately NOT testing-library's fireEvent here: fireEvent
+    // auto-wraps every dispatch in act(), which synchronously flushes
+    // React's state update (and therefore the disabled-button DOM attribute)
+    // before this function returns — that's a testing-tool guarantee, not
+    // something a real browser gives two rapid physical clicks. Dispatching
+    // raw native events lets React handle them via its normal scheduling,
+    // which is what actually reproduces the race the disabled-button state
+    // alone can't close (verified: this exact technique against the
+    // pre-fix code produces 3 instances, not 2 — see the fix's commit).
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+    await waitFor(() => expect(razorpayInstances).toHaveLength(2))
+    // Give a would-be extra race call time to land before asserting it didn't.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(razorpayInstances).toHaveLength(2)
+    const retryPaymentCalls = mock.history.post.filter((r) => r.url === '/checkout/orders/order-1/retry-payment')
+    // One from the auto-opened attempt, exactly one more from the
+    // double-click — not two.
+    expect(retryPaymentCalls).toHaveLength(2)
+  })
 })
