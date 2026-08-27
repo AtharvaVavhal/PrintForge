@@ -11,6 +11,7 @@ export const ROUTES = {
   /** react-router pattern for the detail route — build an actual link with
    * productDetailPath(slug) below, not this constant directly. */
   PRODUCT_DETAIL: '/products/:slug',
+  CART: '/cart',
   ACCOUNT: '/account',
   ORDERS: '/orders',
   CHECKOUT: '/checkout',

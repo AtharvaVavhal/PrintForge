@@ -11,6 +11,7 @@ import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 import { ProductListPage } from '@/pages/catalog/ProductListPage'
 import { ProductDetailPage } from '@/pages/catalog/ProductDetailPage'
+import { CartPage } from '@/pages/cart/CartPage'
 import { AccountPage } from '@/pages/account/AccountPage'
 import { OrdersPage } from '@/pages/orders/OrdersPage'
 import { CheckoutPage } from '@/pages/checkout/CheckoutPage'
@@ -42,6 +43,7 @@ function App() {
 
               {/* Protected routes */}
               <Route element={<ProtectedRoute />}>
+                <Route path={ROUTES.CART} element={<CartPage />} />
                 <Route path={ROUTES.ACCOUNT} element={<AccountPage />} />
                 <Route path={ROUTES.ORDERS} element={<OrdersPage />} />
                 <Route path={ROUTES.CHECKOUT} element={<CheckoutPage />} />

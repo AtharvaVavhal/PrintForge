@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom'
+import { ShoppingCart } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
+import { useCart } from '@/hooks/useCart'
 import { ROUTES } from '@/constants/routes'
 import { cn } from '@/utils/cn'
 import { LogoutButton } from '@/features/auth/LogoutButton'
@@ -11,6 +13,7 @@ function navLinkClassName({ isActive }: { isActive: boolean }): string {
 
 export function Header() {
   const { user, status } = useAuth()
+  const { data: cart } = useCart()
 
   return (
     <header className={styles.header}>
@@ -38,6 +41,12 @@ export function Header() {
         <div className={styles.actions}>
           {status === 'authenticated' && user ? (
             <>
+              <NavLink to={ROUTES.CART} className={styles.cartLink} aria-label="Cart">
+                <ShoppingCart size={20} aria-hidden="true" />
+                {cart && cart.itemCount > 0 && (
+                  <span className={styles.cartBadge}>{cart.itemCount}</span>
+                )}
+              </NavLink>
               <span className={styles.userEmail}>{user.email}</span>
               <LogoutButton />
             </>
