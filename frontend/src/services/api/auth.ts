@@ -1,5 +1,5 @@
 import type { ApiSuccessResponse } from '@/types/api'
-import type { AuthTokenResult, UserProfileView } from '@/types/auth'
+import type { AuthTokenResult, UpdateProfilePayload, UserProfileView } from '@/types/auth'
 import { apiClient } from './client'
 
 /**
@@ -52,5 +52,14 @@ export async function confirmPasswordResetRequest(
 
 export async function fetchCurrentUser(): Promise<UserProfileView> {
   const res = await apiClient.get<ApiSuccessResponse<UserProfileView>>('/users/me')
+  return res.data.data
+}
+
+/** PATCH /users/me — confirmed live (curl) to return the full updated
+ * UserProfileView under the normal {success, data} envelope, no `meta`
+ * (this isn't a paginated/list response, so ResponseInterceptor doesn't
+ * lift anything). */
+export async function updateProfile(payload: UpdateProfilePayload): Promise<UserProfileView> {
+  const res = await apiClient.patch<ApiSuccessResponse<UserProfileView>>('/users/me', payload)
   return res.data.data
 }
