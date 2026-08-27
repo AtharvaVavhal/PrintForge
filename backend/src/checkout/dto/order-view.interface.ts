@@ -39,6 +39,14 @@ export interface OrderView {
    * shippingFee, not subtotal + shippingFee. */
   shippingFee: string;
   total: string;
+  /** Major-unit decimal string, "0.00" when no coupon was applied — never
+   * null, mirrors the stored orders.discountAmount column's own
+   * never-null default (PHASE-10-PROPOSAL.md §2.1/C7). */
+  discountAmount: string;
+  /** Denormalized snapshot of the applied coupon's code, null when none
+   * was applied. Never a live join back to `coupons` — same reasoning as
+   * every other order-display snapshot field. */
+  couponCode: string | null;
   currency: string;
   shippingRecipientName: string;
   shippingPhone: string;
@@ -50,4 +58,20 @@ export interface OrderView {
   shippingCountry: string;
   items: OrderItemView[];
   createdAt: Date;
+}
+
+/** POST /checkout/validate's response (§2.2) — a preview only, never
+ * authoritative. Deliberately has no `id`/`orderNumber`/`items` etc.:
+ * nothing is created, this is a pricing computation against the caller's
+ * current cart, not an order snapshot. */
+export interface CheckoutPreviewView {
+  subtotal: string;
+  shippingFee: string;
+  discountAmount: string;
+  total: string;
+  /** Normalized (uppercased) echo of the coupon code that was actually
+   * applied — null if none was provided. A provided-but-invalid code
+   * throws instead of silently returning null here (same "backend owns
+   * all price calculation" principle applied to a preview). */
+  couponCode: string | null;
 }

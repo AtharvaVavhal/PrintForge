@@ -77,6 +77,19 @@ export interface OrderListItemView {
 
 export interface OrderDetailView extends OrderListItemView {
   subtotal: string;
+  /** Read from the stored orders.shippingFee column — see
+   * checkout/dto/order-view.interface.ts's OrderView.shippingFee for why
+   * this was never safe to derive as `total - subtotal` once discount
+   * could be nonzero (PHASE-10-PROPOSAL.md §2.5). Previously absent from
+   * this view entirely (only checkout's own response exposed it) — added
+   * alongside the coupon fields below as a small, free consistency fix. */
+  shippingFee: string;
+  /** Major-unit decimal string, "0.00" when no coupon was applied — never
+   * null (§2.1/C7). */
+  discountAmount: string;
+  /** Denormalized snapshot of the applied coupon's code, null when none
+   * was applied — never a live join back to `coupons`. */
+  couponCode: string | null;
   shippingRecipientName: string;
   shippingPhone: string;
   shippingAddressLine1: string;

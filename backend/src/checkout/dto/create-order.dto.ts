@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * Shipping address is collected directly on this request, not read from
@@ -47,4 +53,17 @@ export class CreateOrderDto {
   @IsNotEmpty()
   @MaxLength(100)
   shippingCountry: string;
+
+  /** Optional (§2.2) — checked and claimed inside the same transaction as
+   * order creation (CouponsService.validateAndClaim), never a separate
+   * pre-check. Any case accepted; normalized to uppercase before lookup,
+   * same as the admin-facing coupon code. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Matches(/^[A-Za-z0-9_-]+$/, {
+    message:
+      'couponCode must contain only letters, numbers, hyphens, and underscores',
+  })
+  couponCode?: string;
 }

@@ -530,6 +530,11 @@ export class OrdersService {
       status: order.status,
       subtotal: paiseToDecimalString(decimalToPaise(order.subtotal)),
       total: paiseToDecimalString(decimalToPaise(order.total)),
+      shippingFee: paiseToDecimalString(decimalToPaise(order.shippingFee)),
+      discountAmount: paiseToDecimalString(
+        decimalToPaise(order.discountAmount),
+      ),
+      couponCode: order.couponCode,
       currency: order.currency,
       itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
       needsManualRefund: order.paymentAttempts.some((attempt) =>
