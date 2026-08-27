@@ -205,6 +205,47 @@ export async function addCartItem(
   return res.body.data as { id: string };
 }
 
+export interface CouponFixtureOptions {
+  type?: 'PERCENTAGE' | 'FLAT_AMOUNT' | 'FREE_SHIPPING';
+  percentageOff?: number;
+  flatAmountOff?: string;
+  scopeType?: 'STORE_WIDE' | 'CATEGORY';
+  categoryId?: string;
+  usageLimitTotal?: number;
+  usageLimitPerUser?: number;
+  firstOrderOnly?: boolean;
+  minOrderValue?: string;
+}
+
+/** Direct-via-Prisma, same rationale as createProduct — admin coupon CRUD
+ * (Coupons, PR #32) is not the flow under test here, so tests build their
+ * own exact coupon state instead of going through the admin API. */
+export async function createCoupon(
+  prisma: PrismaService,
+  createdByAdminId: string,
+  options: CouponFixtureOptions = {},
+): Promise<{ id: string; code: string }> {
+  const type = options.type ?? 'PERCENTAGE';
+  const coupon = await prisma.coupon.create({
+    data: {
+      code: `TEST${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`,
+      type,
+      percentageOff:
+        type === 'PERCENTAGE' ? (options.percentageOff ?? 10) : null,
+      flatAmountOff:
+        type === 'FLAT_AMOUNT' ? (options.flatAmountOff ?? '5.00') : null,
+      scopeType: options.scopeType ?? 'STORE_WIDE',
+      categoryId: options.categoryId ?? null,
+      usageLimitTotal: options.usageLimitTotal,
+      usageLimitPerUser: options.usageLimitPerUser ?? 1,
+      firstOrderOnly: options.firstOrderOnly ?? false,
+      minOrderValue: options.minOrderValue,
+      createdByAdminId,
+    },
+  });
+  return { id: coupon.id, code: coupon.code };
+}
+
 export function shippingFields(): Record<string, string> {
   return {
     shippingRecipientName: 'Test Recipient',

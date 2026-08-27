@@ -142,6 +142,52 @@ describe('Cross-user access & auth security (§27 #2, #6, #7)', () => {
       // userA's profile must be unaffected by userB's own PATCH /users/me.
       expect(meAAfter.body.data.city).not.toBe('Mumbai');
     });
+
+    it("reviews: PATCH/DELETE another user's review is rejected (403), the review itself untouched", async () => {
+      const owner = await registerUser(app, 'revowner');
+      const intruder = await registerUser(app, 'revintruder');
+      const { productId } = await createProduct(prisma, { basePrice: '15.00' });
+      await addCartItem(app, owner, { productId, quantity: 1 });
+      const checkoutRes = await http(app)
+        .post(apiPath('/checkout/orders'))
+        .set(...authHeader(owner))
+        .set('Idempotency-Key', `idor-review-${randomUUID()}`)
+        .send(shippingFields())
+        .expect(201);
+      const orderId = checkoutRes.body.data.id as string;
+
+      // Verified-purchase gate requires DELIVERED — no admin API call
+      // needed here (out of scope), a direct write is exactly what the
+      // real admin status-transition chain would have produced.
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'DELIVERED' },
+      });
+
+      const createRes = await http(app)
+        .post(apiPath('/reviews'))
+        .set(...authHeader(owner))
+        .send({ productId, rating: 5, bodyText: 'Great product' })
+        .expect(201);
+      const reviewId = createRes.body.data.id as string;
+
+      await http(app)
+        .patch(apiPath(`/reviews/${reviewId}`))
+        .set(...authHeader(intruder))
+        .send({ rating: 1 })
+        .expect(403);
+
+      await http(app)
+        .delete(apiPath(`/reviews/${reviewId}`))
+        .set(...authHeader(intruder))
+        .expect(403);
+
+      const review = await prisma.review.findUniqueOrThrow({
+        where: { id: reviewId },
+      });
+      expect(review.rating).toBe(5);
+      expect(review.status).toBe('PUBLISHED');
+    });
   });
 
   it('#6 — a replayed, already-rotated refresh token triggers full-chain revocation', async () => {
@@ -250,6 +296,13 @@ describe('Cross-user access & auth security (§27 #2, #6, #7)', () => {
     it('GET /admin/customers/:id', async () => {
       await http(app)
         .get(apiPath(`/admin/customers/${customerId}`))
+        .set(...authHeader(customer))
+        .expect(403);
+    });
+
+    it('GET /admin/coupons', async () => {
+      await http(app)
+        .get(apiPath('/admin/coupons'))
         .set(...authHeader(customer))
         .expect(403);
     });
