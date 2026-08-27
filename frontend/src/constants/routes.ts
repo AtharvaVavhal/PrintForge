@@ -18,6 +18,19 @@ export const ROUTES = {
    * orderDetailPath(id) below, not this constant directly. */
   ORDER_DETAIL: '/orders/:id',
   CHECKOUT: '/checkout',
+  /** Landed on by AdminRoute when a logged-in non-admin hits an /admin/*
+   * route — a distinct "not authorized" outcome, not a redirect to LOGIN
+   * (which would falsely imply they're logged out). */
+  FORBIDDEN: '/forbidden',
+  ADMIN_DASHBOARD: '/admin',
+  ADMIN_ORDERS: '/admin/orders',
+  /** react-router pattern — build an actual link with
+   * adminOrderDetailPath(id) below, not this constant directly. */
+  ADMIN_ORDER_DETAIL: '/admin/orders/:id',
+  ADMIN_CUSTOMERS: '/admin/customers',
+  /** react-router pattern — build an actual link with
+   * adminCustomerDetailPath(id) below, not this constant directly. */
+  ADMIN_CUSTOMER_DETAIL: '/admin/customers/:id',
 } as const
 
 export function productDetailPath(slug: string): string {
@@ -26,4 +39,12 @@ export function productDetailPath(slug: string): string {
 
 export function orderDetailPath(id: string): string {
   return `/orders/${encodeURIComponent(id)}`
+}
+
+export function adminOrderDetailPath(id: string): string {
+  return `/admin/orders/${encodeURIComponent(id)}`
+}
+
+export function adminCustomerDetailPath(id: string): string {
+  return `/admin/customers/${encodeURIComponent(id)}`
 }

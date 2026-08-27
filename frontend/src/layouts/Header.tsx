@@ -34,6 +34,11 @@ export function Header() {
               <NavLink to={ROUTES.ACCOUNT} className={navLinkClassName}>
                 Account
               </NavLink>
+              {user?.role === 'ADMIN' && (
+                <NavLink to={ROUTES.ADMIN_DASHBOARD} className={navLinkClassName}>
+                  Admin
+                </NavLink>
+              )}
             </>
           )}
         </nav>
