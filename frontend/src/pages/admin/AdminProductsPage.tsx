@@ -20,10 +20,14 @@ const DEFAULT_LIMIT = 20
  * (no client-side slicing), same pattern as AdminOrdersPage/
  * AdminCustomersPage — and it can only ever show active products. A
  * deactivated product (DELETE /products/:id) drops out of this list
- * entirely and becomes unreachable through this admin UI, with no
- * reactivate endpoint to bring it back either. Flagged here rather than
- * silently building a list that claims to show "all products including
- * inactive" when the backend contract doesn't support that.
+ * entirely. `POST /products/:id/reactivate` exists (mirrors deactivate),
+ * but this list still can't offer it — there's nothing to click it from,
+ * since a deactivated product never appears here. Reactivating is only
+ * reachable immediately after deactivating, on AdminProductDetailPage
+ * itself, before navigating away (see that page's own doc comment); a
+ * product deactivated in an earlier visit has no path back through this
+ * UI at all. Flagged rather than silently building a "Reactivate" button
+ * on this list that nothing could ever reach.
  */
 export function AdminProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -64,8 +68,9 @@ export function AdminProductsPage() {
       </div>
 
       <Alert variant="info">
-        Showing active products only — GET /products has no admin view of deactivated products, and there's
-        no way to reactivate one once deactivated.
+        Showing active products only — GET /products has no admin view of deactivated products. If you just
+        deactivated one, you can still reactivate it from its own page before navigating away; once you leave,
+        there's no way back to it.
       </Alert>
 
       {categoriesQuery.data && categoriesQuery.data.length > 0 && (

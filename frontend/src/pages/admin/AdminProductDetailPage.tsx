@@ -4,6 +4,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { useCreateProduct } from '@/hooks/useCreateProduct'
 import { useUpdateProduct } from '@/hooks/useUpdateProduct'
 import { useDeactivateProduct } from '@/hooks/useDeactivateProduct'
+import { useReactivateProduct } from '@/hooks/useReactivateProduct'
 import { ProductForm } from '@/features/admin/ProductForm'
 import { VariantManager } from '@/features/admin/VariantManager'
 import { CustomizationFieldManager } from '@/features/admin/CustomizationFieldManager'
@@ -61,6 +62,18 @@ interface LocationState {
  * Local component state (`product`) is the single source of truth for
  * this page once loaded — each sub-manager (VariantManager etc.) patches
  * it from its own mutation's response, never from a refetch.
+ *
+ * Reactivating a deactivated product (POST /products/:id/reactivate) is
+ * only ever reachable from here, right after deactivating, before
+ * navigating away — never from AdminProductsPage's list, which is
+ * structurally incapable of ever showing an inactive product (GET
+ * /products filters isActive:true unconditionally, confirmed live, no
+ * admin bypass). A product deactivated in an earlier session has no path
+ * back to this page at all: there's still no way to look one up once
+ * it's out of local state. Deliberately not solved here — that would mean
+ * adding a list-visibility affordance (a query param, an admin toggle),
+ * a bigger change than "add a reactivate endpoint," and out of this
+ * phase's scope. Flagged in the completion report as the residual gap.
  */
 export function AdminProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -77,6 +90,7 @@ export function AdminProductDetailPage() {
   const createProduct = useCreateProduct()
   const updateProduct = useUpdateProduct(product?.id ?? '')
   const deactivateProduct = useDeactivateProduct(product?.id ?? '')
+  const reactivateProduct = useReactivateProduct(product?.id ?? '')
 
   async function handleCreate(values: AdminProductFormValues) {
     try {
@@ -101,12 +115,25 @@ export function AdminProductDetailPage() {
     if (!product) return
     try {
       await deactivateProduct.mutateAsync()
-      // The product drops out of GET /products the instant it's
-      // deactivated — nothing left for this page to show, so head back
-      // to the list rather than rendering a now-unreachable "edit" view.
-      void navigate(ROUTES.ADMIN_PRODUCTS)
+      // Stay on the page (previously this navigated back to the products
+      // list, which was the dead end: GET /products immediately stops
+      // returning this product, so there was no way back to it at all).
+      // The still-open local `product` state is now the *only* place this
+      // product remains reachable from — that's exactly the moment the
+      // Reactivate action below needs to exist.
+      setProduct((prev) => (prev ? { ...prev, isActive: false } : prev))
     } catch {
       // Error surfaced via deactivateProduct.isError below.
+    }
+  }
+
+  async function handleReactivate() {
+    if (!product) return
+    try {
+      await reactivateProduct.mutateAsync()
+      setProduct((prev) => (prev ? { ...prev, isActive: true } : prev))
+    } catch {
+      // Error surfaced via reactivateProduct.isError below.
     }
   }
 
@@ -148,7 +175,7 @@ export function AdminProductDetailPage() {
       <div className={styles.header}>
         <h1>{product.name}</h1>
         {!product.isActive && <span className={styles.inactiveFlag}>Inactive</span>}
-        {product.isActive && (
+        {product.isActive ? (
           <Button
             type="button"
             variant="secondary"
@@ -157,10 +184,25 @@ export function AdminProductDetailPage() {
           >
             Deactivate
           </Button>
+        ) : (
+          <Button
+            type="button"
+            isLoading={reactivateProduct.isPending}
+            onClick={() => void handleReactivate()}
+          >
+            Reactivate
+          </Button>
         )}
       </div>
 
       {deactivateProduct.isError && <Alert variant="error">{getApiErrorMessage(deactivateProduct.error)}</Alert>}
+      {reactivateProduct.isError && <Alert variant="error">{getApiErrorMessage(reactivateProduct.error)}</Alert>}
+      {!product.isActive && !reactivateProduct.isError && (
+        <Alert variant="info">
+          This product is deactivated and no longer visible in the storefront or the products list. Reactivate
+          it now, or navigate away — there is currently no way to find it again afterward.
+        </Alert>
+      )}
 
       {categoriesQuery.isPending && <Skeleton className={styles.skeletonBlock} />}
 

@@ -81,6 +81,20 @@ export class ProductsController {
     return { message: 'Product deactivated' };
   }
 
+  /** Mirrors `remove` above exactly — same file, same pattern, right next
+   * to it. A dedicated route rather than an `isActive` field on
+   * UpdateProductDto, same reasoning as deactivation: exactly one path
+   * flips this flag in either direction, both explicit. */
+  @Roles(Role.ADMIN)
+  @Post(':id/reactivate')
+  @HttpCode(HttpStatus.OK)
+  async reactivate(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ message: string }> {
+    await this.productsService.reactivateProduct(id);
+    return { message: 'Product reactivated' };
+  }
+
   @Roles(Role.ADMIN)
   @Post(':id/variants')
   @HttpCode(HttpStatus.CREATED)

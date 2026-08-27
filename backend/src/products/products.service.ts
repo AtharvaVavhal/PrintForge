@@ -211,6 +211,23 @@ export class ProductsService {
     });
   }
 
+  /**
+   * The reverse of deactivateProduct — same shape, same reasoning: kept as
+   * its own dedicated method/endpoint (POST /products/:id/reactivate)
+   * rather than a field smuggled into UpdateProductDto, so `isActive` has
+   * exactly two ways to change, both explicit and auditable at the route
+   * level, never a silent side effect of a general PATCH. Unconditional,
+   * same as deactivateProduct: no current-state check, no error if the
+   * product is already active (idempotent, admin-double-click-safe).
+   */
+  async reactivateProduct(id: string): Promise<void> {
+    await this.getProductOrThrow(id);
+    await this.prisma.product.update({
+      where: { id },
+      data: { isActive: true },
+    });
+  }
+
   private async getProductOrThrow(id: string): Promise<Product> {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) {

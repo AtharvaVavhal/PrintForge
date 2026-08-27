@@ -121,7 +121,7 @@ describe('AdminProductDetailPage', () => {
     )
   })
 
-  it('deactivating a product DELETEs it and navigates back to the products list', async () => {
+  it('deactivating a product DELETEs it and stays on the page, offering Reactivate instead of navigating away', async () => {
     const user = userEvent.setup()
     const product = buildProduct()
     mock.onDelete('/products/prod-1').reply(200, { success: true, data: { message: 'Product deactivated' } })
@@ -131,16 +131,43 @@ describe('AdminProductDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Deactivate' }))
 
     await waitFor(() => expect(mock.history.delete.length).toBe(1))
-    expect(await screen.findByText('Products list page')).toBeInTheDocument()
+    // This used to navigate to the list, which was the dead end — a
+    // deactivated product immediately stops appearing in GET /products,
+    // so that navigation was a one-way trip. Staying here, with a
+    // Reactivate action, is what closes it.
+    expect(screen.queryByText('Products list page')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Ceramic Mug' })).toBeInTheDocument()
+    expect(screen.getByText('Inactive')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reactivate' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
   })
 
-  it('an already-inactive product shows no Deactivate button', async () => {
+  it('an already-inactive product shows Reactivate, not Deactivate', async () => {
     const product = buildProduct({ isActive: false })
     renderAt('/admin/products/prod-1', { product })
 
     await screen.findByRole('heading', { name: 'Ceramic Mug' })
     expect(screen.getByText('Inactive')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Deactivate' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reactivate' })).toBeInTheDocument()
+  })
+
+  it('reactivating POSTs to /products/:id/reactivate and flips the page back to showing Deactivate', async () => {
+    const user = userEvent.setup()
+    const product = buildProduct({ isActive: false })
+    mock.onPost('/products/prod-1/reactivate').reply(200, {
+      success: true,
+      data: { message: 'Product reactivated' },
+    })
+
+    renderAt('/admin/products/prod-1', { product })
+
+    await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
+
+    await waitFor(() => expect(mock.history.post.length).toBe(1))
+    expect(screen.queryByText('Inactive')).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Deactivate' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reactivate' })).not.toBeInTheDocument()
   })
 
   it('adding a variant POSTs to /products/:id/variants and reflects it without a page refetch', async () => {
