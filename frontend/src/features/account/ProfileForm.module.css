@@ -1,0 +1,25 @@
+.form {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 32rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 480px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}

@@ -27,3 +27,14 @@ export interface UserProfileView {
   role: string
   createdAt: string
 }
+
+/** PATCH /users/me's whitelisted body (backend/src/users/dto/update-profile.dto.ts,
+ * class-validator whitelist:true + forbidNonWhitelisted:true — confirmed live
+ * that sending email/role/password gets a 400, not a silent strip). Every
+ * field is independently optional: an absent key leaves that column
+ * untouched (true partial update), while an explicit `null` clears it —
+ * also confirmed live. Never send a literal `""`; the backend does not
+ * normalize that to null itself, it stores the empty string verbatim. */
+export type UpdateProfilePayload = Partial<
+  Pick<UserProfileView, 'addressLine1' | 'addressLine2' | 'city' | 'state' | 'postalCode' | 'country' | 'phone'>
+>

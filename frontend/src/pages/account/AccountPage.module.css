@@ -19,3 +19,7 @@
 .details dd {
   margin: 0;
 }
+
+.editButton {
+  margin-top: 1.5rem;
+}
