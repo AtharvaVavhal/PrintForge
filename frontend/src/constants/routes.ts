@@ -14,9 +14,16 @@ export const ROUTES = {
   CART: '/cart',
   ACCOUNT: '/account',
   ORDERS: '/orders',
+  /** react-router pattern for the detail route — build an actual link with
+   * orderDetailPath(id) below, not this constant directly. */
+  ORDER_DETAIL: '/orders/:id',
   CHECKOUT: '/checkout',
 } as const
 
 export function productDetailPath(slug: string): string {
   return `/products/${encodeURIComponent(slug)}`
+}
+
+export function orderDetailPath(id: string): string {
+  return `/orders/${encodeURIComponent(id)}`
 }

@@ -1,0 +1,37 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 440px;
+  padding: 2rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.heading {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.subheading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  font-weight: 600;
+}
+
+.total {
+  color: var(--color-text-strong);
+  font-size: 1.125rem;
+}
+
+.payButton {
+  width: 100%;
+}

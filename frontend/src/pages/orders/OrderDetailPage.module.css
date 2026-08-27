@@ -1,0 +1,137 @@
+.wrap {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 2.5rem var(--container-padding) 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.header h1 {
+  margin: 0;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.statusBadge[data-tone='success'] {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.statusBadge[data-tone='error'] {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.retryBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 2.5rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.line {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.name {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+.meta {
+  margin: 0.125rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.lineTotal {
+  white-space: nowrap;
+  color: var(--color-text-strong);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.summaryBlock {
+  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.heading {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+}
+
+.total {
+  font-weight: 600;
+  color: var(--color-text-strong);
+  font-size: 1.125rem;
+}
+
+.address {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.skeletonBlock {
+  height: 20rem;
+  width: 100%;
+}

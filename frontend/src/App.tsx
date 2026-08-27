@@ -14,6 +14,7 @@ import { ProductDetailPage } from '@/pages/catalog/ProductDetailPage'
 import { CartPage } from '@/pages/cart/CartPage'
 import { AccountPage } from '@/pages/account/AccountPage'
 import { OrdersPage } from '@/pages/orders/OrdersPage'
+import { OrderDetailPage } from '@/pages/orders/OrderDetailPage'
 import { CheckoutPage } from '@/pages/checkout/CheckoutPage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
 import { ROUTES } from '@/constants/routes'
@@ -46,6 +47,7 @@ function App() {
                 <Route path={ROUTES.CART} element={<CartPage />} />
                 <Route path={ROUTES.ACCOUNT} element={<AccountPage />} />
                 <Route path={ROUTES.ORDERS} element={<OrdersPage />} />
+                <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
                 <Route path={ROUTES.CHECKOUT} element={<CheckoutPage />} />
               </Route>
 
