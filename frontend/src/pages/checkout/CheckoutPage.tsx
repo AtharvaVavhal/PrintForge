@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useCreateOrder'
@@ -28,6 +28,15 @@ export function CheckoutPage() {
   const [idempotencyKey] = useState(() => crypto.randomUUID())
   const [order, setOrder] = useState<CheckoutOrderView | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  // Guards startPayment against a synchronous double-click. A check against
+  // retryPayment.isPending here would NOT work: both clicks of a true
+  // zero-latency double-click land on the same pre-re-render closure, so
+  // they'd both see the same stale (false) isPending value — the state
+  // update from the first click's mutateAsync hasn't committed to a new
+  // render yet. A ref mutates synchronously and is shared across every
+  // closure holding it, so the second click sees the first click's write
+  // immediately, independent of React's render cycle.
+  const isRetryingRef = useRef(false)
 
   const { data: cart, isPending: isCartPending, isError: isCartError, error: cartError } = useCart()
   const createOrder = useCreateOrder()
@@ -45,6 +54,8 @@ export function CheckoutPage() {
   })
 
   async function startPayment(target: CheckoutOrderView) {
+    if (isRetryingRef.current) return
+    isRetryingRef.current = true
     setPaymentError(null)
     try {
       const payment = await retryPayment.mutateAsync(target.id)
@@ -55,6 +66,8 @@ export function CheckoutPage() {
       )
     } catch (err) {
       setPaymentError(getApiErrorMessage(err))
+    } finally {
+      isRetryingRef.current = false
     }
   }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useOrder } from '@/hooks/useOrder'
 import { useRetryPayment } from '@/hooks/useRetryPayment'
@@ -38,6 +38,11 @@ export function OrderDetailPage() {
   const { data: order, isPending, isError, error, refetch } = useOrder(id!)
   const retryPayment = useRetryPayment()
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  // See CheckoutPage.tsx's startPayment for why this must be a ref, not a
+  // retryPayment.isPending check — a synchronous double-click's second call
+  // lands on the same pre-re-render closure as the first, so an isPending
+  // read would still see the stale (false) value.
+  const isRetryingRef = useRef(false)
 
   const { openCheckout, isOpening, isVerifying } = useRazorpayCheckout({
     onVerified: () => {
@@ -49,7 +54,9 @@ export function OrderDetailPage() {
   })
 
   async function handleRetry() {
+    if (isRetryingRef.current) return
     if (!order) return
+    isRetryingRef.current = true
     setPaymentError(null)
     try {
       const payment = await retryPayment.mutateAsync(order.id)
@@ -60,6 +67,8 @@ export function OrderDetailPage() {
       )
     } catch (err) {
       setPaymentError(getApiErrorMessage(err))
+    } finally {
+      isRetryingRef.current = false
     }
   }
 
