@@ -7,6 +7,8 @@ import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { ProductImage } from '@/features/catalog/ProductImage'
+import { VariantSelector } from '@/features/cart/VariantSelector'
+import { AddToCartControls } from '@/features/cart/AddToCartControls'
 import {
   CustomizationForm,
   type CustomizationFormState,
@@ -20,15 +22,16 @@ const EMPTY_CUSTOMIZATION_STATE: CustomizationFormState = {
 }
 
 /** Renders the product's own data — variants, images, specifications —
- * plus, since Phase 3, the dynamic customization form
- * (features/customization/CustomizationForm). Variant selection and the
- * actual Add to Cart request are Phase 4's job (Cart): variants below are
- * still read-only, and the running total shown here is base price +
- * customization surcharges only, deliberately excluding any variant
- * priceDelta since nothing is selected yet. */
+ * plus the Phase 3 customization form and, since Phase 4, real variant
+ * selection and the actual Add to Cart request (features/cart). The price
+ * shown here (base + selected variant's priceDelta + customization
+ * surcharge) is a client-side preview only — the authoritative
+ * unitPrice/lineTotal for whatever ends up in the cart is always whatever
+ * GET /cart (or the add-to-cart response) returns, never this number. */
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>()
   const { data: product, isPending, isError, error } = useProduct(slug)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const [customization, setCustomization] = useState<CustomizationFormState>(
     EMPTY_CUSTOMIZATION_STATE,
   )
@@ -60,7 +63,9 @@ export function ProductDetailPage() {
     )
   }
 
-  const total = Number(product.basePrice) + customization.surcharge
+  const selectedVariant = product.variants.find((v) => v.id === selectedVariantId)
+  const total =
+    Number(product.basePrice) + Number(selectedVariant?.priceDelta ?? 0) + customization.surcharge
 
   return (
     <section className={styles.wrap}>
@@ -89,28 +94,22 @@ export function ProductDetailPage() {
         )}
 
         {product.variants.length > 0 && (
-          <div className={styles.variants}>
-            <h2>Options</h2>
-            <ul className={styles.variantList}>
-              {product.variants.map((variant) => (
-                <li key={variant.id} className={styles.variantRow}>
-                  <span>{variant.label}</span>
-                  <span className={styles.variantMeta}>
-                    {Number(variant.priceDelta) !== 0 &&
-                      `+${formatPrice(variant.priceDelta)}`}
-                    {!variant.isAvailable && (
-                      <span className={styles.unavailable}> · Unavailable</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <VariantSelector
+            variants={product.variants}
+            selectedVariantId={selectedVariantId}
+            onChange={setSelectedVariantId}
+          />
         )}
 
         <CustomizationForm
           fields={product.customizationFields}
           onChange={handleCustomizationChange}
+        />
+
+        <AddToCartControls
+          product={product}
+          selectedVariantId={selectedVariantId}
+          customization={customization}
         />
       </div>
     </section>

@@ -58,6 +58,33 @@
   color: var(--color-text-muted);
 }
 
+.cartLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text);
+}
+
+.cartLink:hover {
+  color: var(--color-text-strong);
+}
+
+.cartBadge {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.625rem;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.125rem;
+  text-align: center;
+}
+
 .signUpLink {
   background: var(--color-accent);
   color: var(--color-accent-contrast);
