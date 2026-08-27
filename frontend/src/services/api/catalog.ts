@@ -77,9 +77,17 @@ export async function updateProduct(id: string, payload: UpdateProductPayload): 
 }
 
 /** DELETE /products/:id — soft-delete (isActive=false), not a real
- * removal. There's no reactivate endpoint, so this is one-directional. */
+ * removal. */
 export async function deactivateProduct(id: string): Promise<void> {
   await apiClient.delete(`/products/${id}`)
+}
+
+/** POST /products/:id/reactivate — the reverse of deactivateProduct, a
+ * dedicated endpoint rather than an isActive field on the general PATCH
+ * (same reasoning the backend applies to deactivation: exactly one path
+ * flips this flag in either direction). */
+export async function reactivateProduct(id: string): Promise<void> {
+  await apiClient.post(`/products/${id}/reactivate`)
 }
 
 // ─── Admin: variants ─────────────────────────────────────────────────────
