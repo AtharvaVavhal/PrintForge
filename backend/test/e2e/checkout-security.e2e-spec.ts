@@ -5,11 +5,13 @@ import {
   addCartItem,
   apiPath,
   authHeader,
+  createCoupon,
   createFileCustomizationField,
   createProduct,
   createUploadedFile,
   createVariant,
   http,
+  registerAdmin,
   registerUser,
   rupeesToPaise,
   shippingFields,
@@ -77,6 +79,52 @@ describe('Checkout security & re-validation (§27 #1, #10, #11, #12)', () => {
       );
       expect(res.body.data.total).not.toBe('0.01');
     }
+  });
+
+  it('#1 — a real coupon applied alongside a tampered discountAmount is ignored; server recomputes the discount from the coupon itself, never the client value', async () => {
+    const admin = await registerAdmin(app, prisma);
+    const user = await registerUser(app);
+    const { productId } = await createProduct(prisma, { basePrice: '250.00' });
+    await addCartItem(app, user, { productId, quantity: 2 });
+    const coupon = await createCoupon(prisma, admin.id, { percentageOff: 20 });
+
+    // discountAmount is not a real field on CreateOrderDto — the whitelist
+    // (main.ts) rejects it outright, so the tampered value never even
+    // reaches pricing logic. This is the same guarantee #1's main case
+    // proves generically; here it's specifically alongside a real coupon,
+    // to rule out a coupon-specific bypass of that whitelist.
+    await http(app)
+      .post(apiPath('/checkout/orders'))
+      .set(...authHeader(user))
+      .set('Idempotency-Key', `coupon-tamper-reject-${user.id}`)
+      .send({
+        ...shippingFields(),
+        couponCode: coupon.code,
+        discountAmount: '999.00',
+      })
+      .expect(400);
+    expect(
+      await prisma.order.findMany({ where: { userId: user.id } }),
+    ).toHaveLength(0);
+
+    // The only way discountAmount is ever populated is a legitimate
+    // couponCode — and even then it's always the coupon's own computed
+    // value (20% of the 500.00 subtotal = 100.00), never a client number.
+    const res = await http(app)
+      .post(apiPath('/checkout/orders'))
+      .set(...authHeader(user))
+      .set('Idempotency-Key', `coupon-tamper-legit-${user.id}`)
+      .send({ ...shippingFields(), couponCode: coupon.code })
+      .expect(201);
+
+    expect(res.body.data.discountAmount).toBe('100.00');
+    expect(res.body.data.couponCode).toBe(coupon.code);
+    expect(res.body.data.total).toBe('400.00');
+
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { id: res.body.data.id as string },
+    });
+    expect(order.discountAmount.toFixed(2)).toBe('100.00');
   });
 
   it('#10 — minQuantity/maxQuantity boundaries are enforced on cart-add', async () => {
