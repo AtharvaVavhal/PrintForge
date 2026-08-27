@@ -16,6 +16,7 @@ import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { CartModule } from './cart/cart.module';
 import { CheckoutModule } from './checkout/checkout.module';
+import { CouponsModule } from './coupons/coupons.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -29,12 +30,14 @@ import { UsersModule } from './users/users.module';
  * dependency graph reported alongside this scaffold, extended for Phase 10's
  * Reviews half (PHASE-10-PROPOSAL.md §1.3 — a new top-level module sitting
  * after `orders`, not nested under `products/`; see reviews.module.ts's own
- * doc comment for why):
- *   users, notifications, uploads  (base layer)
+ * doc comment for why) and Coupons half (§2.3 — coupons is base-layer,
+ * same tier as users/notifications/uploads, no cross-module import at
+ * all; see coupons.module.ts's own doc comment):
+ *   users, notifications, uploads, coupons  (base layer)
  *   -> products -> cart
- *   -> orders -> payments -> checkout
+ *   -> orders -> payments -> checkout (-> coupons)
  *   -> reviews (-> orders)
- *   -> admin (-> orders, products, users, reviews), auth
+ *   -> admin (-> orders, products, users, reviews, coupons), auth
  *
  * JwtAuthGuard + RolesGuard + ThrottlerGuard are global (§17/§23): every
  * route is protected and IP-throttled by default; routes opt out
@@ -62,6 +65,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     NotificationsModule,
     UploadsModule,
+    CouponsModule,
     ProductsModule,
     CartModule,
     OrdersModule,

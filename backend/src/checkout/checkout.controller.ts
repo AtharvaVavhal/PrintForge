@@ -16,6 +16,7 @@ import { IDEMPOTENCY_KEY_HEADER } from '../common/constants/app.constants';
 import { PaymentsService } from '../payments/payments.service';
 import { CheckoutService } from './checkout.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { ValidateCheckoutDto } from './dto/validate-checkout.dto';
 
 /**
  * Owns (§20): `POST /checkout/orders` (Auth, **required**
@@ -24,9 +25,11 @@ import { CreateOrderDto } from './dto/create-order.dto';
  * in Phase 6, §20 places it here rather than under /payments (reuses an
  * existing `razorpayOrderId` if set — same endpoint serves both the first
  * payment attempt on a fresh order and a genuine retry, see
- * PaymentsService.initiatePayment). §20 also lists `POST
- * /checkout/validate` (read-only pre-check) — not implemented, out of
- * scope for both phases so far.
+ * PaymentsService.initiatePayment). `POST /checkout/validate` — reserved
+ * by §20 since the original blueprint, never built until Phase 10's
+ * Coupons half: a read-only pricing preview against the caller's current
+ * cart with an optional couponCode, no Idempotency-Key (nothing is
+ * created), never authoritative (PHASE-10-PROPOSAL.md §2.2).
  */
 @Controller('checkout')
 export class CheckoutController {
@@ -34,6 +37,14 @@ export class CheckoutController {
     private readonly checkoutService: CheckoutService,
     private readonly paymentsService: PaymentsService,
   ) {}
+
+  @Post('validate')
+  async validate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ValidateCheckoutDto,
+  ) {
+    return this.checkoutService.previewCheckout(user.id, dto.couponCode);
+  }
 
   @Post('orders')
   async createOrder(

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CartModule } from '../cart/cart.module';
+import { CouponsModule } from '../coupons/coupons.module';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { ProductsModule } from '../products/products.module';
@@ -14,7 +15,11 @@ import { PricingService } from './pricing/pricing.service';
  * (never the reverse) — the checkout transaction creates the Order, then
  * calls into payments to create the Razorpay order (§12.4). This direction
  * was corrected from the literal turn-6 restatement; see the corrected
- * module dependency graph reported alongside this scaffold.
+ * module dependency graph reported alongside this scaffold. Also depends
+ * on coupons (Phase 10, PHASE-10-PROPOSAL.md §2.3) — CheckoutService calls
+ * CouponsService.validateAndClaim inside its own order-creation
+ * transaction, and CouponsService.previewDiscount for POST
+ * /checkout/validate.
  */
 @Module({
   imports: [
@@ -23,6 +28,7 @@ import { PricingService } from './pricing/pricing.service';
     UsersModule,
     OrdersModule,
     PaymentsModule,
+    CouponsModule,
   ],
   controllers: [CheckoutController],
   providers: [CheckoutService, PricingService, IdempotencyService],

@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -14,6 +15,10 @@ import { Role } from '../common/enums/role.enum';
 import { OrdersService } from '../orders/orders.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { UpdateReviewStatusDto } from '../reviews/dto/update-review-status.dto';
+import { CouponsService } from '../coupons/coupons.service';
+import { CreateCouponDto } from '../coupons/dto/create-coupon.dto';
+import { UpdateCouponDto } from '../coupons/dto/update-coupon.dto';
+import { ListAdminCouponsQueryDto } from '../coupons/dto/list-admin-coupons-query.dto';
 import { AdminService } from './admin.service';
 import { ListAdminOrdersQueryDto } from './dto/list-admin-orders-query.dto';
 import { ListAdminCustomersQueryDto } from './dto/list-admin-customers-query.dto';
@@ -26,10 +31,13 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
  * the order's PENDING Refund row — see OrdersService.performRefundRecording
  * — §13.L/§32's "record only, no in-app refund-initiation API"), GET
  * /admin/dashboard (minimal — no charts), GET /admin/customers[/:id]
- * (read-only), and — as of Phase 10's Reviews half — PATCH
- * /admin/reviews/:id/status (moderation; unlike order status there's no
- * transition graph to enforce, any ReviewStatus to any ReviewStatus is
- * valid). Order/review mutation delegates to OrdersService/ReviewsService —
+ * (read-only), PATCH /admin/reviews/:id/status (moderation; unlike order
+ * status there's no transition graph to enforce, any ReviewStatus to any
+ * ReviewStatus is valid), and — as of Phase 10's Coupons half — GET/POST
+ * /admin/coupons[/:id] and PATCH /admin/coupons/:id (full CRUD; `code`/
+ * `type` are immutable after creation, enforced by UpdateCouponDto's
+ * whitelist, not by anything in this controller). Order/review/coupon
+ * mutation delegates to OrdersService/ReviewsService/CouponsService —
  * same pattern as CategoriesController sharing ProductsService in Phase 2 —
  * not duplicated into AdminService; dashboard/customer aggregation is
  * AdminService's own logic, per the admin.module.ts dependency-graph note.
@@ -44,6 +52,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly ordersService: OrdersService,
     private readonly reviewsService: ReviewsService,
+    private readonly couponsService: CouponsService,
   ) {}
 
   @Get('orders')
@@ -86,5 +95,31 @@ export class AdminController {
     @Body() dto: UpdateReviewStatusDto,
   ) {
     return this.reviewsService.adminUpdateStatus(id, dto);
+  }
+
+  @Get('coupons')
+  async listCoupons(@Query() query: ListAdminCouponsQueryDto) {
+    return this.couponsService.listCoupons(query);
+  }
+
+  @Get('coupons/:id')
+  async couponDetail(@Param('id', ParseUUIDPipe) id: string) {
+    return this.couponsService.getCoupon(id);
+  }
+
+  @Post('coupons')
+  async createCoupon(
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: CreateCouponDto,
+  ) {
+    return this.couponsService.createCoupon(admin.id, dto);
+  }
+
+  @Patch('coupons/:id')
+  async updateCoupon(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCouponDto,
+  ) {
+    return this.couponsService.updateCoupon(id, dto);
   }
 }

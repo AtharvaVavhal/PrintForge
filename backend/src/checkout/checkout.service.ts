@@ -11,10 +11,11 @@ import {
 } from '../cart/pricing/money.util';
 import { validateCustomizationFieldShape } from '../products/customizations/customization-validation.util';
 import { OrdersService } from '../orders/orders.service';
+import { CouponsService } from '../coupons/coupons.service';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { OrderLinePricing, PricingService } from './pricing/pricing.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { OrderView } from './dto/order-view.interface';
+import { CheckoutPreviewView, OrderView } from './dto/order-view.interface';
 
 const CHECKOUT_ENDPOINT_ID = 'POST /checkout/orders';
 const SHIPPING_FEE_SETTING_KEY = 'shippingFeeFlat';
@@ -61,6 +62,7 @@ export class CheckoutService {
     private readonly ordersService: OrdersService,
     private readonly idempotencyService: IdempotencyService,
     private readonly pricingService: PricingService,
+    private readonly couponsService: CouponsService,
   ) {}
 
   async checkout(
@@ -149,9 +151,41 @@ export class CheckoutService {
       const subtotalPaise = this.pricingService.sumLineTotals(
         linePricing.map((l) => l.pricing),
       );
+
+      // Coupon claim (§2.4/§2.6) — additive: PricingService.computeOrderTotal
+      // already accepts an optional discountPaise, populated here for the
+      // first time, its signature unchanged. Must run inside this same
+      // transaction, after subtotal is known (scope/minOrderValue checks
+      // need it) and before computeOrderTotal — a thrown error here (400
+      // invalid/expired/scope-mismatched/etc., or 409 usage-limit-exhausted)
+      // rolls back the whole transaction, including the idempotency claim
+      // already made above, leaving nothing half-claimed for a retry.
+      let discountPaise = 0n;
+      let finalShippingFeePaise = shippingFeePaise;
+      let couponClaim: { couponId: string; couponCode: string } | null = null;
+      if (dto.couponCode) {
+        const claim = await this.couponsService.validateAndClaim(tx, {
+          code: dto.couponCode,
+          userId,
+          subtotalPaise,
+          shippingFeePaise,
+          lineItems: linePricing.map(({ item, pricing }) => ({
+            categoryId: item.product.categoryId,
+            lineTotalPaise: pricing.lineTotalPaise,
+          })),
+        });
+        discountPaise = claim.discountPaise;
+        finalShippingFeePaise = claim.shippingFeePaise;
+        couponClaim = {
+          couponId: claim.couponId,
+          couponCode: claim.couponCode,
+        };
+      }
+
       const totalPaise = this.pricingService.computeOrderTotal({
         subtotalPaise,
-        shippingFeePaise,
+        shippingFeePaise: finalShippingFeePaise,
+        discountPaise,
       });
 
       const orderNumber = await this.ordersService.generateOrderNumber(tx);
@@ -162,8 +196,11 @@ export class CheckoutService {
           userId,
           status: OrderStatus.PENDING_PAYMENT,
           subtotal: paiseToDecimalString(subtotalPaise),
-          shippingFee: paiseToDecimalString(shippingFeePaise),
+          shippingFee: paiseToDecimalString(finalShippingFeePaise),
           total: paiseToDecimalString(totalPaise),
+          discountAmount: paiseToDecimalString(discountPaise),
+          couponId: couponClaim?.couponId,
+          couponCode: couponClaim?.couponCode,
           shippingRecipientName: dto.shippingRecipientName,
           shippingPhone: dto.shippingPhone,
           shippingAddressLine1: dto.shippingAddressLine1,
@@ -174,6 +211,19 @@ export class CheckoutService {
           shippingCountry: dto.shippingCountry,
         },
       });
+
+      // Audit-ledger row (§2.1) — can only be written now that the Order
+      // it belongs to exists (coupon_usages.orderId is NOT NULL + unique);
+      // necessarily after validateAndClaim's usedCount CAS already
+      // succeeded above, never before it.
+      if (couponClaim) {
+        await this.couponsService.recordUsage(tx, {
+          couponId: couponClaim.couponId,
+          userId,
+          orderId: createdOrder.id,
+          discountAppliedAmountPaise: discountPaise,
+        });
+      }
 
       for (const { item, pricing } of linePricing) {
         const orderItem = await tx.orderItem.create({
@@ -224,6 +274,79 @@ export class CheckoutService {
     return {
       view: await this.loadOrderView(result.orderId, userId),
       created: result.created,
+    };
+  }
+
+  /**
+   * POST /checkout/validate (§2.2) — read-only preview against the
+   * caller's current cart, no transaction, no idempotency key, no coupon
+   * usage claim. `getShippingFeePaise`/`priceItem` accept `this.prisma`
+   * directly wherever they expect a `Prisma.TransactionClient` — the two
+   * types are structurally compatible for the read-only calls those
+   * methods make, so no second (transactional) code path is needed just
+   * for this preview. Never authoritative: the real numbers are always
+   * whatever POST /checkout/orders's own transaction computes, which may
+   * differ if the cart, catalog, or coupon state changes in between
+   * (Business Rule 1 — the backend, never a prior response, is the price
+   * authority).
+   */
+  async previewCheckout(
+    userId: string,
+    couponCode: string | undefined,
+  ): Promise<CheckoutPreviewView> {
+    const cart = await this.prisma.cart.findUnique({
+      where: { userId },
+      include: {
+        items: {
+          orderBy: { createdAt: 'asc' },
+          include: CHECKOUT_CART_ITEM_INCLUDE,
+        },
+      },
+    });
+    if (!cart || cart.items.length === 0) {
+      throw new BadRequestException('Your cart is empty');
+    }
+
+    const shippingFeePaise = await this.getShippingFeePaise(this.prisma);
+    const linePricing = cart.items.map((item) => ({
+      item,
+      pricing: this.priceItem(item),
+    }));
+    const subtotalPaise = this.pricingService.sumLineTotals(
+      linePricing.map((l) => l.pricing),
+    );
+
+    let discountPaise = 0n;
+    let finalShippingFeePaise = shippingFeePaise;
+    let normalizedCouponCode: string | null = null;
+    if (couponCode) {
+      const preview = await this.couponsService.previewDiscount({
+        code: couponCode,
+        userId,
+        subtotalPaise,
+        shippingFeePaise,
+        lineItems: linePricing.map(({ item, pricing }) => ({
+          categoryId: item.product.categoryId,
+          lineTotalPaise: pricing.lineTotalPaise,
+        })),
+      });
+      discountPaise = preview.discountPaise;
+      finalShippingFeePaise = preview.shippingFeePaise;
+      normalizedCouponCode = preview.couponCode;
+    }
+
+    const totalPaise = this.pricingService.computeOrderTotal({
+      subtotalPaise,
+      shippingFeePaise: finalShippingFeePaise,
+      discountPaise,
+    });
+
+    return {
+      subtotal: paiseToDecimalString(subtotalPaise),
+      shippingFee: paiseToDecimalString(finalShippingFeePaise),
+      discountAmount: paiseToDecimalString(discountPaise),
+      total: paiseToDecimalString(totalPaise),
+      couponCode: normalizedCouponCode,
     };
   }
 
@@ -322,6 +445,10 @@ export class CheckoutService {
       subtotal: paiseToDecimalString(subtotalPaise),
       shippingFee: paiseToDecimalString(decimalToPaise(order.shippingFee)),
       total: paiseToDecimalString(totalPaise),
+      discountAmount: paiseToDecimalString(
+        decimalToPaise(order.discountAmount),
+      ),
+      couponCode: order.couponCode,
       currency: order.currency,
       shippingRecipientName: order.shippingRecipientName,
       shippingPhone: order.shippingPhone,

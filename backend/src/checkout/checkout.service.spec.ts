@@ -22,6 +22,7 @@ describe('CheckoutService.toOrderView — shippingFee read-back', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   }
 
@@ -30,12 +31,16 @@ describe('CheckoutService.toOrderView — shippingFee read-back', () => {
       subtotal: string;
       shippingFee: string;
       total: string;
+      discountAmount: string;
+      couponCode: string | null;
     }> = {},
   ) {
     const values = {
       subtotal: '150.00',
       shippingFee: '49.00',
       total: '199.00',
+      discountAmount: '0.00',
+      couponCode: null,
       ...overrides,
     };
     return {
@@ -46,6 +51,8 @@ describe('CheckoutService.toOrderView — shippingFee read-back', () => {
       subtotal: new Prisma.Decimal(values.subtotal),
       shippingFee: new Prisma.Decimal(values.shippingFee),
       total: new Prisma.Decimal(values.total),
+      discountAmount: new Prisma.Decimal(values.discountAmount),
+      couponCode: values.couponCode,
       currency: 'INR',
       razorpayOrderId: null,
       shippingRecipientName: 'Jane Doe',
