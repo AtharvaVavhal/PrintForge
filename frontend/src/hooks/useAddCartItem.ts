@@ -26,6 +26,12 @@ export function useAddCartItem() {
           ? { ...old, items: [...old.items, item], subtotal: meta.subtotal, itemCount: meta.itemCount }
           : old,
       )
+      // §10 line 377: "invalidated after every mutation." The setQueryData
+      // patch above is only an instant-UI optimization from this mutation's
+      // own response — invalidating too guarantees eventual correctness
+      // (e.g. two mutations on different lines resolving out of order can't
+      // leave a stale subtotal/itemCount sitting past the next refetch).
+      void queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY })
     },
   })
 }

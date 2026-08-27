@@ -23,6 +23,10 @@ export function useUpdateCartItem() {
             }
           : old,
       )
+      // §10 line 377: "invalidated after every mutation" — see
+      // useAddCartItem.ts's identical comment for why this stays alongside
+      // the setQueryData patch rather than replacing it.
+      void queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY })
     },
   })
 }

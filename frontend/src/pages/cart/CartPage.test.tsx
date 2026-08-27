@@ -122,7 +122,7 @@ describe('CartPage', () => {
 
   it('updates the quantity via PATCH and reflects the new line total', async () => {
     const user = userEvent.setup()
-    mock.onGet('/cart').reply(200, { success: true, data: buildCart([buildItem()]) })
+    mock.onGet('/cart').replyOnce(200, { success: true, data: buildCart([buildItem()]) })
 
     render(<CartPage />)
     await screen.findByText('Ceramic Mug')
@@ -133,6 +133,10 @@ describe('CartPage', () => {
       data: updatedItem,
       meta: { subtotal: '450.00', itemCount: 3 },
     })
+    // useUpdateCartItem now invalidates the cart query after success (§10
+    // line 377), so a real follow-up GET /cart happens — it must reflect
+    // the same post-mutation state the PATCH response already did.
+    mock.onGet('/cart').reply(200, { success: true, data: buildCart([updatedItem]) })
 
     await user.click(screen.getByRole('button', { name: /increase/i }))
 
@@ -169,7 +173,7 @@ describe('CartPage', () => {
 
   it('removes a line via DELETE and updates the subtotal', async () => {
     const user = userEvent.setup()
-    mock.onGet('/cart').reply(200, { success: true, data: buildCart([buildItem()]) })
+    mock.onGet('/cart').replyOnce(200, { success: true, data: buildCart([buildItem()]) })
 
     render(<CartPage />)
     await screen.findByText('Ceramic Mug')
@@ -179,6 +183,9 @@ describe('CartPage', () => {
       data: { message: 'Item removed from cart' },
       meta: { subtotal: '0.00', itemCount: 0 },
     })
+    // useRemoveCartItem now invalidates the cart query after success (§10
+    // line 377) — the follow-up GET /cart must reflect the item's removal.
+    mock.onGet('/cart').reply(200, { success: true, data: buildCart([]) })
 
     await user.click(screen.getByRole('button', { name: 'Remove' }))
 
