@@ -86,6 +86,15 @@ export interface ListOrdersParams {
 
 export interface OrderDetailView extends OrderListItemView {
   subtotal: string
+  /** Read from the stored orders.shippingFee column — previously absent
+   * from this view entirely (only checkout's own response exposed it). */
+  shippingFee: string
+  /** Major-unit decimal string, "0.00" when no coupon was applied — never
+   * null. */
+  discountAmount: string
+  /** Denormalized snapshot of the applied coupon's code, null when none
+   * was applied — never a live join back to coupons. */
+  couponCode: string | null
   shippingRecipientName: string
   shippingPhone: string
   shippingAddressLine1: string

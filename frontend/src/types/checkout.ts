@@ -32,6 +32,13 @@ export interface CheckoutOrderView {
   subtotal: string
   shippingFee: string
   total: string
+  /** Major-unit decimal string, "0.00" when no coupon was applied — never
+   * null, mirrors the stored orders.discountAmount column's own
+   * never-null default. */
+  discountAmount: string
+  /** Denormalized snapshot of the applied coupon's code, null when none
+   * was applied. */
+  couponCode: string | null
   currency: string
   shippingRecipientName: string
   shippingPhone: string
@@ -55,4 +62,10 @@ export interface CreateOrderPayload {
   shippingState: string
   shippingPostalCode: string
   shippingCountry: string
+  /** Optional — checked and claimed inside the same transaction as order
+   * creation, never a separate pre-check. Should be the server's own
+   * normalized echo from a prior POST /checkout/validate call (see
+   * CheckoutPreviewView.couponCode in types/coupons.ts), not raw user
+   * input — but the real checkout re-validates it regardless. */
+  couponCode?: string
 }

@@ -88,6 +88,14 @@ export function AdminOrderDetailPage() {
               <span>Subtotal</span>
               <span>{formatPrice(order.subtotal)}</span>
             </div>
+            {order.couponCode && (
+              <div className={styles.row}>
+                <span>
+                  Discount (<strong>{order.couponCode}</strong>)
+                </span>
+                <span className={styles.discount}>−{formatPrice(order.discountAmount)}</span>
+              </div>
+            )}
             <div className={styles.row}>
               <span>Total</span>
               <span className={styles.total}>{formatPrice(order.total)}</span>

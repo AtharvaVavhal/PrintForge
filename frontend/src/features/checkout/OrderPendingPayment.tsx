@@ -29,6 +29,15 @@ export function OrderPendingPayment({ order, error, onRetry, isProcessing }: Ord
         window.
       </p>
 
+      {order.couponCode && (
+        <div className={styles.discountRow}>
+          <span>
+            Discount (<strong>{order.couponCode}</strong>)
+          </span>
+          <span className={styles.discount}>−{formatPrice(order.discountAmount)}</span>
+        </div>
+      )}
+
       <div className={styles.totalRow}>
         <span>Total</span>
         <span className={styles.total}>{formatPrice(order.total)}</span>

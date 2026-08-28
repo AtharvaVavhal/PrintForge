@@ -92,6 +92,31 @@ describe('OrderDetailPage', () => {
     delete (window as { Razorpay?: unknown }).Razorpay
   })
 
+  it('shows no discount row when no coupon was applied (discountAmount is "0.00", not null)', async () => {
+    mock.onGet('/orders/order-1').reply(200, {
+      success: true,
+      data: { ...buildOrder('PAID'), discountAmount: '0.00', couponCode: null },
+    })
+
+    renderOrderDetail()
+
+    await screen.findByText('₹349.00')
+    expect(screen.queryByText(/Discount/)).not.toBeInTheDocument()
+  })
+
+  it('shows the discount row with the coupon code when one was applied', async () => {
+    mock.onGet('/orders/order-1').reply(200, {
+      success: true,
+      data: { ...buildOrder('PAID'), total: '319.00', discountAmount: '30.00', couponCode: 'SAVE10' },
+    })
+
+    renderOrderDetail()
+
+    await screen.findByText('₹319.00')
+    expect(screen.getByText('SAVE10')).toBeInTheDocument()
+    expect(screen.getByText('−₹30.00')).toBeInTheDocument()
+  })
+
   it('never renders "Payment confirmed" for a still-PENDING_PAYMENT order, regardless of what the checkout flow assumed', async () => {
     mock.onGet('/orders/order-1').reply(200, { success: true, data: buildOrder('PENDING_PAYMENT') })
 

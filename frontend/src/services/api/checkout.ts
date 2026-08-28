@@ -1,11 +1,29 @@
 import type { ApiSuccessResponse } from '@/types/api'
 import type { CheckoutOrderView, CreateOrderPayload } from '@/types/checkout'
+import type { CheckoutPreviewView, ValidateCheckoutPayload } from '@/types/coupons'
 import type { InitiatePaymentView } from '@/types/payments'
 import { apiClient } from './client'
 
 /** Thin wrappers over backend/src/checkout/checkout.controller.ts. */
 
 const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key'
+
+/**
+ * POST /checkout/validate — read-only preview against the caller's
+ * current cart, no Idempotency-Key (nothing is created, no usage claimed).
+ * A provided-but-invalid/ineligible couponCode throws (400/409) rather
+ * than silently returning a null discount — the caller's error state
+ * handles it the same as any other mutation error.
+ */
+export async function validateCheckout(
+  payload: ValidateCheckoutPayload,
+): Promise<CheckoutPreviewView> {
+  const res = await apiClient.post<ApiSuccessResponse<CheckoutPreviewView>>(
+    '/checkout/validate',
+    payload,
+  )
+  return res.data.data
+}
 
 /**
  * `idempotencyKey` must be the SAME value across every retry of a given

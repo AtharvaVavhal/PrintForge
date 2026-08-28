@@ -116,6 +116,10 @@
   color: var(--color-text-muted);
 }
 
+.discount {
+  color: var(--color-success);
+}
+
 .total {
   font-weight: 600;
   color: var(--color-text-strong);
