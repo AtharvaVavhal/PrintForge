@@ -48,6 +48,10 @@ export function productDetailPath(slug: string): string {
   return `/products/${encodeURIComponent(slug)}`
 }
 
+export function categoryProductsPath(categoryId: string): string {
+  return `${ROUTES.PRODUCTS}?categoryId=${encodeURIComponent(categoryId)}`
+}
+
 export function orderDetailPath(id: string): string {
   return `/orders/${encodeURIComponent(id)}`
 }
