@@ -28,6 +28,31 @@
 
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
 
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* rem, same convention as --container-padding — 1rem = 16px body default */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 1rem; /* 16px — matches body's default font-size */
+  --text-md: 1.125rem; /* 18px */
+  --text-lg: 1.25rem; /* 20px */
+  --text-xl: 1.5rem; /* 24px */
+  --text-2xl: 2rem; /* 32px */
+  --text-3xl: 2.5rem; /* 40px */
+
+  /* Warm-tinted (not pure black) to sit naturally against the warm neutral
+   * palette above, rather than reading as a cool/blue-ish drop shadow. */
+  --shadow-sm: 0 1px 2px rgba(32, 29, 27, 0.08);
+  --shadow-md: 0 6px 20px rgba(32, 29, 27, 0.12);
+  --shadow-lg: 0 16px 40px rgba(32, 29, 27, 0.16);
+
   color-scheme: light;
 }
 
