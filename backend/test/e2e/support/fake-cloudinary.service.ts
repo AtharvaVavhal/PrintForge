@@ -26,16 +26,16 @@ export class FakeCloudinaryService extends CloudinaryService {
     super(configService);
   }
 
-  async uploadBuffer(
+  uploadBuffer(
     buffer: Buffer,
     options: CloudinaryUploadOptions,
   ): Promise<UploadApiResponse> {
-    return {
+    return Promise.resolve({
       public_id: `fake/${options.purpose}/${randomUUID()}`,
       bytes: buffer.length,
       format: 'png',
       resource_type: 'image',
-    } as UploadApiResponse;
+    } as UploadApiResponse);
   }
 
   signedUrl(publicId: string): string {
