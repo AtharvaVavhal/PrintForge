@@ -16,10 +16,11 @@ const DEFAULT_LIMIT = 20
 export function ProductListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const categoryId = searchParams.get('categoryId') ?? undefined
+  const search = searchParams.get('search') ?? undefined
   const page = Number(searchParams.get('page') ?? '1')
 
   const categoriesQuery = useCategories()
-  const productsQuery = useProducts({ categoryId, page, limit: DEFAULT_LIMIT })
+  const productsQuery = useProducts({ categoryId, search, page, limit: DEFAULT_LIMIT })
 
   function goToPage(nextPage: number) {
     setSearchParams((prev) => {
@@ -32,6 +33,7 @@ export function ProductListPage() {
   return (
     <section className={styles.wrap}>
       <h1>Shop</h1>
+      {search && <p className={styles.searchResultLabel}>Results for &quot;{search}&quot;</p>}
 
       {categoriesQuery.data && categoriesQuery.data.length > 0 && (
         <CategoryFilter categories={categoriesQuery.data} />
@@ -44,7 +46,7 @@ export function ProductListPage() {
       )}
 
       {productsQuery.data && productsQuery.data.items.length === 0 && (
-        <EmptyCatalog hasFilter={Boolean(categoryId)} />
+        <EmptyCatalog hasFilter={Boolean(categoryId) || Boolean(search)} />
       )}
 
       {productsQuery.data && productsQuery.data.items.length > 0 && (

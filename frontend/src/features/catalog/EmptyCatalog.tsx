@@ -15,10 +15,10 @@ export function EmptyCatalog({ hasFilter }: EmptyCatalogProps) {
   return (
     <div className={styles.empty}>
       <PackageSearch size={40} strokeWidth={1.5} aria-hidden="true" />
-      <h2>{hasFilter ? 'No products in this category yet' : 'No products yet'}</h2>
+      <h2>{hasFilter ? 'No products match this filter' : 'No products yet'}</h2>
       <p>
         {hasFilter
-          ? 'Try a different category, or check back soon.'
+          ? 'Try a different search or category, or check back soon.'
           : "We're setting up the catalog — check back soon."}
       </p>
     </div>

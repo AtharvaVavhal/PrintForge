@@ -98,10 +98,14 @@ export class ProductsService {
     page: number,
     limit: number,
     categoryId: string | undefined,
+    search: string | undefined,
   ): Promise<PaginatedResult<ProductWithRelations>> {
     const where: Prisma.ProductWhereInput = {
       isActive: true,
       ...(categoryId ? { categoryId } : {}),
+      ...(search
+        ? { name: { contains: search, mode: 'insensitive' as const } }
+        : {}),
     };
 
     const [items, total] = await Promise.all([

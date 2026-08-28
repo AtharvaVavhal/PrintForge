@@ -46,6 +46,7 @@ export class ProductsController {
       query.page,
       query.limit,
       query.categoryId,
+      query.search,
     );
   }
 
