@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - main
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    # A real Postgres, not mocks — the §27 e2e suite runs supertest
+    # against a real Nest app and a real database (see
+    # backend/test/e2e/support/README.md). POSTGRES_DB creates the
+    # database on container startup; its name must end in `_test` or
+    # test/e2e/support/db.ts's resetDatabase guard refuses to truncate it.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: printforge_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/printforge_ci_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npm run prisma:generate
+
+      - name: Apply migrations
+        working-directory: backend
+        run: npm run prisma:migrate:deploy
+
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Build
+        working-directory: backend
+        run: npm run build
+
+      - name: Unit tests
+        working-directory: backend
+        run: npm run test
+
+      # backend/.env.test is gitignored and never committed (see
+      # backend/test/e2e/support/README.md) — generated here so
+      # env.setup.ts (test/jest-e2e.json's setupFiles) has something to
+      # load before AppModule is imported. Only NODE_ENV/PORT/DATABASE_URL/
+      # JWT_ACCESS_SECRET/REFRESH_TOKEN_SECRET are @IsNotEmpty at boot
+      # (src/common/config/env.validation.ts) — Razorpay/Resend/Cloudinary
+      # vars are deliberately omitted: no e2e spec reaches a real Razorpay
+      # call (checkout order creation is DB-only; payments-race.e2e-spec
+      # seeds razorpayOrderId directly via Prisma) and CloudinaryService is
+      # swapped for FakeCloudinaryService in test-app.ts.
+      - name: Write .env.test
+        working-directory: backend
+        run: |
+          cat > .env.test <<EOF
+          NODE_ENV=test
+          PORT=4000
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/printforge_ci_test?schema=public
+          JWT_ACCESS_SECRET=ci-test-access-secret
+          JWT_ACCESS_EXPIRES_IN=15m
+          REFRESH_TOKEN_SECRET=ci-test-refresh-secret
+          REFRESH_TOKEN_EXPIRES_IN=30d
+          EOF
+
+      # test/jest-e2e.json already sets maxWorkers: 1 (these tests share
+      # one database and run serially) — no extra --runInBand flag needed.
+      - name: E2E tests
+        working-directory: backend
+        run: npm run test:e2e
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      # A dummy value — frontend/.env.example references VITE_API_BASE_URL,
+      # but no real backend is reachable (or needed) for a build/typecheck/
+      # test pass.
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: http://localhost:4000/api
+        run: npm run build
+
+      - name: Test
+        working-directory: frontend
+        run: npm run test
