@@ -9,6 +9,7 @@ import { ProductForm } from '@/features/admin/ProductForm'
 import { VariantManager } from '@/features/admin/VariantManager'
 import { CustomizationFieldManager } from '@/features/admin/CustomizationFieldManager'
 import { ProductImageManager } from '@/features/admin/ProductImageManager'
+import { ProductReviewModeration } from '@/features/admin/ProductReviewModeration'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -236,6 +237,8 @@ export function AdminProductDetailPage() {
         images={product.images}
         onImagesChange={(images) => setProduct((prev) => (prev ? { ...prev, images } : prev))}
       />
+
+      <ProductReviewModeration productId={product.id} />
     </section>
   )
 }

@@ -62,6 +62,13 @@
   margin-top: 1rem;
 }
 
+.reviews {
+  grid-column: 1 / -1;
+  margin-top: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-border);
+}
+
 .imageSkeleton {
   max-width: 380px;
   aspect-ratio: 1 / 1;

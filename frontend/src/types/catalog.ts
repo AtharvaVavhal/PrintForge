@@ -93,6 +93,12 @@ export interface Product {
   maxQuantity: number | null
   specifications: Record<string, unknown> | null
   isActive: boolean
+  /** Denormalized rating aggregate (PHASE-10-PROPOSAL.md §1.1/R7),
+   * recomputed server-side on every review write — never client-derived.
+   * null (not "0.00") when reviewCount is 0, i.e. no PUBLISHED reviews
+   * yet. Decimal-as-string, same convention as basePrice. */
+  avgRating: string | null
+  reviewCount: number
   createdAt: string
   updatedAt: string
   variants: ProductVariant[]

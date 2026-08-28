@@ -12,6 +12,7 @@
  */
 import type { OrderListItemView, OrderStatus } from './orders'
 import type { CustomizationFieldType, SurchargeType } from './catalog'
+import type { ReviewStatus } from './reviews'
 
 export interface OrderStatusCount {
   status: OrderStatus
@@ -133,3 +134,10 @@ export interface CreateCategoryPayload {
 }
 
 export type UpdateCategoryPayload = Partial<CreateCategoryPayload>
+
+/** PATCH /admin/reviews/:id/status — the only field. Unlike order status
+ * there's no legality graph (reviews.service.ts): any ReviewStatus to any
+ * ReviewStatus is a valid moderation action. */
+export interface UpdateReviewStatusPayload {
+  status: ReviewStatus
+}
