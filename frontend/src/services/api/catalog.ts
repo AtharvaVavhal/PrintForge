@@ -48,8 +48,9 @@ export interface ProductListResult {
   meta: PaginationMeta
 }
 
-/** GET /products only accepts page/limit/categoryId (ListProductsQueryDto)
- * — no search or sort param exists server-side. */
+/** GET /products accepts page/limit/categoryId/search (ListProductsQueryDto)
+ * — no sort param exists server-side yet. `params` is forwarded as-is, so
+ * `search` flows through once present on ListProductsParams. */
 export async function fetchProducts(
   params: ListProductsParams = {},
 ): Promise<ProductListResult> {

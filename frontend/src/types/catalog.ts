@@ -107,11 +107,13 @@ export interface Product {
 }
 
 /**
- * Mirrors ListProductsQueryDto exactly (page/limit/categoryId only — no
- * search or sort param exists on GET /products).
+ * Mirrors ListProductsQueryDto exactly — page/limit/categoryId/search.
+ * `search` is a case-insensitive substring match on Product.name; no sort
+ * param exists on GET /products yet.
  */
 export interface ListProductsParams {
   page?: number
   limit?: number
   categoryId?: string
+  search?: string
 }

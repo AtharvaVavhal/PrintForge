@@ -71,6 +71,7 @@ export function authHeader(user: TestUser): [string, string] {
 }
 
 export interface ProductFixtureOptions {
+  name?: string;
   basePrice?: string;
   minQuantity?: number;
   maxQuantity?: number | null;
@@ -102,7 +103,7 @@ export async function createProduct(
   const product = await prisma.product.create({
     data: {
       categoryId: category.id,
-      name: `Test Product ${randomUUID()}`,
+      name: options.name ?? `Test Product ${randomUUID()}`,
       slug,
       basePrice,
       minQuantity: options.minQuantity ?? 1,
