@@ -1,6 +1,6 @@
 /**
  * Mirrors backend/src/common/types/api-response.interface.ts — every
- * PrintForge REST response is one of these two shapes (BLUEPRINT-v1.2.md
+ * AB Creations REST response is one of these two shapes (BLUEPRINT-v1.2.md
  * §21). Kept as a hand-written mirror rather than a shared package since
  * frontend/backend are separate npm projects with no workspace linking.
  */

@@ -1,4 +1,4 @@
-# PrintForge — Phase 10 Design Proposal: Reviews & Coupons
+# AB Creations — Phase 10 Design Proposal: Reviews & Coupons
 
 **STATUS: PROPOSAL — NOT FROZEN, NOT IMPLEMENTED**
 **DRAFT DATE: 27 August 2026**
@@ -128,7 +128,7 @@ No `forwardRef()` anywhere, same rule the scaffold report already committed to.
 
 This is flagged as the single highest-leverage decision, so the tradeoff deserves more than the one-liner in §0.
 
-**Argument for gating (chosen):** PrintForge is a small, early-stage, custom-printing storefront (§1 of the blueprint: "budget-constrained," two developers, MVP deliberately narrow). At this scale, trust signals carry outsized weight — a handful of fabricated negative reviews (a competitor, a disgruntled non-customer) does much more relative damage than the same handful would on a marketplace absorbing thousands of reviews a day. A verified-purchase gate is the cheapest available control against exactly that risk, and this schema already has every fact needed to enforce it for free (`Order.status`, `OrderItem.productId`) — no new tracking infrastructure required.
+**Argument for gating (chosen):** AB Creations is a small, early-stage, custom-printing storefront (§1 of the blueprint: "budget-constrained," two developers, MVP deliberately narrow). At this scale, trust signals carry outsized weight — a handful of fabricated negative reviews (a competitor, a disgruntled non-customer) does much more relative damage than the same handful would on a marketplace absorbing thousands of reviews a day. A verified-purchase gate is the cheapest available control against exactly that risk, and this schema already has every fact needed to enforce it for free (`Order.status`, `OrderItem.productId`) — no new tracking infrastructure required.
 
 **Argument against (rejected, but real):** gating on `DELIVERED` specifically (not `PAID`) means a customer can't review the moment they've paid — they have to wait through the entire fulfillment pipeline (confirm → production → ship → deliver), which for a custom-printed good could be days to weeks. This suppresses review *volume* and *velocity* meaningfully, which matters if the business's actual goal for Phase 10 is "get to 50 reviews fast to look credible," not "every review is trustworthy." If review volume turns out to matter more than review trustworthiness once this ships, the fix is a one-line change (gate on `PAID` or `CONFIRMED` instead of `DELIVERED`) — not a schema change, since `orderItemId` already anchors to the exact item regardless of which status is required at check-time.
 

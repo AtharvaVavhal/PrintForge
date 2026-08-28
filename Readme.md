@@ -1,6 +1,6 @@
 <div align="center">
 
-# PrintForge
+# AB Creations
 
 **Custom printing, engineered like infrastructure.**
 
@@ -17,7 +17,7 @@
 
 ## Overview
 
-PrintForge is a modular commerce platform for custom printing. It takes a customer from product discovery through file upload, checkout, payment, production, and delivery — with every state transition enforced at the database layer, not assumed by application code.
+AB Creations is a modular commerce platform for custom printing. It takes a customer from product discovery through file upload, checkout, payment, production, and delivery — with every state transition enforced at the database layer, not assumed by application code.
 
 The system is built as a **modular monolith**: one deployable backend, twelve clean domain boundaries, and PostgreSQL as the single source of truth for correctness. There are no microservices, no message brokers, and no distributed infrastructure the current scale doesn't justify. Reliability comes from transactions, constraints, and idempotency — not from additional moving parts.
 
@@ -141,7 +141,7 @@ flowchart LR
 
 ## Payment Architecture
 
-An **Order** has one-to-many **PaymentAttempts**. A single Razorpay Order ID is created per application Order and reused across retries — PrintForge never creates a new application Order for a retried payment.
+An **Order** has one-to-many **PaymentAttempts**. A single Razorpay Order ID is created per application Order and reused across retries — AB Creations never creates a new application Order for a retried payment.
 
 ```
 Order 1 ──< PaymentAttempt N
@@ -189,7 +189,7 @@ sequenceDiagram
     API-->>C: Order created
 ```
 
-The database transaction commits **before** PrintForge talks to Razorpay. This is deliberate: the order's existence never depends on an external API call succeeding. If Razorpay order creation fails, the order remains valid in `PENDING_PAYMENT`, and `POST /checkout/orders/:id/retry-payment` repeats only the association step — not the entire checkout.
+The database transaction commits **before** AB Creations talks to Razorpay. This is deliberate: the order's existence never depends on an external API call succeeding. If Razorpay order creation fails, the order remains valid in `PENDING_PAYMENT`, and `POST /checkout/orders/:id/retry-payment` repeats only the association step — not the entire checkout.
 
 The cart lock (`FOR UPDATE`) is the first statement in the transaction, and it does double duty: it's what makes two different tabs racing on the same cart collapse into one order, *and* it's what makes a per-user coupon usage limit safe to check without a second lock — by the time the coupon claim runs, this user's checkout is already fully serialized.
 
@@ -271,7 +271,7 @@ RECEIVED → PROCESSED
          ↘ IGNORED            (duplicate / not actionable)
 ```
 
-The unique `razorpayEventId` constraint means a redelivered webhook is detected at ingest and cannot produce duplicate side effects. Processing failures are picked up by the same scheduled polling mechanism used for the outbox — no separate retry infrastructure. Webhook delivery order is **not** guaranteed by Razorpay, and PrintForge does not claim otherwise: payment-state updates are written as idempotent, state-checked writes rather than assumed to arrive in sequence.
+The unique `razorpayEventId` constraint means a redelivered webhook is detected at ingest and cannot produce duplicate side effects. Processing failures are picked up by the same scheduled polling mechanism used for the outbox — no separate retry infrastructure. Webhook delivery order is **not** guaranteed by Razorpay, and AB Creations does not claim otherwise: payment-state updates are written as idempotent, state-checked writes rather than assumed to arrive in sequence.
 
 ---
 
@@ -580,7 +580,7 @@ Coupons and Reviews (§10) are the first change to go through this path in full,
 
 ## Tax & GST
 
-GST treatment is a business and legal decision, not an engineering one. PrintForge does not assume, infer, or hard-code any GST rate, invoicing requirement, or filing obligation. The pricing engine is structured so GST handling can be introduced once the following are confirmed by the business:
+GST treatment is a business and legal decision, not an engineering one. AB Creations does not assume, infer, or hard-code any GST rate, invoicing requirement, or filing obligation. The pricing engine is structured so GST handling can be introduced once the following are confirmed by the business:
 
 - Whether GST applies to the platform's transactions.
 - Whether GST-compliant invoices must be generated.
@@ -609,7 +609,7 @@ Only the architecture is frozen; everything below reflects actual implementation
 
 ## Team
 
-Maintained by the PrintForge engineering team.
+Maintained by the AB Creations engineering team.
 
 ---
 
@@ -621,6 +621,6 @@ Proprietary. All rights reserved. This repository and its contents are not licen
 
 <div align="center">
 
-**PrintForge** · Custom printing, engineered like infrastructure.
+**AB Creations** · Custom printing, engineered like infrastructure.
 
 </div>

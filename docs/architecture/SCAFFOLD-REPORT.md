@@ -1,4 +1,4 @@
-# PrintForge Backend — Scaffolding Report
+# AB Creations Backend — Scaffolding Report
 
 **Date:** 25 August 2026
 **Scope:** Backend folder/module architecture and project scaffolding only, per the frozen `docs/architecture/BLUEPRINT-v1.2.md`. No business logic implemented.

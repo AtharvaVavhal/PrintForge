@@ -41,7 +41,7 @@ export function LoginPage() {
   return (
     <AuthFormShell
       title="Log in"
-      subtitle="Welcome back to PrintForge."
+      subtitle="Welcome back to AB Creations."
       footer={
         <>
           Don&apos;t have an account? <Link to={ROUTES.REGISTER}>Sign up</Link>

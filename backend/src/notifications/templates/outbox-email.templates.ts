@@ -38,9 +38,9 @@ function buildPasswordResetEmail(
 ): EmailContent {
   const resetLink = asString(payload.resetLink);
   return {
-    subject: 'Reset your PrintForge password',
+    subject: 'Reset your AB Creations password',
     html: `
-      <p>We received a request to reset your PrintForge password.</p>
+      <p>We received a request to reset your AB Creations password.</p>
       <p><a href="${resetLink}">Click here to reset your password</a>. This link expires in 30 minutes.</p>
       <p>If you didn't request this, you can safely ignore this email.</p>
     `.trim(),

@@ -51,7 +51,7 @@ export function useRazorpayCheckout({ onVerified, onDismissed, onError }: UseRaz
           amount: Number(payment.amountPaise),
           currency: payment.currency,
           order_id: payment.razorpayOrderId,
-          name: 'PrintForge',
+          name: 'AB Creations',
           description: `Order ${order.orderNumber}`,
           prefill: customer,
           handler: (response) => {

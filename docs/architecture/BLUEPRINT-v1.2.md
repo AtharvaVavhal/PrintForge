@@ -1,4 +1,4 @@
-# PrintForge — Architecture Blueprint v1.2
+# AB Creations — Architecture Blueprint v1.2
 
 **STATUS: FROZEN**
 **FREEZE DATE: 25 August 2026**

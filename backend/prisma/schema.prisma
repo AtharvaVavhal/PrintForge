@@ -1,4 +1,4 @@
-// PrintForge — Prisma schema
+// AB Creations — Prisma schema
 // Architecture frozen v1.2 — docs/architecture/BLUEPRINT-v1.2.md §15 (Complete Schema),
 // §12 (Payment Architecture), §14 (Order State Machine).
 // Single database, single deployable (§16). Do not add tables/fields beyond

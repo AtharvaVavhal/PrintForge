@@ -19,7 +19,7 @@ export function Header() {
     <header className={styles.header}>
       <div className={styles.inner}>
         <NavLink to={ROUTES.HOME} className={styles.brand}>
-          PrintForge
+          AB Creations
         </NavLink>
 
         <nav className={styles.nav} aria-label="Main">

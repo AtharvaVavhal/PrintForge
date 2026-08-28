@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "0.0.1",
-  "description": "PrintForge backend — NestJS modular monolith (architecture frozen v1.2)",
+  "description": "AB Creations backend — NestJS modular monolith (architecture frozen v1.2)",
   "author": "Atharva Vavhal",
   "private": true,
   "license": "UNLICENSED",
