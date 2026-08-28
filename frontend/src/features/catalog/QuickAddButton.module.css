@@ -1,0 +1,15 @@
+.wrap {
+  margin-top: var(--space-2);
+}
+
+.button {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.error {
+  margin: var(--space-1) 0 0;
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+}

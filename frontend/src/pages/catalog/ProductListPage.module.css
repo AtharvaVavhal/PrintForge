@@ -1,27 +1,27 @@
 .wrap {
   max-width: var(--container-max);
   margin: 0 auto;
-  padding: 2.5rem var(--container-padding) 4rem;
+  padding: var(--space-8) var(--container-padding) var(--space-8);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-5);
 }
 
 .searchResultLabel {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.9375rem;
+  font-size: var(--text-sm);
 }
 
 .pagination {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
 }
 
 .pageIndicator {
-  font-size: 0.875rem;
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
 }

@@ -1,7 +1,13 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
+}
+
+.cardLink {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   text-decoration: none;
   color: inherit;
 }
@@ -9,11 +15,11 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
 }
 
 .name {
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-weight: 600;
   margin: 0;
   color: var(--color-text-strong);
@@ -22,5 +28,5 @@
 .price {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.9375rem;
+  font-size: var(--text-sm);
 }

@@ -1,7 +1,7 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 2rem 1.5rem;
+  gap: var(--space-5) var(--space-4);
 }
 
 .skeletonCard {
