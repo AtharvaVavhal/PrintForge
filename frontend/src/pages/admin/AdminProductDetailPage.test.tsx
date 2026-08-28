@@ -25,6 +25,8 @@ function buildProduct(overrides: Partial<Product> = {}): Product {
     maxQuantity: null,
     specifications: null,
     isActive: true,
+    avgRating: null,
+    reviewCount: 0,
     createdAt: '2026-08-27T00:00:00.000Z',
     updatedAt: '2026-08-27T00:00:00.000Z',
     variants: [],
@@ -54,6 +56,14 @@ describe('AdminProductDetailPage', () => {
   beforeEach(() => {
     mock = new MockAdapter(apiClient)
     mock.onGet('/categories').reply(200, CATEGORIES_RESPONSE)
+    // ProductReviewModeration (rendered whenever a product is loaded)
+    // fetches this on mount — an empty list is the harmless default for
+    // every test that isn't specifically exercising moderation.
+    mock.onGet('/products/prod-1/reviews').reply(200, {
+      success: true,
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 1 },
+    })
   })
 
   afterEach(() => {
@@ -195,5 +205,85 @@ describe('AdminProductDetailPage', () => {
 
     await waitFor(() => expect(mock.history.post.length).toBe(1))
     expect(await screen.findByText('Large')).toBeInTheDocument()
+  })
+
+  it("moderates a review's status via the dropdown, PATCHing /admin/reviews/:id/status", async () => {
+    const user = userEvent.setup()
+    const product = buildProduct()
+    mock.onGet('/products/prod-1/reviews').reply(200, {
+      success: true,
+      data: [
+        {
+          id: 'rev-1',
+          productId: 'prod-1',
+          userId: 'user-9',
+          rating: 1,
+          bodyText: 'Spam content',
+          status: 'PUBLISHED',
+          createdAt: '2026-08-27T00:00:00.000Z',
+          updatedAt: '2026-08-27T00:00:00.000Z',
+        },
+      ],
+      meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    })
+    mock.onPatch('/admin/reviews/rev-1/status').reply(200, {
+      success: true,
+      data: {
+        id: 'rev-1',
+        productId: 'prod-1',
+        userId: 'user-9',
+        rating: 1,
+        bodyText: 'Spam content',
+        status: 'REMOVED',
+        createdAt: '2026-08-27T00:00:00.000Z',
+        updatedAt: '2026-08-27T00:00:01.000Z',
+      },
+    })
+
+    renderAt('/admin/products/prod-1', { product })
+
+    await screen.findByText('Spam content')
+    await user.selectOptions(screen.getByLabelText('Status'), 'REMOVED')
+
+    await waitFor(() => expect(mock.history.patch.length).toBe(1))
+    expect(JSON.parse(mock.history.patch[0].data as string)).toEqual({ status: 'REMOVED' })
+    // The row stays visible with its new status selected, rather than
+    // vanishing — GET /products/:id/reviews is PUBLISHED-only and this
+    // page never refetches it after a moderation write (see
+    // ProductReviewModeration's own doc comment for why).
+    expect(screen.getByText('Spam content')).toBeInTheDocument()
+    expect(screen.getByLabelText('Status')).toHaveValue('REMOVED')
+  })
+
+  it('shows an error and leaves the previous status selected when moderation is rejected', async () => {
+    const user = userEvent.setup()
+    const product = buildProduct()
+    mock.onGet('/products/prod-1/reviews').reply(200, {
+      success: true,
+      data: [
+        {
+          id: 'rev-1',
+          productId: 'prod-1',
+          userId: 'user-9',
+          rating: 4,
+          bodyText: 'Fine review',
+          status: 'PUBLISHED',
+          createdAt: '2026-08-27T00:00:00.000Z',
+          updatedAt: '2026-08-27T00:00:00.000Z',
+        },
+      ],
+      meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+    })
+    mock.onPatch('/admin/reviews/rev-1/status').reply(500, {
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Something went wrong', details: [] },
+    })
+
+    renderAt('/admin/products/prod-1', { product })
+
+    await screen.findByText('Fine review')
+    await user.selectOptions(screen.getByLabelText('Status'), 'REJECTED')
+
+    expect(await screen.findByText('Something went wrong')).toBeInTheDocument()
   })
 })

@@ -19,6 +19,8 @@ const SAMPLE_PRODUCT = {
   maxQuantity: 10,
   specifications: { Material: 'Ceramic' },
   isActive: true,
+  avgRating: '4.50',
+  reviewCount: 2,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   variants: [
@@ -58,6 +60,14 @@ describe('ProductDetailPage', () => {
     // apiClient (see client.ts's own comment on why) — must be mocked
     // separately or a real, unmocked network call goes out.
     rootMock = new MockAdapter(axios)
+    // ReviewList (rendered below the fold on every product) fetches this
+    // on mount — an empty list is the harmless default for every test
+    // that isn't specifically exercising the reviews section.
+    mock.onGet('/products/prod-1/reviews').reply(200, {
+      success: true,
+      data: [],
+      meta: { page: 1, limit: 10, total: 0, totalPages: 1 },
+    })
   })
 
   afterEach(() => {
@@ -82,6 +92,52 @@ describe('ProductDetailPage', () => {
     expect(
       screen.getByRole('img', { name: 'Ceramic Mug — no image available' }),
     ).toBeInTheDocument()
+  })
+
+  it('renders the star rating summary near the price', async () => {
+    mock.onGet('/products/ceramic-mug').reply(200, { success: true, data: SAMPLE_PRODUCT })
+
+    renderAtSlug('ceramic-mug')
+
+    expect(await screen.findByText('4.50')).toBeInTheDocument()
+    expect(screen.getByText('(2 reviews)')).toBeInTheDocument()
+  })
+
+  it('shows "No reviews yet" instead of a rating when reviewCount is 0', async () => {
+    mock.onGet('/products/ceramic-mug').reply(200, {
+      success: true,
+      data: { ...SAMPLE_PRODUCT, avgRating: null, reviewCount: 0 },
+    })
+
+    renderAtSlug('ceramic-mug')
+
+    expect(await screen.findByText('No reviews yet')).toBeInTheDocument()
+  })
+
+  it('renders the paginated review list below the main content', async () => {
+    mock.onGet('/products/ceramic-mug').reply(200, { success: true, data: SAMPLE_PRODUCT })
+    mock.onGet('/products/prod-1/reviews').reply(200, {
+      success: true,
+      data: [
+        {
+          id: 'rev-1',
+          productId: 'prod-1',
+          userId: 'someone-else',
+          rating: 5,
+          bodyText: 'Sturdy and looks great.',
+          status: 'PUBLISHED',
+          createdAt: '2026-01-02T00:00:00.000Z',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+      meta: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    })
+
+    renderAtSlug('ceramic-mug')
+    await screen.findByRole('heading', { name: 'Ceramic Mug' })
+
+    expect(await screen.findByText('Sturdy and looks great.')).toBeInTheDocument()
+    expect(screen.getByText('Verified buyer')).toBeInTheDocument()
   })
 
   it('renders a real <img> when the product has an image', async () => {

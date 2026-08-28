@@ -13,6 +13,8 @@ import {
   CustomizationForm,
   type CustomizationFormState,
 } from '@/features/customization/CustomizationForm'
+import { StarRating } from '@/features/reviews/StarRating'
+import { ReviewList } from '@/features/reviews/ReviewList'
 import styles from './ProductDetailPage.module.css'
 
 const EMPTY_CUSTOMIZATION_STATE: CustomizationFormState = {
@@ -75,6 +77,7 @@ export function ProductDetailPage() {
 
       <div className={styles.info}>
         <h1>{product.name}</h1>
+        <StarRating avgRating={product.avgRating} reviewCount={product.reviewCount} />
         <p className={styles.price}>{formatPrice(total)}</p>
         <p className={styles.quantityRange}>
           {product.maxQuantity
@@ -111,6 +114,10 @@ export function ProductDetailPage() {
           selectedVariantId={selectedVariantId}
           customization={customization}
         />
+      </div>
+
+      <div className={styles.reviews}>
+        <ReviewList productId={product.id} />
       </div>
     </section>
   )

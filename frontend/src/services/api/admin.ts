@@ -7,7 +7,9 @@ import type {
   ListAdminCustomersParams,
   ListAdminOrdersParams,
   UpdateOrderStatusPayload,
+  UpdateReviewStatusPayload,
 } from '@/types/admin'
+import type { ReviewView } from '@/types/reviews'
 import { apiClient } from './client'
 
 /**
@@ -78,5 +80,22 @@ export async function fetchAdminCustomers(
 
 export async function fetchAdminCustomer(customerId: string): Promise<AdminCustomerDetailView> {
   const res = await apiClient.get<ApiSuccessResponse<AdminCustomerDetailView>>(`/admin/customers/${customerId}`)
+  return res.data.data
+}
+
+/** PATCH /admin/reviews/:id/status — any ReviewStatus to any ReviewStatus
+ * is a valid moderation action (no legality graph, unlike order status).
+ * There is no GET /admin/reviews (list-all) endpoint — this is the only
+ * review-moderation route that exists; see
+ * features/admin/ProductReviewModeration.tsx for how a review id is found
+ * to moderate without one. */
+export async function updateReviewStatus(
+  reviewId: string,
+  payload: UpdateReviewStatusPayload,
+): Promise<ReviewView> {
+  const res = await apiClient.patch<ApiSuccessResponse<ReviewView>>(
+    `/admin/reviews/${reviewId}/status`,
+    payload,
+  )
   return res.data.data
 }
