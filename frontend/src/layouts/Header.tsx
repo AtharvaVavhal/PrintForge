@@ -1,9 +1,10 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Search, ShoppingCart } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useCart } from '@/hooks/useCart'
+import { useCategories } from '@/hooks/useCategories'
 import { ROUTES } from '@/constants/routes'
 import { cn } from '@/utils/cn'
 import {
@@ -21,6 +22,14 @@ function navLinkClassName({ isActive }: { isActive: boolean }): string {
 export function Header() {
   const { user, status } = useAuth()
   const { data: cart } = useCart()
+  /** Same ['categories'] query CategoryFilter (ProductListPage) reads —
+   * react-query dedupes/caches by queryKey against the single app-wide
+   * QueryClientProvider (App.tsx), so this doesn't add a second network
+   * fetch beyond the normal staleTime-driven refetch; there's no separate
+   * layout-level data-sharing context in this codebase to plug into
+   * instead (the only other one, AuthContext, is auth-specific). */
+  const categoriesQuery = useCategories()
+  const categories = categoriesQuery.data ?? []
   const navigate = useNavigate()
   const {
     register,
@@ -135,6 +144,25 @@ export function Header() {
           ) : null}
         </div>
       </div>
+
+      {categories.length > 0 && (
+        <nav className={styles.categoryNav} aria-label="Categories">
+          <div className={styles.categoryNavInner}>
+            <Link to={ROUTES.PRODUCTS} className={styles.categoryLink}>
+              All categories
+            </Link>
+            {categories.map((category) => (
+              <Link
+                key={category.id}
+                to={`${ROUTES.PRODUCTS}?categoryId=${encodeURIComponent(category.id)}`}
+                className={styles.categoryLink}
+              >
+                {category.name}
+              </Link>
+            ))}
+          </div>
+        </nav>
+      )}
     </header>
   )
 }
