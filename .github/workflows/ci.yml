@@ -78,11 +78,18 @@ jobs:
       # env.setup.ts (test/jest-e2e.json's setupFiles) has something to
       # load before AppModule is imported. Only NODE_ENV/PORT/DATABASE_URL/
       # JWT_ACCESS_SECRET/REFRESH_TOKEN_SECRET are @IsNotEmpty at boot
-      # (src/common/config/env.validation.ts) — Razorpay/Resend/Cloudinary
-      # vars are deliberately omitted: no e2e spec reaches a real Razorpay
-      # call (checkout order creation is DB-only; payments-race.e2e-spec
-      # seeds razorpayOrderId directly via Prisma) and CloudinaryService is
-      # swapped for FakeCloudinaryService in test-app.ts.
+      # (src/common/config/env.validation.ts); RAZORPAY_KEY_ID/RESEND/
+      # CLOUDINARY vars are deliberately omitted — no e2e spec reaches a
+      # real Razorpay/Cloudinary/Resend network call (checkout order
+      # creation is DB-only, CloudinaryService is swapped for
+      # FakeCloudinaryService in test-app.ts). RAZORPAY_KEY_SECRET and
+      # RAZORPAY_WEBHOOK_SECRET ARE required, though — confirmed live
+      # (first CI run): payments-race.e2e-spec.ts signs webhook/verify
+      # payloads with the real local HMAC check
+      # (test/e2e/support/razorpay-signing.ts / RazorpayService's own
+      # verifySignature/verifyWebhookSignature), which throws if either is
+      # unset — still no real Razorpay network call, just two consistent
+      # dummy secrets the test and the app both read.
       - name: Write .env.test
         working-directory: backend
         run: |
@@ -94,6 +101,8 @@ jobs:
           JWT_ACCESS_EXPIRES_IN=15m
           REFRESH_TOKEN_SECRET=ci-test-refresh-secret
           REFRESH_TOKEN_EXPIRES_IN=30d
+          RAZORPAY_KEY_SECRET=ci-test-razorpay-key-secret
+          RAZORPAY_WEBHOOK_SECRET=ci-test-razorpay-webhook-secret
           EOF
 
       # test/jest-e2e.json already sets maxWorkers: 1 (these tests share
