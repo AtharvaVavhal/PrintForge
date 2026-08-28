@@ -15,7 +15,11 @@ const STAR_COUNT = 5
  * yet rather than a misleading "0 stars". */
 export function StarRating({ avgRating, reviewCount, compact = false }: StarRatingProps) {
   if (reviewCount <= 0 || avgRating === null) {
-    return <p className={styles.empty}>No reviews yet</p>
+    return (
+      <p className={compact ? `${styles.empty} ${styles.compact}` : styles.empty}>
+        No reviews yet
+      </p>
+    )
   }
 
   const rounded = Math.round(Number(avgRating))
