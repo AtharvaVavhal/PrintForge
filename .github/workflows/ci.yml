@@ -38,9 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22, not 20: confirmed live (first CI run) that frontend's
+      # vitest/jsdom stack crashes under Node 20's older bundled undici
+      # (`webidl.util.markAsUncloneable is not a function`, from jsdom's
+      # Cache API shim) — jsdom@30 needs a newer undici than Node 20 ships.
+      # Bumped both jobs for consistency, not just frontend.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -106,7 +111,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
