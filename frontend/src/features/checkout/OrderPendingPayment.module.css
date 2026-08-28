@@ -19,6 +19,16 @@
   font-size: 0.9375rem;
 }
 
+.discountRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9375rem;
+}
+
+.discount {
+  color: var(--color-success);
+}
+
 .totalRow {
   display: flex;
   justify-content: space-between;

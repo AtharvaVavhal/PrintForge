@@ -9,7 +9,15 @@ import { createTestQueryClient } from '@/test/test-utils'
 import type { OrderStatus } from '@/types/orders'
 import { AdminOrderDetailPage } from './AdminOrderDetailPage'
 
-function buildOrder(overrides: Partial<{ status: OrderStatus; needsManualRefund: boolean }> = {}) {
+function buildOrder(
+  overrides: Partial<{
+    status: OrderStatus
+    needsManualRefund: boolean
+    total: string
+    discountAmount: string
+    couponCode: string | null
+  }> = {},
+) {
   return {
     id: 'order-1',
     orderNumber: 'PF-000001',
@@ -19,6 +27,8 @@ function buildOrder(overrides: Partial<{ status: OrderStatus; needsManualRefund:
     itemCount: 2,
     needsManualRefund: false,
     subtotal: '300.00',
+    discountAmount: '0.00',
+    couponCode: null as string | null,
     shippingRecipientName: 'Jane Doe',
     shippingPhone: '9876543210',
     shippingAddressLine1: '123 Test St',
@@ -89,6 +99,28 @@ describe('AdminOrderDetailPage', () => {
     expect(screen.getByText('Ceramic Mug')).toBeInTheDocument()
     expect(screen.getByText(/123 Test St/)).toBeInTheDocument()
     expect(screen.getByText('Order created from cart at checkout')).toBeInTheDocument()
+  })
+
+  it('shows no discount row when no coupon was applied', async () => {
+    mock.onGet('/admin/orders/order-1').reply(200, { success: true, data: buildOrder() })
+
+    renderPage()
+
+    await screen.findByText('₹349.00')
+    expect(screen.queryByText(/Discount/)).not.toBeInTheDocument()
+  })
+
+  it('shows the discount row with the coupon code when one was applied', async () => {
+    mock.onGet('/admin/orders/order-1').reply(200, {
+      success: true,
+      data: buildOrder({ total: '319.00', discountAmount: '30.00', couponCode: 'SAVE10' }),
+    })
+
+    renderPage()
+
+    await screen.findByText('₹319.00')
+    expect(screen.getByText('SAVE10')).toBeInTheDocument()
+    expect(screen.getByText('−₹30.00')).toBeInTheDocument()
   })
 
   it('shows a manual-refund banner only when needsManualRefund is true', async () => {

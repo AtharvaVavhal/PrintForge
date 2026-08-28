@@ -41,6 +41,7 @@ export const ROUTES = {
    * page's own doc comment for why create/edit share one route). */
   ADMIN_PRODUCT_DETAIL: '/admin/products/:id',
   ADMIN_CATEGORIES: '/admin/categories',
+  ADMIN_COUPONS: '/admin/coupons',
 } as const
 
 export function productDetailPath(slug: string): string {

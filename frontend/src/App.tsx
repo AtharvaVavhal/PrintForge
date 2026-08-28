@@ -25,6 +25,7 @@ import { AdminCustomerDetailPage } from '@/pages/admin/AdminCustomerDetailPage'
 import { AdminProductsPage } from '@/pages/admin/AdminProductsPage'
 import { AdminProductDetailPage } from '@/pages/admin/AdminProductDetailPage'
 import { AdminCategoriesPage } from '@/pages/admin/AdminCategoriesPage'
+import { AdminCouponsPage } from '@/pages/admin/AdminCouponsPage'
 import { ForbiddenPage } from '@/pages/forbidden/ForbiddenPage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
 import { ROUTES } from '@/constants/routes'
@@ -73,6 +74,7 @@ function App() {
                 <Route path={ROUTES.ADMIN_PRODUCTS} element={<AdminProductsPage />} />
                 <Route path={ROUTES.ADMIN_PRODUCT_DETAIL} element={<AdminProductDetailPage />} />
                 <Route path={ROUTES.ADMIN_CATEGORIES} element={<AdminCategoriesPage />} />
+                <Route path={ROUTES.ADMIN_COUPONS} element={<AdminCouponsPage />} />
               </Route>
 
               <Route path="*" element={<NotFoundPage />} />

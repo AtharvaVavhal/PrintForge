@@ -45,6 +45,8 @@ const ORDER_VIEW = {
   subtotal: '300.00',
   shippingFee: '49.00',
   total: '349.00',
+  discountAmount: '0.00',
+  couponCode: null,
   currency: 'INR',
   shippingRecipientName: 'Jane Doe',
   shippingPhone: '9876543210',
@@ -262,5 +264,75 @@ describe('CheckoutPage', () => {
     // One from the auto-opened attempt, exactly one more from the
     // double-click — not two.
     expect(retryPaymentCalls).toHaveLength(2)
+  })
+
+  it('applies a coupon on submit (not on keystroke) and shows the returned discount/shipping/total preview', async () => {
+    const user = userEvent.setup()
+    mock.onPost('/checkout/validate').reply(200, {
+      success: true,
+      data: { subtotal: '300.00', shippingFee: '49.00', discountAmount: '30.00', total: '319.00', couponCode: 'SAVE10' },
+    })
+
+    renderCheckout()
+    await screen.findByLabelText('Recipient name')
+
+    await user.type(screen.getByLabelText('Coupon code'), 'save10')
+    expect(mock.history.post.filter((r) => r.url === '/checkout/validate')).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByText('SAVE10')).toBeInTheDocument()
+    expect(screen.getByText('−₹30.00')).toBeInTheDocument()
+    expect(screen.getByText('₹319.00')).toBeInTheDocument()
+    const validateCalls = mock.history.post.filter((r) => r.url === '/checkout/validate')
+    expect(validateCalls).toHaveLength(1)
+    expect(JSON.parse(validateCalls[0].data as string)).toEqual({ couponCode: 'save10' })
+  })
+
+  it("surfaces the backend's specific coupon rejection message, not a generic one", async () => {
+    const user = userEvent.setup()
+    mock.onPost('/checkout/validate').reply(400, {
+      success: false,
+      error: { code: 'BAD_REQUEST', message: 'This coupon has expired', details: [] },
+    })
+
+    renderCheckout()
+    await screen.findByLabelText('Recipient name')
+
+    await user.type(screen.getByLabelText('Coupon code'), 'OLDCODE')
+    await user.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByText('This coupon has expired')).toBeInTheDocument()
+  })
+
+  it('passes the applied coupon code through to the real order, and the confirmation page shows the discount', async () => {
+    const user = userEvent.setup()
+    mock.onPost('/checkout/validate').reply(200, {
+      success: true,
+      data: { subtotal: '300.00', shippingFee: '49.00', discountAmount: '30.00', total: '319.00', couponCode: 'SAVE10' },
+    })
+    mock.onPost('/checkout/orders').reply(201, {
+      success: true,
+      data: { ...ORDER_VIEW, total: '319.00', discountAmount: '30.00', couponCode: 'SAVE10' },
+    })
+    mock.onPost('/checkout/orders/order-1/retry-payment').reply(200, { success: true, data: PAYMENT_VIEW })
+
+    renderCheckout()
+    await screen.findByLabelText('Recipient name')
+
+    await user.type(screen.getByLabelText('Coupon code'), 'save10')
+    await user.click(screen.getByRole('button', { name: 'Apply' }))
+    await screen.findByText('₹319.00')
+
+    await fillShippingForm(user)
+    await user.click(screen.getByRole('button', { name: 'Pay now' }))
+
+    await waitFor(() => expect(mock.history.post.filter((r) => r.url === '/checkout/orders')).toHaveLength(1))
+    const orderCall = mock.history.post.find((r) => r.url === '/checkout/orders')!
+    expect(JSON.parse(orderCall.data as string)).toMatchObject({ couponCode: 'SAVE10' })
+
+    // Order confirmation shows the discount — a real coupon was applied.
+    expect(await screen.findByText('SAVE10')).toBeInTheDocument()
+    expect(screen.getByText('−₹30.00')).toBeInTheDocument()
   })
 })

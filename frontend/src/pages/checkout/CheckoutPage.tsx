@@ -6,6 +6,7 @@ import { useRetryPayment } from '@/hooks/useRetryPayment'
 import { useRazorpayCheckout } from '@/features/checkout/useRazorpayCheckout'
 import { ShippingForm } from '@/features/checkout/ShippingForm'
 import { CheckoutCartSummary } from '@/features/checkout/CheckoutCartSummary'
+import { CouponForm } from '@/features/checkout/CouponForm'
 import { OrderPendingPayment } from '@/features/checkout/OrderPendingPayment'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -13,6 +14,7 @@ import { getApiErrorMessage } from '@/utils/apiError'
 import { orderDetailPath } from '@/constants/routes'
 import type { ShippingFormValues } from '@/schemas/checkout.schema'
 import type { CheckoutOrderView } from '@/types/checkout'
+import type { CheckoutPreviewView } from '@/types/coupons'
 import styles from './CheckoutPage.module.css'
 
 /**
@@ -28,6 +30,7 @@ export function CheckoutPage() {
   const [idempotencyKey] = useState(() => crypto.randomUUID())
   const [order, setOrder] = useState<CheckoutOrderView | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [couponPreview, setCouponPreview] = useState<CheckoutPreviewView | null>(null)
   // Guards startPayment against a synchronous double-click. A check against
   // retryPayment.isPending here would NOT work: both clicks of a true
   // zero-latency double-click land on the same pre-re-render closure, so
@@ -75,7 +78,11 @@ export function CheckoutPage() {
     setPaymentError(null)
     try {
       const created = await createOrder.mutateAsync({
-        payload: { ...values, shippingAddressLine2: values.shippingAddressLine2 || undefined },
+        payload: {
+          ...values,
+          shippingAddressLine2: values.shippingAddressLine2 || undefined,
+          couponCode: couponPreview?.couponCode ?? undefined,
+        },
         idempotencyKey,
       })
       setOrder(created)
@@ -155,7 +162,10 @@ export function CheckoutPage() {
             isSubmitting={createOrder.isPending || retryPayment.isPending || isOpening}
           />
         </div>
-        <CheckoutCartSummary cart={cart} />
+        <div className={styles.summaryColumn}>
+          <CheckoutCartSummary cart={cart} />
+          <CouponForm appliedPreview={couponPreview} onApplied={setCouponPreview} />
+        </div>
       </div>
     </section>
   )

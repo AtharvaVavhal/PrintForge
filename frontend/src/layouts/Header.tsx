@@ -45,6 +45,9 @@ export function Header() {
                   <NavLink to={ROUTES.ADMIN_CATEGORIES} className={navLinkClassName}>
                     Categories
                   </NavLink>
+                  <NavLink to={ROUTES.ADMIN_COUPONS} className={navLinkClassName}>
+                    Coupons
+                  </NavLink>
                 </>
               )}
             </>

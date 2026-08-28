@@ -26,6 +26,12 @@
   gap: 1rem;
 }
 
+.summaryColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 .skeletonBlock {
   height: 20rem;
   width: 100%;
