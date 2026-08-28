@@ -11,6 +11,14 @@
   letter-spacing: 0.05em;
 }
 
+.compact {
+  font-size: 0.8rem;
+}
+
+.compact .stars {
+  letter-spacing: 0.04em;
+}
+
 .starFilled {
   color: var(--color-accent);
 }
