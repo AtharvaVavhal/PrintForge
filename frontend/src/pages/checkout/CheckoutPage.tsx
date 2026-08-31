@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useCreateOrder'
@@ -10,8 +10,10 @@ import { CouponForm } from '@/features/checkout/CouponForm'
 import { OrderPendingPayment } from '@/features/checkout/OrderPendingPayment'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { PaymentLoadError } from '@/components/ui/PaymentLoadError'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { orderDetailPath } from '@/constants/routes'
+import { fetchCurrentUser } from '@/services/api/auth'
 import type { ShippingFormValues } from '@/schemas/checkout.schema'
 import type { CheckoutOrderView } from '@/types/checkout'
 import type { CheckoutPreviewView } from '@/types/coupons'
@@ -31,6 +33,8 @@ export function CheckoutPage() {
   const [order, setOrder] = useState<CheckoutOrderView | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [couponPreview, setCouponPreview] = useState<CheckoutPreviewView | null>(null)
+  const [scriptLoadError, setScriptLoadError] = useState<string | null>(null)
+  const [userProfile, setUserProfile] = useState<{ email: string; phone: string | null } | null>(null)
   // Guards startPayment against a synchronous double-click. A check against
   // retryPayment.isPending here would NOT work: both clicks of a true
   // zero-latency double-click land on the same pre-re-render closure, so
@@ -45,7 +49,22 @@ export function CheckoutPage() {
   const createOrder = useCreateOrder()
   const retryPayment = useRetryPayment()
 
-  const { openCheckout, isOpening, isVerifying } = useRazorpayCheckout({
+  // Fetch user profile for Razorpay prefill (email, phone)
+  useEffect(() => {
+    let mounted = true
+    fetchCurrentUser()
+      .then((profile) => {
+        if (mounted) {
+          setUserProfile({ email: profile.email, phone: profile.phone })
+        }
+      })
+      .catch(() => {
+        // Non-fatal: prefill is optional UX improvement
+      })
+    return () => { mounted = false }
+  }, [])
+
+  const { openCheckout, isOpening, isVerifying, isLoadingScript } = useRazorpayCheckout({
     // Never render "payment confirmed" here — only navigate. The
     // confirmation page re-fetches the order and renders strictly off its
     // own status field, which is what stays correct if the webhook
@@ -53,19 +72,27 @@ export function CheckoutPage() {
     onVerified: (result) => void navigate(orderDetailPath(result.orderId), { replace: true }),
     onDismissed: () =>
       setPaymentError('Payment was not completed. Your order is still here — you can retry anytime.'),
-    onError: setPaymentError,
+    onError: (msg) => {
+      if (msg.includes('Failed to load') || msg.includes('Razorpay Checkout script')) {
+        setScriptLoadError(msg)
+      } else {
+        setPaymentError(msg)
+      }
+    },
   })
+
 
   async function startPayment(target: CheckoutOrderView) {
     if (isRetryingRef.current) return
     isRetryingRef.current = true
     setPaymentError(null)
+    setScriptLoadError(null)
     try {
       const payment = await retryPayment.mutateAsync(target.id)
       await openCheckout(
         payment,
         { orderNumber: target.orderNumber },
-        { name: target.shippingRecipientName, contact: target.shippingPhone },
+        { name: target.shippingRecipientName, contact: target.shippingPhone, email: userProfile?.email },
       )
     } catch (err) {
       setPaymentError(getApiErrorMessage(err))
@@ -125,6 +152,7 @@ export function CheckoutPage() {
           error={paymentError}
           onRetry={handleRetry}
           isProcessing={retryPayment.isPending || isOpening || isVerifying}
+          isScriptLoading={isLoadingScript}
         />
       </section>
     )
@@ -154,12 +182,14 @@ export function CheckoutPage() {
   return (
     <section className={styles.wrap}>
       <h1>Checkout</h1>
+      {scriptLoadError && <PaymentLoadError message={scriptLoadError} onRetry={() => setScriptLoadError(null)} />}
       <div className={styles.layout}>
         <div className={styles.formColumn}>
           {createOrder.isError && <Alert variant="error">{getApiErrorMessage(createOrder.error)}</Alert>}
           <ShippingForm
             onSubmit={(values) => void handleSubmitShipping(values)}
             isSubmitting={createOrder.isPending || retryPayment.isPending || isOpening}
+            isScriptLoading={isLoadingScript}
           />
         </div>
         <div className={styles.summaryColumn}>

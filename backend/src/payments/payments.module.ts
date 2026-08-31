@@ -5,6 +5,7 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { RazorpayModule } from './razorpay/razorpay.module';
 import { WebhookProcessor } from './webhooks/webhook-processor.service';
+import { PaymentReconciliationService } from './payment-reconciliation.service';
 
 /**
  * Depends on: orders (payment_attempts belong to an Order — §12), and
@@ -18,7 +19,7 @@ import { WebhookProcessor } from './webhooks/webhook-processor.service';
 @Module({
   imports: [OrdersModule, RazorpayModule, ScheduleModule.forRoot()],
   controllers: [PaymentsController],
-  providers: [PaymentsService, WebhookProcessor],
+  providers: [PaymentsService, WebhookProcessor, PaymentReconciliationService],
   exports: [PaymentsService],
 })
 export class PaymentsModule {}

@@ -11,6 +11,7 @@ interface OrderPrefill {
 interface CustomerPrefill {
   name?: string
   contact?: string
+  email?: string
 }
 
 interface UseRazorpayCheckoutOptions {
@@ -39,13 +40,21 @@ interface UseRazorpayCheckoutOptions {
  */
 export function useRazorpayCheckout({ onVerified, onDismissed, onError }: UseRazorpayCheckoutOptions) {
   const [isOpening, setIsOpening] = useState(false)
+  const [isLoadingScript, setIsLoadingScript] = useState(false)
   const verifyMutation = useVerifyPayment()
 
   const openCheckout = useCallback(
     async (payment: InitiatePaymentView, order: OrderPrefill, customer?: CustomerPrefill) => {
       setIsOpening(true)
       try {
-        const Razorpay = await loadRazorpayCheckout()
+        let Razorpay: ReturnType<typeof loadRazorpayCheckout> extends Promise<infer T> ? T : never
+        try {
+          setIsLoadingScript(true)
+          Razorpay = await loadRazorpayCheckout()
+        } finally {
+          setIsLoadingScript(false)
+        }
+
         const instance = new Razorpay({
           key: payment.razorpayKeyId,
           amount: Number(payment.amountPaise),
@@ -73,8 +82,9 @@ export function useRazorpayCheckout({ onVerified, onDismissed, onError }: UseRaz
         })
         instance.on('payment.failed', () => onDismissed())
         instance.open()
-      } catch {
-        onError('Could not open the payment window. Please try again.')
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Could not open the payment window. Please try again.'
+        onError(msg)
       } finally {
         setIsOpening(false)
       }
@@ -82,5 +92,5 @@ export function useRazorpayCheckout({ onVerified, onDismissed, onError }: UseRaz
     [verifyMutation, onVerified, onDismissed, onError],
   )
 
-  return { openCheckout, isOpening, isVerifying: verifyMutation.isPending }
+  return { openCheckout, isOpening, isVerifying: verifyMutation.isPending, isLoadingScript }
 }

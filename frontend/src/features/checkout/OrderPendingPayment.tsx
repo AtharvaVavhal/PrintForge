@@ -9,6 +9,7 @@ interface OrderPendingPaymentProps {
   error: string | null
   onRetry: () => void
   isProcessing: boolean
+  isScriptLoading?: boolean
 }
 
 /**
@@ -20,7 +21,9 @@ interface OrderPendingPaymentProps {
  * POST /checkout/orders/:id/retry-payment rather than re-submitting a new
  * checkout — the same order, reusing its Razorpay order id.
  */
-export function OrderPendingPayment({ order, error, onRetry, isProcessing }: OrderPendingPaymentProps) {
+export function OrderPendingPayment({ order, error, onRetry, isProcessing, isScriptLoading }: OrderPendingPaymentProps) {
+  const isDisabled = isProcessing || isScriptLoading
+
   return (
     <div className={styles.wrap}>
       <h2 className={styles.heading}>Order {order.orderNumber}</h2>
@@ -45,8 +48,8 @@ export function OrderPendingPayment({ order, error, onRetry, isProcessing }: Ord
 
       {error && <Alert variant="error">{error}</Alert>}
 
-      <Button onClick={onRetry} isLoading={isProcessing} className={styles.payButton}>
-        {error ? 'Retry payment' : 'Pay now'}
+      <Button onClick={onRetry} isLoading={isDisabled} className={styles.payButton} disabled={isDisabled}>
+        {isScriptLoading ? 'Loading payment…' : error ? 'Retry payment' : 'Pay now'}
       </Button>
     </div>
   )

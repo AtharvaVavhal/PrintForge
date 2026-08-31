@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import * as Sentry from '@sentry/node';
 import {
   BadRequestException,
   ConflictException,
@@ -388,6 +389,10 @@ export class PaymentsService {
       this.logger.warn(
         `Amount mismatch on captured payment for order ${order.id}: expected ${expectedPaise}, got ${actualPaise}`,
       );
+      Sentry.captureMessage('Payment amount mismatch', {
+        level: 'warning',
+        extra: { orderId: order.id, expectedPaise: expectedPaise.toString(), actualPaise: actualPaise.toString() },
+      });
     }
 
     // Deliberately no try/catch here: a P2002 on the partial unique index
