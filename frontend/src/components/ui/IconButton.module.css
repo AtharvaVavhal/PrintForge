@@ -1,0 +1,40 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+/* sizes */
+.sm { width: 32px; height: 32px; }
+.md { width: 40px; height: 40px; }
+.lg { width: 48px; height: 48px; }
+
+/* variants */
+.ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.ghost:hover { background: var(--color-surface); color: var(--color-text-strong); }
+.ghost:active { background: var(--color-border); }
+
+.outline {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+.outline:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+.solid {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+.solid:hover { background: var(--color-accent-hover); }

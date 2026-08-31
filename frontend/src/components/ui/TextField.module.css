@@ -7,7 +7,7 @@
 
 .label {
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
 }
 
@@ -20,8 +20,8 @@
   font-size: 1rem;
   font-family: inherit;
   transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    border-color var(--transition-base) ease,
+    box-shadow var(--transition-base) ease;
 }
 
 .input:focus-visible {

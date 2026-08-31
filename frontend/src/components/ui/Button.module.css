@@ -7,14 +7,14 @@
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-family: inherit;
   cursor: pointer;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease,
-    opacity 0.15s ease;
+    background-color var(--transition-base) ease,
+    border-color var(--transition-base) ease,
+    color var(--transition-base) ease,
+    opacity var(--transition-base) ease;
 }
 
 .button:disabled {
