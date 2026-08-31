@@ -7,6 +7,8 @@ import {
   Max,
   MaxLength,
   Min,
+  IsIn,
+  IsNumber,
 } from 'class-validator';
 
 export const DEFAULT_PAGE = 1;
@@ -35,4 +37,27 @@ export class ListProductsQueryDto {
   @IsString()
   @MaxLength(100)
   search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maxPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  minRating?: number;
+
+  @IsOptional()
+  @IsIn(['newest', 'price_asc', 'price_desc', 'rating_desc'])
+  sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc' = 'newest';
 }

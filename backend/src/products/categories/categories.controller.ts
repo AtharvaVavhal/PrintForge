@@ -17,6 +17,7 @@ import { UpdateCategoryDto } from '../dto/update-category.dto';
 /**
  * Owns (§20): GET /categories (Public, flat list — one nesting level via
  * parentCategoryId, no server-built tree, §8); admin create/update (Admin).
+ * GET /categories/tree (Public, nested tree via parentCategoryId).
  * Kept as a subfolder of the products aggregate (§17) but a distinct
  * top-level `/categories` path, so it needs its own @Controller.
  */
@@ -28,6 +29,12 @@ export class CategoriesController {
   @Get()
   async list() {
     return this.productsService.listCategories();
+  }
+
+  @Public()
+  @Get('tree')
+  async tree() {
+    return this.productsService.getCategoryTree();
   }
 
   @Roles(Role.ADMIN)

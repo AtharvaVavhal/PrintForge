@@ -23,6 +23,14 @@ export interface Category {
   updatedAt: string
 }
 
+export interface CategoryTreeNode {
+  id: string
+  name: string
+  slug: string
+  parentCategoryId: string | null
+  children: CategoryTreeNode[]
+}
+
 export type CustomizationFieldType =
   | 'TEXT'
   | 'LOGO_UPLOAD'
@@ -107,13 +115,33 @@ export interface Product {
 }
 
 /**
- * Mirrors ListProductsQueryDto exactly — page/limit/categoryId/search.
- * `search` is a case-insensitive substring match on Product.name; no sort
- * param exists on GET /products yet.
+ * Mirrors ListProductsQueryDto exactly — page/limit/categoryId/search/minPrice/maxPrice/minRating/sort.
+ * `search` is a case-insensitive substring match on Product.name.
+ * `sort` can be 'newest' | 'price_asc' | 'price_desc' | 'rating_desc'.
  */
 export interface ListProductsParams {
   page?: number
   limit?: number
   categoryId?: string
   search?: string
+  minPrice?: number
+  maxPrice?: number
+  minRating?: number
+  sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc'
 }
+
+export interface FilterState {
+  minPrice?: number
+  maxPrice?: number
+  minRating?: number
+  sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc'
+}
+
+export const SORT_OPTIONS: Array<{ value: FilterState['sort']; label: string }> = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'price_asc', label: 'Price: Low to High' },
+  { value: 'price_desc', label: 'Price: High to Low' },
+  { value: 'rating_desc', label: 'Top Rated' },
+]
+
+export const RATING_OPTIONS = [1, 2, 3, 4, 5] as const

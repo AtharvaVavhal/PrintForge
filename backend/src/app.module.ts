@@ -13,6 +13,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 import { AdminModule } from './admin/admin.module';
+import { AppSettingModule } from './app-setting/app-setting.module';
 import { AuthModule } from './auth/auth.module';
 import { CartModule } from './cart/cart.module';
 import { CheckoutModule } from './checkout/checkout.module';
@@ -32,8 +33,8 @@ import { UsersModule } from './users/users.module';
  * after `orders`, not nested under `products/`; see reviews.module.ts's own
  * doc comment for why) and Coupons half (§2.3 — coupons is base-layer,
  * same tier as users/notifications/uploads, no cross-module import at
- * all; see coupons.module.ts's own doc comment):
- *   users, notifications, uploads, coupons  (base layer)
+ * all; see coupons.module.ts's own doc comment for why):
+ *   users, notifications, uploads, coupons, app-setting  (base layer)
  *   -> products -> cart
  *   -> orders -> payments -> checkout (-> coupons)
  *   -> reviews (-> orders)
@@ -66,6 +67,7 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     UploadsModule,
     CouponsModule,
+    AppSettingModule,
     ProductsModule,
     CartModule,
     OrdersModule,

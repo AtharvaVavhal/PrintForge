@@ -28,7 +28,7 @@ export function ProductImage({ images, label }: ProductImageProps) {
   const [failed, setFailed] = useState(false)
   const image = images.find((img) => img.isPrimary) ?? images[0]
 
-  if (!image || failed) {
+  if (!image || !image.url || failed) {
     return <ProductImagePlaceholder label={label} />
   }
 

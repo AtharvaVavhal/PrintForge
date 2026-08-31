@@ -54,6 +54,23 @@
   --shadow-lg: 0 16px 40px rgba(32, 29, 27, 0.16);
 
   color-scheme: light;
+
+  /* Font weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Transition durations */
+  --transition-fast: 0.1s;
+  --transition-base: 0.15s;
+  --transition-slow: 0.25s;
+
+  /* Z-index layers */
+  --z-index-header: 10;
+  --z-index-dropdown: 100;
+  --z-index-modal: 200;
+  --z-index-toast: 300;
 }
 
 @media (max-width: 640px) {

@@ -1,0 +1,230 @@
+.carousel {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.slide {
+  flex: 0 0 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-slow) ease, visibility var(--transition-slow) ease;
+  min-height: 500px;
+}
+
+.slide.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  max-width: var(--container-max);
+  width: 100%;
+  padding: var(--space-8) var(--container-padding);
+  text-align: center;
+  color: var(--color-bg);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.headline {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+  margin-bottom: var(--space-4);
+  letter-spacing: -0.02em;
+}
+
+.subtext {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.5;
+  margin-bottom: var(--space-6);
+  opacity: 0.9;
+}
+
+.ctaWrapper {
+  display: inline-block;
+}
+
+.navBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--color-bg);
+  border-radius: 50%;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+  z-index: 2;
+}
+
+.navBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.navBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.navBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.prev {
+  left: var(--container-padding);
+}
+
+.next {
+  right: var(--container-padding);
+}
+
+.pagination {
+  position: absolute;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--space-2);
+  z-index: 2;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.dot:hover {
+  background: rgba(255, 255, 255, 0.8);
+  transform: scale(1.2);
+}
+
+.dot.active {
+  background: var(--color-bg);
+  transform: scale(1.2);
+}
+
+.dot:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.playPause {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--color-bg);
+  border-radius: 50%;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background var(--transition-fast);
+  z-index: 2;
+}
+
+.playPause:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.playPause:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide {
+    transition: none;
+  }
+  .navBtn,
+  .dot,
+  .playPause {
+    transition: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .slide {
+    min-height: 400px;
+  }
+
+  .headline {
+    font-size: var(--text-2xl);
+  }
+
+  .subtext {
+    font-size: var(--text-md);
+  }
+
+  .navBtn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .prev {
+    left: var(--space-2);
+  }
+
+  .next {
+    right: var(--space-2);
+  }
+}
+
+@media (max-width: 480px) {
+  .slide {
+    min-height: 350px;
+  }
+
+  .headline {
+    font-size: var(--text-xl);
+  }
+
+  .subtext {
+    font-size: var(--text-base);
+  }
+
+  .content {
+    padding: var(--space-6) var(--space-4);
+  }
+}

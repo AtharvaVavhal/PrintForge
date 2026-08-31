@@ -47,6 +47,10 @@ export class ProductsController {
       query.limit,
       query.categoryId,
       query.search,
+      query.minPrice,
+      query.maxPrice,
+      query.minRating,
+      query.sort,
     );
   }
 

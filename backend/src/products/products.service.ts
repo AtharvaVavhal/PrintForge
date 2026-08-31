@@ -14,6 +14,7 @@ import {
 import { PrismaService } from '../common/database/prisma.service';
 import { PaginatedResult } from '../common/types/api-response.interface';
 import { UploadsService } from '../uploads/uploads.service';
+import { CategoryTreeNode } from './dto/category-tree.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -92,6 +93,50 @@ export class ProductsService {
     return category;
   }
 
+  // ─── Category Tree ──────────────────────────────────────────────────────
+
+  async getCategoryTree(): Promise<CategoryTreeNode[]> {
+    const categories = await this.prisma.category.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, slug: true, parentCategoryId: true },
+    });
+
+    const map = new Map<string, CategoryTreeNode>();
+    const roots: CategoryTreeNode[] = [];
+
+    // First pass: create nodes
+    for (const cat of categories) {
+      map.set(cat.id, { id: cat.id, name: cat.name, slug: cat.slug, children: [] });
+    }
+
+    // Second pass: link children to parents
+    for (const cat of categories) {
+      const node = map.get(cat.id)!;
+      if (cat.parentCategoryId) {
+        const parent = map.get(cat.parentCategoryId);
+        if (parent) {
+          parent.children.push(node);
+        } else {
+          // Orphaned child (parent doesn't exist) - treat as root
+          roots.push(node);
+        }
+      } else {
+        roots.push(node);
+      }
+    }
+
+    // Sort children recursively
+    const sortRecursive = (nodes: CategoryTreeNode[]) => {
+      nodes.sort((a, b) => a.name.localeCompare(b.name));
+      for (const node of nodes) {
+        if (node.children.length) sortRecursive(node.children);
+      }
+    };
+    sortRecursive(roots);
+
+    return roots;
+  }
+
   // ─── Products (public reads) ─────────────────────────────────────────
 
   async listProducts(
@@ -99,6 +144,10 @@ export class ProductsService {
     limit: number,
     categoryId: string | undefined,
     search: string | undefined,
+    minPrice?: number,
+    maxPrice?: number,
+    minRating?: number,
+    sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc',
   ): Promise<PaginatedResult<ProductWithRelations>> {
     const where: Prisma.ProductWhereInput = {
       isActive: true,
@@ -106,13 +155,40 @@ export class ProductsService {
       ...(search
         ? { name: { contains: search, mode: 'insensitive' as const } }
         : {}),
+      ...(minPrice !== undefined || maxPrice !== undefined
+        ? {
+            basePrice: {
+              ...(minPrice !== undefined ? { gte: minPrice } : {}),
+              ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
+            },
+          }
+        : {}),
+      ...(minRating !== undefined
+        ? { avgRating: { gte: minRating } }
+        : {}),
     };
+
+    let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: 'desc' };
+    switch (sort) {
+      case 'price_asc':
+        orderBy = { basePrice: 'asc' };
+        break;
+      case 'price_desc':
+        orderBy = { basePrice: 'desc' };
+        break;
+      case 'rating_desc':
+        orderBy = { avgRating: 'desc' };
+        break;
+      case 'newest':
+      default:
+        orderBy = { createdAt: 'desc' };
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.product.findMany({
         where,
         include: PRODUCT_DETAIL_INCLUDE,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -218,11 +294,11 @@ export class ProductsService {
   /**
    * The reverse of deactivateProduct — same shape, same reasoning: kept as
    * its own dedicated method/endpoint (POST /products/:id/reactivate)
-   * rather than a field smuggled into UpdateProductDto, so `isActive` has
-   * exactly two ways to change, both explicit and auditable at the route
-   * level, never a silent side effect of a general PATCH. Unconditional,
-   * same as deactivateProduct: no current-state check, no error if the
-   * product is already active (idempotent, admin-double-click-safe).
+   * rather than an isActive field on the general PATCH (same reasoning the
+   * backend applies to deactivation: exactly one path flips this flag in
+   * either direction). Unconditional, same as deactivateProduct: no
+   * current-state check, no error if the product is already active
+   * (idempotent, admin-double-click-safe).
    */
   async reactivateProduct(id: string): Promise<void> {
     await this.getProductOrThrow(id);

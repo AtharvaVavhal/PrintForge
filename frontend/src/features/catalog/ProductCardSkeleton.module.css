@@ -1,0 +1,41 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.image {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.name {
+  height: 1rem;
+  width: 80%;
+  border-radius: var(--radius-sm);
+}
+
+.rating {
+  height: 1rem;
+  width: 40%;
+  border-radius: var(--radius-sm);
+}
+
+.price {
+  height: 1rem;
+  width: 30%;
+  border-radius: var(--radius-sm);
+}
+
+.swatches {
+  height: 1.5rem;
+  width: 60%;
+  border-radius: var(--radius-sm);
+}

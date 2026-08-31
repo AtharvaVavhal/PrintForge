@@ -1,6 +1,7 @@
 import type { ApiSuccessResponse, PaginationMeta } from '@/types/api'
 import type {
   Category,
+  CategoryTreeNode,
   CustomizationField,
   ListProductsParams,
   Product,
@@ -40,6 +41,11 @@ import { apiClient } from './client'
 
 export async function fetchCategories(): Promise<Category[]> {
   const res = await apiClient.get<ApiSuccessResponse<Category[]>>('/categories')
+  return res.data.data
+}
+
+export async function fetchCategoryTree(): Promise<CategoryTreeNode[]> {
+  const res = await apiClient.get<ApiSuccessResponse<CategoryTreeNode[]>>('/categories/tree')
   return res.data.data
 }
 

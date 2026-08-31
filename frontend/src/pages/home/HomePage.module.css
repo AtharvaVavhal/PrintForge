@@ -1,32 +1,84 @@
-.hero {
-  padding: 5rem var(--container-padding);
+.fallback {
+  padding: 6rem var(--container-padding);
+  text-align: center;
+  background: var(--color-bg);
 }
 
-.inner {
+.fallbackInner {
   max-width: 640px;
   margin: 0 auto;
-  text-align: center;
 }
 
-.title {
-  font-size: 2.5rem;
-  letter-spacing: -0.02em;
+.fallback h1 {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+  margin-bottom: var(--space-3);
 }
 
-.subtitle {
+.fallback p {
+  font-size: var(--text-lg);
   color: var(--color-text-muted);
-  font-size: 1.0625rem;
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-6);
 }
 
 .actions {
   display: flex;
   justify-content: center;
-  gap: 1rem;
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
 
-@media (max-width: 640px) {
-  .title {
-    font-size: 2rem;
+.fallbackCTA {
+  padding: var(--space-10) var(--container-padding);
+  background: var(--color-surface);
+  text-align: center;
+}
+
+.fallbackCTA h2 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+  margin: 0 0 var(--space-2);
+}
+
+.fallbackCTA p {
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-6);
+}
+
+.fallbackCTA .actions {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.heroSkeleton {
+  width: 100%;
+  background: var(--color-surface);
+}
+
+.skeletonSlide {
+  height: 500px;
+  border-radius: 0;
+}
+
+@media (max-width: 768px) {
+  .fallback {
+    padding: 4rem var(--container-padding);
+  }
+
+  .fallback h1 {
+    font-size: var(--text-2xl);
+  }
+
+  .skeletonSlide {
+    height: 400px;
+  }
+}
+
+@media (max-width: 480px) {
+  .skeletonSlide {
+    height: 350px;
   }
 }
