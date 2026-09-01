@@ -3,6 +3,7 @@ import type {
   Category,
   CategoryTreeNode,
   CustomizationField,
+  ListAdminProductsParams,
   ListProductsParams,
   Product,
   ProductImage,
@@ -68,6 +69,36 @@ export async function fetchProductBySlug(slug: string): Promise<Product> {
   const res = await apiClient.get<ApiSuccessResponse<Product>>(
     `/products/${encodeURIComponent(slug)}`,
   )
+  return res.data.data
+}
+
+// ─── Admin: catalog-management reads (active + inactive) ─────────────────
+
+/** GET /products/admin — admin-role required server-side. Unlike
+ * fetchProducts this surfaces inactive products; `status` narrows to one
+ * side. */
+export async function fetchAdminProducts(
+  params: ListAdminProductsParams = {},
+): Promise<ProductListResult> {
+  const res = await apiClient.get<ApiSuccessResponse<Product[]>>('/products/admin', {
+    params,
+  })
+  return { items: res.data.data, meta: res.data.meta as PaginationMeta }
+}
+
+/** GET /products/admin/:id — admin-role required; NOT isActive-filtered,
+ * so a deactivated product stays reachable (and reactivatable). */
+export async function fetchAdminProduct(id: string): Promise<Product> {
+  const res = await apiClient.get<ApiSuccessResponse<Product>>(
+    `/products/admin/${encodeURIComponent(id)}`,
+  )
+  return res.data.data
+}
+
+/** GET /categories/admin — admin-role required; returns active AND
+ * inactive categories. The public GET /categories stays active-only. */
+export async function fetchAdminCategories(): Promise<Category[]> {
+  const res = await apiClient.get<ApiSuccessResponse<Category[]>>('/categories/admin')
   return res.data.data
 }
 
@@ -174,4 +205,15 @@ export async function createCategory(payload: CreateCategoryPayload): Promise<Ca
 export async function updateCategory(id: string, payload: UpdateCategoryPayload): Promise<Category> {
   const res = await apiClient.patch<ApiSuccessResponse<Category>>(`/categories/${id}`, payload)
   return res.data.data
+}
+
+/** DELETE /categories/:id — soft-delete (isActive=false), mirroring
+ * deactivateProduct. */
+export async function deactivateCategory(id: string): Promise<void> {
+  await apiClient.delete(`/categories/${id}`)
+}
+
+/** POST /categories/:id/reactivate — the reverse of deactivateCategory. */
+export async function reactivateCategory(id: string): Promise<void> {
+  await apiClient.post(`/categories/${id}/reactivate`)
 }

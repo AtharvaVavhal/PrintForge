@@ -12,6 +12,7 @@ function buildCategory(overrides: Partial<Record<string, unknown>> = {}) {
     name: 'Drinkware',
     slug: 'drinkware',
     parentCategoryId: null,
+    isActive: true,
     createdAt: '2026-08-27T00:00:00.000Z',
     updatedAt: '2026-08-27T00:00:00.000Z',
     ...overrides,
@@ -29,18 +30,60 @@ describe('AdminCategoriesPage', () => {
     mock.restore()
   })
 
-  it('lists categories and never renders a delete control — no DELETE /categories/:id endpoint exists', async () => {
-    mock.onGet('/categories').reply(200, { success: true, data: [buildCategory()] })
+  it('lists every category (active + inactive) via GET /categories/admin', async () => {
+    mock.onGet('/categories/admin').reply(200, {
+      success: true,
+      data: [
+        buildCategory(),
+        buildCategory({ id: 'cat-2', name: 'Retired', slug: 'retired', isActive: false }),
+      ],
+    })
 
     renderWithProviders(<AdminCategoriesPage />)
 
     expect(await screen.findByText('Drinkware')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Retired')).toBeInTheDocument()
+    // The inactive one is flagged.
+    expect(screen.getByText(/· Inactive/)).toBeInTheDocument()
+  })
+
+  it('deactivates an active category via DELETE /categories/:id', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/categories/admin').replyOnce(200, { success: true, data: [buildCategory()] })
+    mock.onDelete('/categories/cat-1').reply(200, { success: true, data: { message: 'Category deactivated' } })
+    mock
+      .onGet('/categories/admin')
+      .reply(200, { success: true, data: [buildCategory({ isActive: false })] })
+
+    renderWithProviders(<AdminCategoriesPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Deactivate' }))
+
+    await waitFor(() => expect(mock.history.delete.length).toBe(1))
+    expect(await screen.findByRole('button', { name: 'Reactivate' })).toBeInTheDocument()
+  })
+
+  it('reactivates an inactive category via POST /categories/:id/reactivate', async () => {
+    const user = userEvent.setup()
+    mock
+      .onGet('/categories/admin')
+      .replyOnce(200, { success: true, data: [buildCategory({ isActive: false })] })
+    mock
+      .onPost('/categories/cat-1/reactivate')
+      .reply(200, { success: true, data: { message: 'Category reactivated' } })
+    mock.onGet('/categories/admin').reply(200, { success: true, data: [buildCategory()] })
+
+    renderWithProviders(<AdminCategoriesPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
+
+    await waitFor(() => expect(mock.history.post.length).toBe(1))
+    expect(await screen.findByRole('button', { name: 'Deactivate' })).toBeInTheDocument()
   })
 
   it('creates a new category, sending only the fields the DTO accepts', async () => {
     const user = userEvent.setup()
-    mock.onGet('/categories').reply(200, { success: true, data: [buildCategory()] })
+    mock.onGet('/categories/admin').reply(200, { success: true, data: [buildCategory()] })
     mock.onPost('/categories').reply(201, {
       success: true,
       data: buildCategory({ id: 'cat-2', name: 'Apparel', slug: 'apparel' }),
@@ -61,16 +104,14 @@ describe('AdminCategoriesPage', () => {
 
   it('edits an existing category via PATCH', async () => {
     const user = userEvent.setup()
-    // The mutation's own onSuccess also invalidates ['categories'], which
-    // triggers a background refetch — mocked separately so it reflects the
-    // just-saved state, same as the real backend would (see AccountPage's
-    // equivalent test for the same pattern).
-    mock.onGet('/categories').replyOnce(200, { success: true, data: [buildCategory()] })
+    mock.onGet('/categories/admin').replyOnce(200, { success: true, data: [buildCategory()] })
     mock.onPatch('/categories/cat-1').reply(200, {
       success: true,
       data: buildCategory({ name: 'Drinkware & Mugs' }),
     })
-    mock.onGet('/categories').reply(200, { success: true, data: [buildCategory({ name: 'Drinkware & Mugs' })] })
+    mock
+      .onGet('/categories/admin')
+      .reply(200, { success: true, data: [buildCategory({ name: 'Drinkware & Mugs' })] })
 
     renderWithProviders(<AdminCategoriesPage />)
 

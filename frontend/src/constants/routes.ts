@@ -42,6 +42,7 @@ export const ROUTES = {
   ADMIN_PRODUCT_DETAIL: '/admin/products/:id',
   ADMIN_CATEGORIES: '/admin/categories',
   ADMIN_COUPONS: '/admin/coupons',
+  ADMIN_SETTINGS: '/admin/settings',
   ABOUT: '/about',
   CONTACT: '/contact',
   PRIVACY: '/privacy',

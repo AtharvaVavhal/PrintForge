@@ -21,6 +21,7 @@ import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { ListAdminProductsQueryDto } from './dto/list-admin-products-query.dto';
 import { CreateCustomizationFieldDto } from './dto/create-customization-field.dto';
 import { UpdateCustomizationFieldDto } from './dto/update-customization-field.dto';
 
@@ -52,6 +53,29 @@ export class ProductsController {
       query.minRating,
       query.sort,
     );
+  }
+
+  // Admin catalog-management reads. Declared BEFORE `@Get(':slug')` so the
+  // literal `admin` segment is matched by these, not swallowed as a slug.
+  // Not isActive-filtered — a deactivated product stays visible here for
+  // management and reactivation.
+
+  @Roles(Role.ADMIN)
+  @Get('admin')
+  async adminList(@Query() query: ListAdminProductsQueryDto) {
+    return this.productsService.adminListProducts(
+      query.page,
+      query.limit,
+      query.categoryId,
+      query.search,
+      query.status,
+    );
+  }
+
+  @Roles(Role.ADMIN)
+  @Get('admin/:id')
+  async adminGet(@Param('id', ParseUUIDPipe) id: string) {
+    return this.productsService.adminGetProduct(id);
   }
 
   @Public()

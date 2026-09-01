@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCategories } from '@/hooks/useCategories'
+import { useAdminCategories } from '@/hooks/useAdminCategories'
 import { useCreateCategory } from '@/hooks/useCreateCategory'
 import { useUpdateCategory } from '@/hooks/useUpdateCategory'
+import { useDeactivateCategory } from '@/hooks/useDeactivateCategory'
+import { useReactivateCategory } from '@/hooks/useReactivateCategory'
 import {
   adminCategorySchema,
   toCreateCategoryPayload,
@@ -20,16 +22,28 @@ import styles from './AdminCategoriesPage.module.css'
 const EMPTY_VALUES: AdminCategoryFormValues = { name: '', slug: '', parentCategoryId: '' }
 
 /**
- * Behind AdminRoute (App.tsx). Simple list + create/edit — no delete
- * button anywhere: `categories.controller.ts` exposes only GET (public)
- * and POST/PATCH (admin), no DELETE, so there's nothing to wire one to.
+ * Behind AdminRoute (App.tsx). Lists every category — active AND inactive
+ * — via GET /categories/admin, so a deactivated category stays
+ * manageable. Create/edit (POST/PATCH /categories) plus deactivate
+ * (DELETE /categories/:id) and reactivate (POST /categories/:id/
+ * reactivate). The public GET /categories / GET /categories/tree stay
+ * active-only, so an inactive category disappears from the storefront but
+ * not from this page.
  */
 export function AdminCategoriesPage() {
-  const categoriesQuery = useCategories()
+  const categoriesQuery = useAdminCategories()
   const createCategory = useCreateCategory()
   const updateCategory = useUpdateCategory()
+  const deactivateCategory = useDeactivateCategory()
+  const reactivateCategory = useReactivateCategory()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  const statusError = deactivateCategory.isError
+    ? getApiErrorMessage(deactivateCategory.error)
+    : reactivateCategory.isError
+      ? getApiErrorMessage(reactivateCategory.error)
+      : null
 
   async function handleCreate(values: AdminCategoryFormValues) {
     try {
@@ -69,6 +83,8 @@ export function AdminCategoriesPage() {
 
       {categoriesQuery.isError && <Alert variant="error">{getApiErrorMessage(categoriesQuery.error)}</Alert>}
 
+      {statusError && <Alert variant="error">{statusError}</Alert>}
+
       {categoriesQuery.data && categoriesQuery.data.length === 0 && !isAdding && (
         <p className={styles.empty}>No categories yet.</p>
       )}
@@ -95,16 +111,47 @@ export function AdminCategoriesPage() {
             ) : (
               <li key={category.id} className={styles.row}>
                 <div className={styles.summary}>
-                  <span className={styles.name}>{category.name}</span>
+                  <span className={styles.name}>
+                    {category.name}
+                    {!category.isActive && (
+                      <span className={styles.inactiveFlag}> · Inactive</span>
+                    )}
+                  </span>
                   <span className={styles.meta}>
                     {category.slug}
                     {category.parentCategoryId &&
                       ` · under ${categoriesQuery.data.find((c) => c.id === category.parentCategoryId)?.name ?? category.parentCategoryId}`}
                   </span>
                 </div>
-                <Button type="button" variant="secondary" onClick={() => setEditingId(category.id)}>
-                  Edit
-                </Button>
+                <div className={styles.rowActions}>
+                  <Button type="button" variant="secondary" onClick={() => setEditingId(category.id)}>
+                    Edit
+                  </Button>
+                  {category.isActive ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      isLoading={
+                        deactivateCategory.isPending &&
+                        deactivateCategory.variables === category.id
+                      }
+                      onClick={() => deactivateCategory.mutate(category.id)}
+                    >
+                      Deactivate
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      isLoading={
+                        reactivateCategory.isPending &&
+                        reactivateCategory.variables === category.id
+                      }
+                      onClick={() => reactivateCategory.mutate(category.id)}
+                    >
+                      Reactivate
+                    </Button>
+                  )}
+                </div>
               </li>
             ),
           )}

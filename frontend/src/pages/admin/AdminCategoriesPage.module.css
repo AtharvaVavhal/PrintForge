@@ -63,6 +63,17 @@
   font-size: 0.8125rem;
 }
 
+.inactiveFlag {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.rowActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .addForm {
   padding: 1.5rem;
   border: 1px solid var(--color-border);

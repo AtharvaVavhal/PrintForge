@@ -19,6 +19,8 @@ import { CouponsService } from '../coupons/coupons.service';
 import { CreateCouponDto } from '../coupons/dto/create-coupon.dto';
 import { UpdateCouponDto } from '../coupons/dto/update-coupon.dto';
 import { ListAdminCouponsQueryDto } from '../coupons/dto/list-admin-coupons-query.dto';
+import { AppSettingService } from '../app-setting/app-setting.service';
+import { UpdateSettingDto } from '../app-setting/dto/update-setting.dto';
 import { AdminService } from './admin.service';
 import { ListAdminOrdersQueryDto } from './dto/list-admin-orders-query.dto';
 import { ListAdminCustomersQueryDto } from './dto/list-admin-customers-query.dto';
@@ -53,6 +55,7 @@ export class AdminController {
     private readonly ordersService: OrdersService,
     private readonly reviewsService: ReviewsService,
     private readonly couponsService: CouponsService,
+    private readonly appSettingService: AppSettingService,
   ) {}
 
   @Get('orders')
@@ -121,5 +124,25 @@ export class AdminController {
     @Body() dto: UpdateCouponDto,
   ) {
     return this.couponsService.updateCoupon(id, dto);
+  }
+
+  // ─── Configurable app settings ───────────────────────────────────────
+  //
+  // Allowlisted + validated in AppSettingService — this controller never
+  // writes an arbitrary key. Setting keys are not UUIDs, so no
+  // ParseUUIDPipe here; the service rejects any key outside its
+  // definition list with a 400.
+
+  @Get('settings')
+  async listSettings() {
+    return this.appSettingService.listConfigurable();
+  }
+
+  @Patch('settings/:key')
+  async updateSetting(
+    @Param('key') key: string,
+    @Body() dto: UpdateSettingDto,
+  ) {
+    return this.appSettingService.updateConfigurable(key, dto.value);
   }
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useCategories } from '@/hooks/useCategories'
+import { useAdminProduct } from '@/hooks/useAdminProduct'
 import { useCreateProduct } from '@/hooks/useCreateProduct'
 import { useUpdateProduct } from '@/hooks/useUpdateProduct'
 import { useDeactivateProduct } from '@/hooks/useDeactivateProduct'
@@ -48,33 +49,22 @@ interface LocationState {
 }
 
 /**
- * Behind AdminRoute (App.tsx). There is no `GET /products/:id` on the
- * backend (confirmed against products.controller.ts — public lookup is by
- * :slug only, and it's isActive-filtered besides), so this page can't
- * fetch its own data from a direct URL the way AdminOrderDetailPage does.
- * Instead: `/admin/products/new` (the literal ":id" value "new") is
- * create mode; any other id expects the full Product object handed over
- * via router `state` from AdminProductRow's click (GET /products already
- * returns everything — variants/images/customizationFields — per row, so
- * there's nothing left to fetch). A direct visit/refresh with no state
- * shows a message pointing back to the list rather than attempting an
- * API call that doesn't exist.
+ * Behind AdminRoute (App.tsx). `/admin/products/new` (the literal ":id"
+ * value "new") is create mode. For an existing product this page prefers
+ * the full Product object handed over via router `state` from
+ * AdminProductRow's click (no extra request needed), and falls back to
+ * GET /products/admin/:id (Phase 13.2 — admin-only, NOT isActive-
+ * filtered) on a direct visit or a page refresh.
  *
  * Local component state (`product`) is the single source of truth for
  * this page once loaded — each sub-manager (VariantManager etc.) patches
  * it from its own mutation's response, never from a refetch.
  *
  * Reactivating a deactivated product (POST /products/:id/reactivate) is
- * only ever reachable from here, right after deactivating, before
- * navigating away — never from AdminProductsPage's list, which is
- * structurally incapable of ever showing an inactive product (GET
- * /products filters isActive:true unconditionally, confirmed live, no
- * admin bypass). A product deactivated in an earlier session has no path
- * back to this page at all: there's still no way to look one up once
- * it's out of local state. Deliberately not solved here — that would mean
- * adding a list-visibility affordance (a query param, an admin toggle),
- * a bigger change than "add a reactivate endpoint," and out of this
- * phase's scope. Flagged in the completion report as the residual gap.
+ * reachable both here (right after deactivating) and by re-opening the
+ * product from AdminProductsPage, which now lists inactive products too
+ * (GET /products/admin). The public GET /products stays isActive-filtered,
+ * so the storefront never shows a deactivated product.
  */
 export function AdminProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -87,6 +77,20 @@ export function AdminProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(
     !isCreating && stateProduct && stateProduct.id === id ? stateProduct : null,
   )
+
+  // Direct visit / refresh with no router state: fetch by id via the
+  // admin-only GET /products/admin/:id (Phase 13.2). Not isActive-
+  // filtered, so a deactivated product loads here too — the reactivation
+  // dead-end is gone. Disabled once `product` is populated.
+  const adminProductQuery = useAdminProduct(
+    !isCreating && !product ? id : undefined,
+  )
+  // Adopt the fetched product into local state (the page's single source
+  // of truth once loaded — sub-managers patch it). Guarded set during
+  // render, per the React "you might not need an effect" guidance.
+  if (!isCreating && !product && adminProductQuery.data) {
+    setProduct(adminProductQuery.data)
+  }
 
   const createProduct = useCreateProduct()
   const updateProduct = useUpdateProduct(product?.id ?? '')
@@ -116,12 +120,9 @@ export function AdminProductDetailPage() {
     if (!product) return
     try {
       await deactivateProduct.mutateAsync()
-      // Stay on the page (previously this navigated back to the products
-      // list, which was the dead end: GET /products immediately stops
-      // returning this product, so there was no way back to it at all).
-      // The still-open local `product` state is now the *only* place this
-      // product remains reachable from — that's exactly the moment the
-      // Reactivate action below needs to exist.
+      // Stay on the page. The product also remains in the admin products
+      // list (GET /products/admin returns inactive rows), so it's still
+      // reachable later — but reactivating right here is the common case.
       setProduct((prev) => (prev ? { ...prev, isActive: false } : prev))
     } catch {
       // Error surfaced via deactivateProduct.isError below.
@@ -160,13 +161,19 @@ export function AdminProductDetailPage() {
     return (
       <section className={styles.wrap}>
         <h1>Product</h1>
-        <Alert variant="error">
-          This page needs to be opened from the products list — there's no way to look up a single product by
-          id directly.
-        </Alert>
-        <p>
-          <Link to={ROUTES.ADMIN_PRODUCTS}>Back to products</Link>
-        </p>
+        {adminProductQuery.isPending && <Skeleton className={styles.skeletonBlock} />}
+        {!adminProductQuery.isPending && (
+          <>
+            <Alert variant="error">
+              {adminProductQuery.isError
+                ? getApiErrorMessage(adminProductQuery.error)
+                : 'This product could not be found.'}
+            </Alert>
+            <p>
+              <Link to={ROUTES.ADMIN_PRODUCTS}>Back to products</Link>
+            </p>
+          </>
+        )}
       </section>
     )
   }
@@ -200,8 +207,8 @@ export function AdminProductDetailPage() {
       {reactivateProduct.isError && <Alert variant="error">{getApiErrorMessage(reactivateProduct.error)}</Alert>}
       {!product.isActive && !reactivateProduct.isError && (
         <Alert variant="info">
-          This product is deactivated and no longer visible in the storefront or the products list. Reactivate
-          it now, or navigate away — there is currently no way to find it again afterward.
+          This product is deactivated and hidden from the storefront. It still appears in the admin products
+          list (filter by “Inactive only”) and can be reactivated from there or here.
         </Alert>
       )}
 

@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router-dom'
-import { useProducts } from '@/hooks/useProducts'
+import { useAdminProducts } from '@/hooks/useAdminProducts'
 import { useCategories } from '@/hooks/useCategories'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { Alert } from '@/components/ui/Alert'
@@ -11,30 +11,31 @@ import styles from './AdminProductsPage.module.css'
 
 const DEFAULT_LIMIT = 20
 
+function getStatus(value: string | null): 'active' | 'inactive' | undefined {
+  return value === 'active' || value === 'inactive' ? value : undefined
+}
+
 /**
- * Behind AdminRoute (App.tsx). GENUINE BACKEND LIMITATION, confirmed
- * against the live products.service.ts (not assumed): `GET /products`
- * unconditionally filters `isActive: true` server-side, and there is no
- * `GET /products/:id` or admin bypass of any kind. This page is therefore
- * built on the same public endpoint the storefront uses — real pagination
- * (no client-side slicing), same pattern as AdminOrdersPage/
- * AdminCustomersPage — and it can only ever show active products. A
- * deactivated product (DELETE /products/:id) drops out of this list
- * entirely. `POST /products/:id/reactivate` exists (mirrors deactivate),
- * but this list still can't offer it — there's nothing to click it from,
- * since a deactivated product never appears here. Reactivating is only
- * reachable immediately after deactivating, on AdminProductDetailPage
- * itself, before navigating away (see that page's own doc comment); a
- * product deactivated in an earlier visit has no path back through this
- * UI at all. Flagged rather than silently building a "Reactivate" button
- * on this list that nothing could ever reach.
+ * Behind AdminRoute (App.tsx). Built on GET /products/admin (Phase 13.2),
+ * which — unlike the public GET /products the storefront uses — returns
+ * inactive products too. Real backend pagination (no client-side
+ * slicing), same pattern as AdminOrdersPage/AdminCustomersPage. A
+ * deactivated product stays in this list with an "Inactive" badge and can
+ * be reactivated from its detail page; the `status` filter narrows to one
+ * side.
  */
 export function AdminProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const page = Number(searchParams.get('page') ?? '1')
   const categoryId = searchParams.get('categoryId') ?? undefined
+  const status = getStatus(searchParams.get('status'))
 
-  const productsQuery = useProducts({ page, limit: DEFAULT_LIMIT, categoryId })
+  const productsQuery = useAdminProducts({
+    page,
+    limit: DEFAULT_LIMIT,
+    categoryId,
+    status,
+  })
   const categoriesQuery = useCategories()
 
   function goToPage(nextPage: number) {
@@ -58,6 +59,19 @@ export function AdminProductsPage() {
     })
   }
 
+  function handleStatusChange(nextStatus: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (nextStatus) {
+        next.set('status', nextStatus)
+      } else {
+        next.delete('status')
+      }
+      next.set('page', '1')
+      return next
+    })
+  }
+
   return (
     <section className={styles.wrap}>
       <div className={styles.header}>
@@ -67,32 +81,42 @@ export function AdminProductsPage() {
         </Link>
       </div>
 
-      <Alert variant="info">
-        Showing active products only — GET /products has no admin view of deactivated products. If you just
-        deactivated one, you can still reactivate it from its own page before navigating away; once you leave,
-        there's no way back to it.
-      </Alert>
+      <div className={styles.filterRow}>
+        <label htmlFor="status-filter" className={styles.filterLabel}>
+          Status
+        </label>
+        <select
+          id="status-filter"
+          className={styles.filterSelect}
+          value={status ?? ''}
+          onChange={(event) => handleStatusChange(event.target.value)}
+        >
+          <option value="">Active &amp; inactive</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Inactive only</option>
+        </select>
 
-      {categoriesQuery.data && categoriesQuery.data.length > 0 && (
-        <div className={styles.filterRow}>
-          <label htmlFor="category-filter" className={styles.filterLabel}>
-            Category
-          </label>
-          <select
-            id="category-filter"
-            className={styles.filterSelect}
-            value={categoryId ?? ''}
-            onChange={(event) => handleCategoryChange(event.target.value)}
-          >
-            <option value="">All categories</option>
-            {categoriesQuery.data.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+        {categoriesQuery.data && categoriesQuery.data.length > 0 && (
+          <>
+            <label htmlFor="category-filter" className={styles.filterLabel}>
+              Category
+            </label>
+            <select
+              id="category-filter"
+              className={styles.filterSelect}
+              value={categoryId ?? ''}
+              onChange={(event) => handleCategoryChange(event.target.value)}
+            >
+              <option value="">All categories</option>
+              {categoriesQuery.data.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
 
       {productsQuery.isPending && <OrderListSkeleton />}
 

@@ -88,6 +88,41 @@ export class ProductsService {
     }
   }
 
+  /**
+   * Admin-only: every category, active and inactive. The storefront reads
+   * (listCategories / getCategoryTree above) stay isActive-filtered, so
+   * public behaviour is unchanged — this is the only path that surfaces a
+   * deactivated category for management.
+   */
+  async adminListCategories(): Promise<Category[]> {
+    return this.prisma.category.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  /**
+   * Soft-delete — isActive=false. Mirrors deactivateProduct exactly:
+   * categories are never hard-deleted, and this is idempotent /
+   * double-click-safe (no current-state check, no error if already
+   * inactive). Category hierarchy is untouched — children keep their
+   * parentCategoryId; getCategoryTree's existing orphan handling already
+   * copes with a hidden parent.
+   */
+  async deactivateCategory(id: string): Promise<Category> {
+    await this.getCategoryOrThrow(id);
+    return this.prisma.category.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  /** The reverse of deactivateCategory — same shape, same reasoning. */
+  async reactivateCategory(id: string): Promise<Category> {
+    await this.getCategoryOrThrow(id);
+    return this.prisma.category.update({
+      where: { id },
+      data: { isActive: true },
+    });
+  }
+
   private async getCategoryOrThrow(id: string): Promise<Category> {
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) {
@@ -110,7 +145,12 @@ export class ProductsService {
 
     // First pass: create nodes
     for (const cat of categories) {
-      map.set(cat.id, { id: cat.id, name: cat.name, slug: cat.slug, children: [] });
+      map.set(cat.id, {
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        children: [],
+      });
     }
 
     // Second pass: link children to parents
@@ -167,9 +207,7 @@ export class ProductsService {
             },
           }
         : {}),
-      ...(minRating !== undefined
-        ? { avgRating: { gte: minRating } }
-        : {}),
+      ...(minRating !== undefined ? { avgRating: { gte: minRating } } : {}),
     };
 
     let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: 'desc' };
@@ -310,6 +348,67 @@ export class ProductsService {
       where: { id },
       data: { isActive: true },
     });
+  }
+
+  /**
+   * Admin-only product list — active AND inactive. Separate from the
+   * public listProducts (which is unconditionally isActive-filtered, and
+   * stays that way): an optional `status` filter narrows to one or the
+   * other. No price/rating/sort params — this is a management list, not
+   * the storefront catalog.
+   */
+  async adminListProducts(
+    page: number,
+    limit: number,
+    categoryId: string | undefined,
+    search: string | undefined,
+    status: 'active' | 'inactive' | undefined,
+  ): Promise<PaginatedResult<ProductWithRelations>> {
+    const where: Prisma.ProductWhereInput = {
+      ...(status === 'active' ? { isActive: true } : {}),
+      ...(status === 'inactive' ? { isActive: false } : {}),
+      ...(categoryId ? { categoryId } : {}),
+      ...(search
+        ? { name: { contains: search, mode: 'insensitive' as const } }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: PRODUCT_DETAIL_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return {
+      items: items.map((item) => this.withImageUrls(item)),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
+
+  /**
+   * Admin-only single-product read by id. Unlike getProductBySlug this is
+   * NOT isActive-filtered, so a deactivated product stays reachable for
+   * management (and reactivation) after navigating away from it.
+   */
+  async adminGetProduct(id: string): Promise<ProductWithRelations> {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: PRODUCT_DETAIL_INCLUDE,
+    });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+    return this.withImageUrls(product);
   }
 
   private async getProductOrThrow(id: string): Promise<Product> {

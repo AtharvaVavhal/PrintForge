@@ -1,18 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { deactivateProduct } from '@/services/api/catalog'
 
-/** See useReactivateProduct for the reverse action. Once deactivated, a
- * product drops out of GET /products entirely (isActive-filtered) — the
- * one place it's still reachable to reactivate is this same detail page,
- * immediately after deactivating, before navigating away (see
- * AdminProductDetailPage's own doc comment for why the products *list*
- * can never offer this action). */
+/** See useReactivateProduct for the reverse action. Invalidates every
+ * ['products', ...] query — the public list stops returning the product,
+ * and the admin list (GET /products/admin) now keeps it visible with an
+ * "Inactive" badge so it stays reachable for reactivation. */
 export function useDeactivateProduct(productId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => deactivateProduct(productId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['products', 'list'] })
+      void queryClient.invalidateQueries({ queryKey: ['products'] })
     },
   })
 }

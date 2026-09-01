@@ -17,6 +17,8 @@ function buildProduct(overrides: Partial<Record<string, unknown>> = {}) {
     maxQuantity: null,
     specifications: null,
     isActive: true,
+    avgRating: null,
+    reviewCount: 0,
     createdAt: '2026-08-27T00:00:00.000Z',
     updatedAt: '2026-08-27T00:00:00.000Z',
     variants: [],
@@ -36,7 +38,7 @@ function productsResponse(items: unknown[], meta?: Partial<{ page: number; total
 
 const CATEGORIES_RESPONSE = {
   success: true,
-  data: [{ id: 'cat-1', name: 'Drinkware', slug: 'drinkware', parentCategoryId: null }],
+  data: [{ id: 'cat-1', name: 'Drinkware', slug: 'drinkware', parentCategoryId: null, isActive: true }],
 }
 
 describe('AdminProductsPage', () => {
@@ -51,8 +53,8 @@ describe('AdminProductsPage', () => {
     mock.restore()
   })
 
-  it('lists products and links each into the admin product detail route with the product in router state', async () => {
-    mock.onGet('/products').reply(200, productsResponse([buildProduct()]))
+  it('lists products (via GET /products/admin) and links each into the admin product detail route', async () => {
+    mock.onGet('/products/admin').reply(200, productsResponse([buildProduct()]))
 
     renderWithProviders(<AdminProductsPage />)
 
@@ -60,17 +62,40 @@ describe('AdminProductsPage', () => {
     expect(link).toHaveAttribute('href', '/admin/products/prod-1')
   })
 
-  it('warns that this list is active-products-only (no admin bypass exists on GET /products)', async () => {
-    mock.onGet('/products').reply(200, productsResponse([buildProduct()]))
+  it('surfaces inactive products with an "Inactive" flag (the public list never would)', async () => {
+    mock
+      .onGet('/products/admin')
+      .reply(200, productsResponse([buildProduct({ id: 'p2', name: 'Retired Mug', isActive: false })]))
 
     renderWithProviders(<AdminProductsPage />)
 
-    expect(await screen.findByText(/active products only/i)).toBeInTheDocument()
+    expect(await screen.findByText('Retired Mug')).toBeInTheDocument()
+    expect(screen.getByText('Inactive')).toBeInTheDocument()
+  })
+
+  it('has a status filter that adds ?status= and refetches', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/products/admin').reply((config) => {
+      const status = (config.params as { status?: string } | undefined)?.status
+      const items = status === 'inactive' ? [buildProduct({ isActive: false })] : [buildProduct()]
+      return [200, productsResponse(items)]
+    })
+
+    renderWithProviders(<AdminProductsPage />)
+
+    await screen.findByText('Ceramic Mug')
+    await user.selectOptions(screen.getByLabelText('Status'), 'inactive')
+
+    await screen.findByText('Inactive')
+    const statuses = mock.history.get
+      .filter((r) => r.url === '/products/admin')
+      .map((r) => (r.params as { status?: string } | undefined)?.status)
+    expect(statuses).toEqual([undefined, 'inactive'])
   })
 
   it('shows a category filter built from GET /categories and refilters on change', async () => {
     const user = userEvent.setup()
-    mock.onGet('/products').reply((config) => {
+    mock.onGet('/products/admin').reply((config) => {
       const categoryId = (config.params as { categoryId?: string } | undefined)?.categoryId
       const items = categoryId === 'cat-1' ? [buildProduct()] : []
       return [200, productsResponse(items)]
@@ -82,7 +107,7 @@ describe('AdminProductsPage', () => {
     await user.selectOptions(select, 'cat-1')
 
     expect(await screen.findByText('Ceramic Mug')).toBeInTheDocument()
-    const calls = mock.history.get.filter((r) => r.url === '/products')
+    const calls = mock.history.get.filter((r) => r.url === '/products/admin')
     expect(calls.map((r) => (r.params as { categoryId?: string } | undefined)?.categoryId)).toEqual([
       undefined,
       'cat-1',
@@ -90,7 +115,7 @@ describe('AdminProductsPage', () => {
   })
 
   it('shows real pagination driven by the backend meta', async () => {
-    mock.onGet('/products').reply(200, productsResponse([buildProduct()], { totalPages: 2 }))
+    mock.onGet('/products/admin').reply(200, productsResponse([buildProduct()], { totalPages: 2 }))
 
     renderWithProviders(<AdminProductsPage />)
 
@@ -98,7 +123,7 @@ describe('AdminProductsPage', () => {
   })
 
   it('links to /admin/products/new for creating a product', async () => {
-    mock.onGet('/products').reply(200, productsResponse([]))
+    mock.onGet('/products/admin').reply(200, productsResponse([]))
 
     renderWithProviders(<AdminProductsPage />)
 

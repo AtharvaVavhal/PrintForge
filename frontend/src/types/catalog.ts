@@ -19,6 +19,10 @@ export interface Category {
   name: string
   slug: string
   parentCategoryId: string | null
+  /** Public GET /categories and GET /categories/tree only ever return
+   * active categories; GET /categories/admin returns both, so admin views
+   * read this flag. */
+  isActive: boolean
   createdAt: string
   updatedAt: string
 }
@@ -128,6 +132,17 @@ export interface ListProductsParams {
   maxPrice?: number
   minRating?: number
   sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc'
+}
+
+/** Mirrors ListAdminProductsQueryDto — the admin catalog-management list
+ * (GET /products/admin), which unlike GET /products can also return
+ * inactive products. */
+export interface ListAdminProductsParams {
+  page?: number
+  limit?: number
+  categoryId?: string
+  search?: string
+  status?: 'active' | 'inactive'
 }
 
 export interface FilterState {

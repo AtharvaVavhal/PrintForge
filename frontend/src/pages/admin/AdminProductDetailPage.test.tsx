@@ -119,12 +119,25 @@ describe('AdminProductDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Ceramic Mug (Large Batch)' })).toBeInTheDocument()
   })
 
-  it('without router state (direct navigation), shows a message pointing back to the list instead of erroring', async () => {
+  it('without router state (direct navigation / refresh), fetches the product by id via GET /products/admin/:id', async () => {
+    mock.onGet('/products/admin/prod-1').reply(200, { success: true, data: buildProduct() })
+
     renderAt('/admin/products/prod-1')
 
     expect(
-      await screen.findByText(/needs to be opened from the products list/i),
+      await screen.findByRole('heading', { name: 'Ceramic Mug' }),
     ).toBeInTheDocument()
+  })
+
+  it('without router state, a product that cannot be loaded shows an error and a link back to the list', async () => {
+    mock.onGet('/products/admin/prod-1').reply(404, {
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Product not found', details: [] },
+    })
+
+    renderAt('/admin/products/prod-1')
+
+    expect(await screen.findByText('Product not found')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to products' })).toHaveAttribute(
       'href',
       '/admin/products',

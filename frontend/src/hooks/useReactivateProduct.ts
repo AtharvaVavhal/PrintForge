@@ -7,7 +7,7 @@ export function useReactivateProduct(productId: string) {
   return useMutation({
     mutationFn: () => reactivateProduct(productId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['products', 'list'] })
+      void queryClient.invalidateQueries({ queryKey: ['products'] })
     },
   })
 }

@@ -127,6 +127,9 @@ export function Header() {
                     <NavLink to={ROUTES.ADMIN_COUPONS} className={styles.navLink}>
                       Coupons
                     </NavLink>
+                    <NavLink to={ROUTES.ADMIN_SETTINGS} className={styles.navLink}>
+                      Settings
+                    </NavLink>
                   </>
                 )}
                 <span className={styles.userEmail}>{user.email}</span>
