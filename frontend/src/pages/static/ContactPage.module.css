@@ -1,0 +1,75 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--container-padding);
+}
+
+.page h1 {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+  margin-bottom: var(--space-2);
+}
+
+.intro {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-6);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-strong);
+}
+
+.input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-family: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.inputError {
+  border-color: var(--color-danger);
+}
+
+.textAreaField textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
+
+.submit {
+  margin-top: var(--space-2);
+}
+
+.note {
+  margin-top: var(--space-6);
+}

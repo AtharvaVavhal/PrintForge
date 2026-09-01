@@ -1,0 +1,48 @@
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--container-padding);
+}
+
+.page h1 {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+  margin-bottom: var(--space-1);
+}
+
+.meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-6);
+}
+
+article h2 {
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-strong);
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-2);
+}
+
+article p,
+article ul {
+  font-size: var(--text-base);
+  line-height: 1.7;
+  color: var(--color-text);
+  margin-bottom: var(--space-4);
+}
+
+article ul {
+  padding-left: var(--space-6);
+  list-style: disc;
+}
+
+article a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+article a:hover {
+  color: var(--color-accent-hover);
+}

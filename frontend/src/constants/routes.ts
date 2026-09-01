@@ -42,6 +42,11 @@ export const ROUTES = {
   ADMIN_PRODUCT_DETAIL: '/admin/products/:id',
   ADMIN_CATEGORIES: '/admin/categories',
   ADMIN_COUPONS: '/admin/coupons',
+  ABOUT: '/about',
+  CONTACT: '/contact',
+  PRIVACY: '/privacy',
+  TERMS: '/terms',
+  REFUND_POLICY: '/refund-policy',
 } as const
 
 export function productDetailPath(slug: string): string {

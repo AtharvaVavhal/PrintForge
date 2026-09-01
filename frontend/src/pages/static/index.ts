@@ -1,0 +1,5 @@
+export { AboutPage } from './AboutPage'
+export { ContactPage } from './ContactPage'
+export { PrivacyPage } from './PrivacyPage'
+export { TermsPage } from './TermsPage'
+export { RefundPolicyPage } from './RefundPolicyPage'

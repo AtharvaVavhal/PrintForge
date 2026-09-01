@@ -143,12 +143,14 @@ model RefreshToken {
 
 // ─── Catalog ────────────────────────────────────────────────────────────
 
-// Flat, one nesting level (§8).
+// Flat, one nesting level (§8). Only active categories appear in the
+// public storefront; isActive mirrors Product's pattern for soft-delete.
 model Category {
   id              String     @id @default(uuid())
   name            String
   slug            String     @unique
   parentCategoryId String?
+  isActive        Boolean    @default(true)
 
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt

@@ -6,6 +6,11 @@ import { ProtectedRoute } from '@/features/auth/ProtectedRoute'
 import { AdminRoute } from '@/features/auth/AdminRoute'
 import { RootLayout } from '@/layouts/RootLayout'
 import { HomePage } from '@/pages/home/HomePage'
+import { AboutPage } from '@/pages/static/AboutPage'
+import { ContactPage } from '@/pages/static/ContactPage'
+import { PrivacyPage } from '@/pages/static/PrivacyPage'
+import { TermsPage } from '@/pages/static/TermsPage'
+import { RefundPolicyPage } from '@/pages/static/RefundPolicyPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
@@ -46,6 +51,11 @@ function App() {
             <Route element={<RootLayout />}>
               {/* Public routes */}
               <Route path={ROUTES.HOME} element={<HomePage />} />
+              <Route path={ROUTES.ABOUT} element={<AboutPage />} />
+              <Route path={ROUTES.CONTACT} element={<ContactPage />} />
+              <Route path={ROUTES.PRIVACY} element={<PrivacyPage />} />
+              <Route path={ROUTES.TERMS} element={<TermsPage />} />
+              <Route path={ROUTES.REFUND_POLICY} element={<RefundPolicyPage />} />
               <Route path={ROUTES.LOGIN} element={<LoginPage />} />
               <Route path={ROUTES.REGISTER} element={<RegisterPage />} />
               <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />

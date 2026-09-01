@@ -1,0 +1,19 @@
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--container-padding);
+}
+
+.page h1 {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+  margin-bottom: var(--space-4);
+}
+
+.page p {
+  font-size: var(--text-base);
+  line-height: 1.7;
+  color: var(--color-text);
+  margin-bottom: var(--space-4);
+}

@@ -53,7 +53,10 @@ export class ProductsService {
   // ─── Categories ──────────────────────────────────────────────────────
 
   async listCategories(): Promise<Category[]> {
-    return this.prisma.category.findMany({ orderBy: { name: 'asc' } });
+    return this.prisma.category.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async createCategory(dto: CreateCategoryDto): Promise<Category> {
@@ -97,6 +100,7 @@ export class ProductsService {
 
   async getCategoryTree(): Promise<CategoryTreeNode[]> {
     const categories = await this.prisma.category.findMany({
+      where: { isActive: true },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, slug: true, parentCategoryId: true },
     });
