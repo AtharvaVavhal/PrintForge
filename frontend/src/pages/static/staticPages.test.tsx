@@ -30,6 +30,25 @@ describe('Static pages render without error', () => {
     )
   })
 
+  it('ContactPage does not present a working or fake contact form', () => {
+    renderPage(ContactPage)
+
+    // No form to collect (and silently discard) a message.
+    expect(document.querySelector('form')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: /send message/i })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+
+    // No false "message sent" / demo-submission copy.
+    expect(screen.queryByText(/message sent/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/thank you for reaching out/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/demo/i)).not.toBeInTheDocument()
+
+    // Clearly communicates that real contact details require client input.
+    expect(screen.getByText(/contact details coming soon/i)).toBeInTheDocument()
+  })
+
   it('PrivacyPage', () => {
     renderPage(PrivacyPage)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(

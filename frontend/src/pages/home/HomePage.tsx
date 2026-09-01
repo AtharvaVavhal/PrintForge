@@ -5,8 +5,6 @@ import { Link } from 'react-router-dom'
 import { HeroCarousel } from '@/components/home/HeroCarousel'
 import { BannerGrid } from '@/components/home/BannerGrid'
 import { CategoryShowcase } from '@/components/home/CategoryShowcase'
-import { Testimonials } from '@/components/home/Testimonials'
-import { NewsletterForm } from '@/components/home/NewsletterForm'
 import { useHomepageSettings } from '@/hooks/useHomepageSettings'
 import { Skeleton } from '@/components/ui/Skeleton'
 import styles from './HomePage.module.css'
@@ -58,10 +56,6 @@ export function HomePage() {
       {banners.length > 0 && <BannerGrid banners={banners} />}
 
       {showcaseCategories.length > 0 && <CategoryShowcase categories={showcaseCategories} />}
-
-      <Testimonials />
-
-      <NewsletterForm />
 
       {!heroSlides.length && status === 'unauthenticated' && (
         <section className={styles.fallbackCTA}>
