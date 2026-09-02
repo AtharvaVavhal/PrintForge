@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { CreateCategoryPayload } from '@/types/admin'
+import type { CreateCategoryPayload, UpdateCategoryPayload } from '@/types/admin'
 
 /** Mirrors backend/src/products/dto/{create,update}-category.dto.ts — a
  * UX convenience only, the server re-validates independently. Same
@@ -25,4 +25,22 @@ export function toCreateCategoryPayload(values: AdminCategoryFormValues): Create
     slug: values.slug,
     parentCategoryId: values.parentCategoryId === '' ? undefined : values.parentCategoryId,
   }
+}
+
+/**
+ * Edit payload. Unlike create, choosing "None" for the parent must send an
+ * explicit `parentCategoryId: null` — a PATCH that merely omits the key
+ * leaves the existing parent untouched, so a nested category could never
+ * be moved back to the top level (a real pre-existing bug). The backend's
+ * `UpdateCategoryDto` marks `parentCategoryId` `@IsOptional()`, which
+ * accepts `null` and clears the column. The cast is only because the
+ * shared `UpdateCategoryPayload` type models `string | undefined`; the
+ * wire value here is genuinely nullable and the frozen type can't say so.
+ */
+export function toUpdateCategoryPayload(values: AdminCategoryFormValues): UpdateCategoryPayload {
+  return {
+    name: values.name,
+    slug: values.slug,
+    parentCategoryId: values.parentCategoryId === '' ? null : values.parentCategoryId,
+  } as unknown as UpdateCategoryPayload
 }
