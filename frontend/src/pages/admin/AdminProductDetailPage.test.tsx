@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -220,7 +220,7 @@ describe('AdminProductDetailPage', () => {
     expect(await screen.findByText('Large')).toBeInTheDocument()
   })
 
-  it("moderates a review's status via the dropdown, PATCHing /admin/reviews/:id/status", async () => {
+  it("moderates a review via the confirm modal, PATCHing /admin/reviews/:id/status", async () => {
     const user = userEvent.setup()
     const product = buildProduct()
     mock.onGet('/products/prod-1/reviews').reply(200, {
@@ -247,7 +247,7 @@ describe('AdminProductDetailPage', () => {
         userId: 'user-9',
         rating: 1,
         bodyText: 'Spam content',
-        status: 'REMOVED',
+        status: 'REJECTED',
         createdAt: '2026-08-27T00:00:00.000Z',
         updatedAt: '2026-08-27T00:00:01.000Z',
       },
@@ -256,19 +256,22 @@ describe('AdminProductDetailPage', () => {
     renderAt('/admin/products/prod-1', { product })
 
     await screen.findByText('Spam content')
-    await user.selectOptions(screen.getByLabelText('Status'), 'REMOVED')
+    await user.click(screen.getByRole('button', { name: 'Reject' }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Reject review' }),
+    )
 
     await waitFor(() => expect(mock.history.patch.length).toBe(1))
-    expect(JSON.parse(mock.history.patch[0].data as string)).toEqual({ status: 'REMOVED' })
-    // The row stays visible with its new status selected, rather than
-    // vanishing — GET /products/:id/reviews is PUBLISHED-only and this
-    // page never refetches it after a moderation write (see
-    // ProductReviewModeration's own doc comment for why).
+    expect(JSON.parse(mock.history.patch[0].data as string)).toEqual({ status: 'REJECTED' })
+    // The row stays visible with its new status, rather than vanishing —
+    // GET /products/:id/reviews is PUBLISHED-only and this page never
+    // refetches it after a moderation write (see ProductReviewModeration's
+    // own doc comment for why).
     expect(screen.getByText('Spam content')).toBeInTheDocument()
-    expect(screen.getByLabelText('Status')).toHaveValue('REMOVED')
+    expect(screen.getByText('Rejected')).toBeInTheDocument()
   })
 
-  it('shows an error and leaves the previous status selected when moderation is rejected', async () => {
+  it('shows an error and leaves the previous status intact when moderation is rejected', async () => {
     const user = userEvent.setup()
     const product = buildProduct()
     mock.onGet('/products/prod-1/reviews').reply(200, {
@@ -295,8 +298,12 @@ describe('AdminProductDetailPage', () => {
     renderAt('/admin/products/prod-1', { product })
 
     await screen.findByText('Fine review')
-    await user.selectOptions(screen.getByLabelText('Status'), 'REJECTED')
+    await user.click(screen.getByRole('button', { name: 'Reject' }))
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Reject review' }),
+    )
 
     expect(await screen.findByText('Something went wrong')).toBeInTheDocument()
+    expect(screen.getByText('Published')).toBeInTheDocument()
   })
 })

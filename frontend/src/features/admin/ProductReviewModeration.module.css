@@ -1,94 +1,73 @@
-.wrap {
+.section {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin-top: 1.5rem;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
 }
 
 .heading {
   margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-strong);
 }
 
-.skeleton {
-  height: 6rem;
-  width: 100%;
-}
-
-.empty {
-  color: var(--color-text-muted);
-}
-
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.results {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1.25rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.summary {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  flex: 1 1 auto;
-  min-width: 0;
+  gap: var(--space-4);
 }
 
 .rating {
-  font-weight: 600;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.stars {
+  color: var(--color-warning, #b26b00);
+  letter-spacing: 1px;
+}
+
+.ratingNum {
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-strong);
 }
 
 .body {
-  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 34rem;
+  color: var(--color-text);
 }
 
-.date {
+.reviewer {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
 }
 
-.selectField {
+.muted {
+  color: var(--color-text-muted);
+}
+
+.confirm {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: var(--space-3);
 }
 
-.selectLabel {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.select {
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+.confirm p {
+  margin: 0;
   color: var(--color-text);
-  font: inherit;
 }
 
-.pagination {
+.confirmActions {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.pageIndicator {
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }
