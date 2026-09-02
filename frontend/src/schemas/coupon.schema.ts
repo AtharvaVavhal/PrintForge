@@ -159,17 +159,34 @@ export const editCouponSchema = z.object({
 
 export type EditCouponFormValues = z.infer<typeof editCouponSchema>
 
+/**
+ * Edit payload. Unlike create, a cleared optional field must send an
+ * explicit `null` — a PATCH that omits the key leaves the stored value
+ * unchanged, so an admin who set a minimum order / usage cap / date window
+ * could never remove it again (a real pre-existing bug). The backend's
+ * `UpdateCouponDto` marks every one of these `@IsOptional()`, which skips
+ * validation for `null`, and `CouponsService.updateCoupon` passes the
+ * value straight into `prisma.coupon.update({ data })`, so `null` clears
+ * the (nullable) column. The cast is only because the frozen shared
+ * `UpdateCouponPayload` type models `T | undefined`, not `T | null`.
+ *
+ * `usageLimitPerUser` is deliberately still omit-when-empty: its column
+ * defaults to 1 and `null` would mean "unlimited per user", a real
+ * business-semantics change rather than a clear — the edit UI keeps that
+ * field pre-filled and doesn't offer clearing it.
+ */
 export function toUpdateCouponPayload(values: EditCouponFormValues): UpdateCouponPayload {
   return {
-    minOrderValue: values.minOrderValue === '' ? undefined : Number(values.minOrderValue),
-    usageLimitTotal: values.usageLimitTotal === '' ? undefined : Number(values.usageLimitTotal),
-    usageLimitPerUser: values.usageLimitPerUser === '' ? undefined : Number(values.usageLimitPerUser),
+    minOrderValue: values.minOrderValue === '' ? null : Number(values.minOrderValue),
+    usageLimitTotal: values.usageLimitTotal === '' ? null : Number(values.usageLimitTotal),
+    usageLimitPerUser:
+      values.usageLimitPerUser === '' ? undefined : Number(values.usageLimitPerUser),
     firstOrderOnly: values.firstOrderOnly,
-    startsAt: values.startsAt === '' ? undefined : values.startsAt,
-    expiresAt: values.expiresAt === '' ? undefined : values.expiresAt,
+    startsAt: values.startsAt === '' ? null : values.startsAt,
+    expiresAt: values.expiresAt === '' ? null : values.expiresAt,
     isActive: values.isActive,
-    description: values.description === '' ? undefined : values.description,
-  }
+    description: values.description === '' ? null : values.description,
+  } as unknown as UpdateCouponPayload
 }
 
 // ─── Checkout coupon-code input (POST /checkout/validate) ──────────────

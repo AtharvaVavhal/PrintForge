@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,36 +17,70 @@ import {
 } from '@/schemas/coupon.schema'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Skeleton } from '@/components/ui/Skeleton'
+import { Modal } from '@/components/ui/Modal'
 import { TextField } from '@/components/ui/TextField'
+import { AdminPage } from '@/components/admin/AdminPage'
+import { AdminCard } from '@/components/admin/AdminCard'
+import { AdminTable } from '@/components/admin/AdminTable'
+import { AdminSelect } from '@/components/admin/AdminSelect'
+import { AdminBadge } from '@/components/admin/AdminBadge'
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState'
+import { AdminPagination } from '@/components/admin/AdminPagination'
+import { AdminPageSkeleton } from '@/components/admin/AdminPageSkeleton'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { formatPrice } from '@/utils/formatPrice'
+import { formatDate } from '@/utils/formatDate'
 import type { Category } from '@/types/catalog'
-import type { CouponView } from '@/types/coupons'
+import type { CouponType, CouponView } from '@/types/coupons'
+import { deriveCouponStatus } from './couponStatus'
 import styles from './AdminCouponsPage.module.css'
 
 const DEFAULT_LIMIT = 20
+const TABLE_COLUMNS = 8
 
-function couponTypeSummary(coupon: CouponView): string {
+const COUPON_TYPE_VALUES: CouponType[] = ['PERCENTAGE', 'FLAT_AMOUNT', 'FREE_SHIPPING']
+
+function parseCouponType(value: string | null): CouponType | undefined {
+  return value && (COUPON_TYPE_VALUES as string[]).includes(value) ? (value as CouponType) : undefined
+}
+
+function parseStatus(value: string | null): boolean | undefined {
+  if (value === 'active') return true
+  if (value === 'inactive') return false
+  return undefined
+}
+
+function couponDiscountLabel(coupon: CouponView): string {
   switch (coupon.type) {
     case 'PERCENTAGE':
-      return `${coupon.percentageOff ?? '?'}% off`
+      return coupon.percentageOff !== null ? `${coupon.percentageOff}% off` : '—'
     case 'FLAT_AMOUNT':
-      return `${formatPrice(coupon.flatAmountOff ?? '0')} off`
+      return coupon.flatAmountOff !== null ? `${formatPrice(coupon.flatAmountOff)} off` : '—'
     case 'FREE_SHIPPING':
       return 'Free shipping'
   }
 }
 
-function couponScopeSummary(coupon: CouponView, categories: Category[] | undefined): string {
+function couponScopeLabel(coupon: CouponView, categories: Category[] | undefined): string {
   if (coupon.scopeType === 'STORE_WIDE') return 'Store-wide'
   const category = categories?.find((c) => c.id === coupon.categoryId)
-  return category ? `Category: ${category.name}` : 'Category-scoped'
+  return category ? category.name : 'Category (inactive/unknown)'
+}
+
+function couponUsageTotalLabel(coupon: CouponView): string {
+  const total = coupon.usageLimitTotal === null ? '∞' : String(coupon.usageLimitTotal)
+  return `${coupon.usedCount} / ${total}`
+}
+
+function couponValidityLabel(coupon: CouponView): string {
+  if (coupon.startsAt === null && coupon.expiresAt === null) return 'Always'
+  const start = coupon.startsAt ? formatDate(coupon.startsAt) : '—'
+  const end = coupon.expiresAt ? formatDate(coupon.expiresAt) : '—'
+  return `${start} – ${end}`
 }
 
 /** `<input type="date">` needs "YYYY-MM-DD" — the backend returns a full
- * ISO datetime string (Date's own JSON serialization), so this slices it
- * down rather than assuming the format matches. */
+ * ISO datetime string, so slice rather than assume the format matches. */
 function toDateInputValue(iso: string | null): string {
   return iso ? iso.slice(0, 10) : ''
 }
@@ -65,26 +99,57 @@ function toEditFormValues(coupon: CouponView): EditCouponFormValues {
 }
 
 /**
- * Behind AdminRoute (App.tsx). List + inline create/edit forms, same shape
- * as AdminCategoriesPage — GET /admin/coupons/:id genuinely exists (unlike
- * products), but there's no need for a separate detail fetch since every
- * field needed for the edit form is already on the list row.
+ * Behind AdminRoute (App.tsx). Data-dense AdminTable + inline create/edit
+ * AdminCard forms, matching the Orders/Customers/Products/Categories
+ * redesigns. GET /admin/coupons is genuinely paginated and accepts
+ * isActive/type filters (ListAdminCouponsQueryDto) — no code search, no
+ * date/category filters exist server-side, so none are offered.
  *
  * code/type/percentageOff/flatAmountOff/scopeType/categoryId are the
- * coupon's fixed identity, immutable after creation (backend rejects them
- * on PATCH via UpdateCouponDto's whitelist) — the edit form
- * (EditCouponFormFields) simply never renders fields for them, rather than
- * rendering-then-disabling.
+ * coupon's fixed identity, immutable after creation (backend whitelist) —
+ * the edit form never renders them. "Expired"/"Scheduled" are derived
+ * presentation states only; the backend never auto-flips isActive.
  */
 export function AdminCouponsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const page = Number(searchParams.get('page') ?? '1')
+  const isActive = parseStatus(searchParams.get('status'))
+  const type = parseCouponType(searchParams.get('type'))
+
   const categoriesQuery = useCategories()
-  const couponsQuery = useAdminCoupons({ page, limit: DEFAULT_LIMIT })
+  const couponsQuery = useAdminCoupons({ page, limit: DEFAULT_LIMIT, isActive, type })
   const createCoupon = useCreateCoupon()
   const updateCoupon = useUpdateCoupon()
+
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [pendingDeactivate, setPendingDeactivate] = useState<CouponView | null>(null)
+
+  const statusError = updateCoupon.isError ? getApiErrorMessage(updateCoupon.error) : null
+  const hasActiveFilters = isActive !== undefined || type !== undefined
+
+  function setFilter(key: 'status' | 'type', value: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (value) {
+        next.set(key, value)
+      } else {
+        next.delete(key)
+      }
+      next.set('page', '1')
+      return next
+    })
+  }
+
+  function clearFilters() {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('status')
+      next.delete('type')
+      next.set('page', '1')
+      return next
+    })
+  }
 
   function goToPage(nextPage: number) {
     setSearchParams((prev) => {
@@ -92,6 +157,16 @@ export function AdminCouponsPage() {
       next.set('page', String(nextPage))
       return next
     })
+  }
+
+  function openCreate() {
+    setIsAdding(true)
+    setEditingId(null)
+  }
+
+  function openEdit(id: string) {
+    setEditingId(id)
+    setIsAdding(false)
   }
 
   async function handleCreate(values: CreateCouponFormValues) {
@@ -108,104 +183,268 @@ export function AdminCouponsPage() {
       await updateCoupon.mutateAsync({ id, payload: toUpdateCouponPayload(values) })
       setEditingId(null)
     } catch {
-      // Error surfaced via updateCoupon.isError below.
+      // Error surfaced via statusError / the edit form's own Alert.
     }
   }
 
+  function confirmDeactivate() {
+    if (!pendingDeactivate) return
+    updateCoupon.mutate(
+      { id: pendingDeactivate.id, payload: { isActive: false } },
+      { onSettled: () => setPendingDeactivate(null) },
+    )
+  }
+
+  function activate(id: string) {
+    updateCoupon.mutate({ id, payload: { isActive: true } })
+  }
+
+  if (couponsQuery.isPending) {
+    return <AdminPageSkeleton rows={4} />
+  }
+
+  const data = couponsQuery.data
+  const coupons = data?.items ?? []
+  const editSubmitError =
+    editingId && updateCoupon.isError ? getApiErrorMessage(updateCoupon.error) : null
+
   return (
-    <section className={styles.wrap}>
-      <div className={styles.header}>
-        <h1>Coupons</h1>
+    <AdminPage
+      title="Coupons"
+      description="Promotional discount codes customers enter at checkout. Inactive, expired, or fully-redeemed coupons stay listed here but won't apply."
+      actions={
         <Button
           type="button"
           variant="secondary"
-          onClick={() => {
-            setIsAdding((prev) => !prev)
-            setEditingId(null)
-          }}
+          onClick={() => (isAdding ? setIsAdding(false) : openCreate())}
         >
           {isAdding ? 'Cancel' : 'New coupon'}
         </Button>
-      </div>
-
-      {couponsQuery.isPending && <Skeleton className={styles.skeletonBlock} />}
-
-      {couponsQuery.isError && <Alert variant="error">{getApiErrorMessage(couponsQuery.error)}</Alert>}
-
-      {couponsQuery.data && couponsQuery.data.items.length === 0 && !isAdding && (
-        <p className={styles.empty}>No coupons yet.</p>
-      )}
-
-      {couponsQuery.data && couponsQuery.data.items.length > 0 && (
-        <ul className={styles.list}>
-          {couponsQuery.data.items.map((coupon) =>
-            editingId === coupon.id ? (
-              <li key={coupon.id} className={styles.row}>
-                <EditCouponFormFields
-                  defaultValues={toEditFormValues(coupon)}
-                  onSubmit={(values) => void handleUpdate(coupon.id, values)}
-                  onCancel={() => setEditingId(null)}
-                  isSubmitting={updateCoupon.isPending}
-                  submitError={updateCoupon.isError ? getApiErrorMessage(updateCoupon.error) : null}
-                />
-              </li>
-            ) : (
-              <li key={coupon.id} className={styles.row}>
-                <div className={styles.summary}>
-                  <span className={styles.code}>{coupon.code}</span>
-                  <span className={styles.meta}>{couponTypeSummary(coupon)}</span>
-                  <span className={styles.meta}>{couponScopeSummary(coupon, categoriesQuery.data)}</span>
-                  <span className={styles.meta}>
-                    Used {coupon.usedCount}
-                    {coupon.usageLimitTotal !== null ? ` / ${coupon.usageLimitTotal}` : ''}
-                  </span>
-                  {!coupon.isActive && <span className={styles.inactiveFlag}>Inactive</span>}
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setEditingId(coupon.id)
-                    setIsAdding(false)
-                  }}
-                >
-                  Edit
-                </Button>
-              </li>
-            ),
-          )}
-        </ul>
-      )}
-
-      {couponsQuery.data && couponsQuery.data.meta.totalPages > 1 && (
-        <div className={styles.pagination}>
-          <Button variant="secondary" disabled={page <= 1} onClick={() => goToPage(page - 1)}>
-            Previous
-          </Button>
-          <span className={styles.pageIndicator}>
-            Page {couponsQuery.data.meta.page} of {couponsQuery.data.meta.totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            disabled={page >= couponsQuery.data.meta.totalPages}
-            onClick={() => goToPage(page + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
-
+      }
+    >
       {isAdding && categoriesQuery.data && (
-        <div className={styles.addForm}>
+        <AdminCard as="section" title="New coupon">
           <CreateCouponFormFields
             categories={categoriesQuery.data}
             onSubmit={(values) => void handleCreate(values)}
             isSubmitting={createCoupon.isPending}
             submitError={createCoupon.isError ? getApiErrorMessage(createCoupon.error) : null}
           />
-        </div>
+        </AdminCard>
       )}
-    </section>
+
+      <AdminCard as="section" title="Filters">
+        <div className={styles.filters}>
+          <AdminSelect
+            label="Status"
+            name="status"
+            value={searchParams.get('status') ?? ''}
+            onChange={(event) => setFilter('status', event.target.value)}
+          >
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </AdminSelect>
+
+          <AdminSelect
+            label="Type"
+            name="type"
+            value={type ?? ''}
+            onChange={(event) => setFilter('type', event.target.value)}
+          >
+            <option value="">All types</option>
+            <option value="PERCENTAGE">Percentage</option>
+            <option value="FLAT_AMOUNT">Flat amount</option>
+            <option value="FREE_SHIPPING">Free shipping</option>
+          </AdminSelect>
+
+          {hasActiveFilters && (
+            <Button variant="secondary" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+      </AdminCard>
+
+      {couponsQuery.isError && (
+        <Alert variant="error">{getApiErrorMessage(couponsQuery.error)}</Alert>
+      )}
+
+      {statusError && !editingId && <Alert variant="error">{statusError}</Alert>}
+
+      {data && coupons.length === 0 && !isAdding ? (
+        <AdminEmptyState
+          title="No coupons yet"
+          description={
+            hasActiveFilters
+              ? 'No coupons match these filters.'
+              : 'Create a discount code for customers to use at checkout.'
+          }
+          action={
+            hasActiveFilters ? (
+              <Button type="button" variant="secondary" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : (
+              <Button type="button" onClick={openCreate}>
+                New coupon
+              </Button>
+            )
+          }
+        />
+      ) : data && coupons.length > 0 ? (
+        <div className={styles.results} aria-busy={couponsQuery.isFetching || undefined}>
+          <AdminCard flush>
+            <AdminTable caption="Coupons">
+              <AdminTable.Head>
+                <AdminTable.Row>
+                  <AdminTable.HeaderCell>Code</AdminTable.HeaderCell>
+                  <AdminTable.HeaderCell>Discount</AdminTable.HeaderCell>
+                  <AdminTable.HeaderCell>Scope</AdminTable.HeaderCell>
+                  <AdminTable.HeaderCell align="end">Min order</AdminTable.HeaderCell>
+                  <AdminTable.HeaderCell>Usage</AdminTable.HeaderCell>
+                  <AdminTable.HeaderCell>Validity</AdminTable.HeaderCell>
+                  <AdminTable.HeaderCell>Status</AdminTable.HeaderCell>
+                  <AdminTable.HeaderCell>Actions</AdminTable.HeaderCell>
+                </AdminTable.Row>
+              </AdminTable.Head>
+              <AdminTable.Body>
+                {coupons.map((coupon) => {
+                  const status = deriveCouponStatus(coupon)
+                  return (
+                    <Fragment key={coupon.id}>
+                      <AdminTable.Row>
+                        <AdminTable.Cell>
+                          <span className={styles.codeCell}>
+                            <span className={styles.code}>{coupon.code}</span>
+                            {coupon.description && (
+                              <span className={styles.description}>{coupon.description}</span>
+                            )}
+                            {coupon.firstOrderOnly && (
+                              <span className={styles.marker}>First order only</span>
+                            )}
+                          </span>
+                        </AdminTable.Cell>
+                        <AdminTable.Cell>{couponDiscountLabel(coupon)}</AdminTable.Cell>
+                        <AdminTable.Cell>
+                          {couponScopeLabel(coupon, categoriesQuery.data)}
+                        </AdminTable.Cell>
+                        <AdminTable.Cell align="end">
+                          {coupon.minOrderValue !== null ? formatPrice(coupon.minOrderValue) : '—'}
+                        </AdminTable.Cell>
+                        <AdminTable.Cell>
+                          <span className={styles.usageCell}>
+                            <span>{couponUsageTotalLabel(coupon)}</span>
+                            {coupon.usageLimitPerUser !== null && (
+                              <span className={styles.usageSub}>
+                                {coupon.usageLimitPerUser} per user
+                              </span>
+                            )}
+                          </span>
+                        </AdminTable.Cell>
+                        <AdminTable.Cell>
+                          <span className={styles.validity}>{couponValidityLabel(coupon)}</span>
+                        </AdminTable.Cell>
+                        <AdminTable.Cell>
+                          <AdminBadge variant={status.variant}>{status.label}</AdminBadge>
+                        </AdminTable.Cell>
+                        <AdminTable.Cell>
+                          <span className={styles.rowActions}>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              onClick={() => openEdit(coupon.id)}
+                            >
+                              Edit
+                            </Button>
+                            {coupon.isActive ? (
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setPendingDeactivate(coupon)}
+                              >
+                                Deactivate
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                isLoading={
+                                  updateCoupon.isPending &&
+                                  updateCoupon.variables?.id === coupon.id
+                                }
+                                onClick={() => activate(coupon.id)}
+                              >
+                                Activate
+                              </Button>
+                            )}
+                          </span>
+                        </AdminTable.Cell>
+                      </AdminTable.Row>
+
+                      {editingId === coupon.id && (
+                        <AdminTable.Row>
+                          <AdminTable.Cell colSpan={TABLE_COLUMNS}>
+                            <AdminCard as="section" title="Edit coupon">
+                              <EditCouponFormFields
+                                defaultValues={toEditFormValues(coupon)}
+                                onSubmit={(values) => void handleUpdate(coupon.id, values)}
+                                onCancel={() => setEditingId(null)}
+                                isSubmitting={updateCoupon.isPending}
+                                submitError={editSubmitError}
+                              />
+                            </AdminCard>
+                          </AdminTable.Cell>
+                        </AdminTable.Row>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </AdminTable.Body>
+            </AdminTable>
+          </AdminCard>
+
+          <AdminPagination
+            page={data.meta.page}
+            totalPages={data.meta.totalPages}
+            onPageChange={goToPage}
+            label="Coupons pagination"
+          />
+        </div>
+      ) : null}
+
+      <Modal
+        isOpen={pendingDeactivate !== null}
+        onClose={() => setPendingDeactivate(null)}
+        title="Deactivate coupon"
+        size="sm"
+      >
+        {pendingDeactivate && (
+          <div className={styles.confirm}>
+            <p>
+              <strong>{pendingDeactivate.code}</strong> will stop working at checkout immediately.
+              Orders that already used it are unaffected, and you can activate it again later.
+            </p>
+            <div className={styles.confirmActions}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPendingDeactivate(null)}
+                disabled={updateCoupon.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                isLoading={updateCoupon.isPending}
+                onClick={confirmDeactivate}
+              >
+                Deactivate
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </AdminPage>
   )
 }
 
@@ -246,16 +485,11 @@ function CreateCouponFormFields({
       <div className={styles.formRow}>
         <TextField label="Code" error={errors.code?.message} {...register('code')} />
 
-        <div className={styles.selectField}>
-          <label htmlFor="coupon-type" className={styles.selectLabel}>
-            Type
-          </label>
-          <select id="coupon-type" className={styles.select} {...register('type')}>
-            <option value="PERCENTAGE">Percentage off</option>
-            <option value="FLAT_AMOUNT">Flat amount off</option>
-            <option value="FREE_SHIPPING">Free shipping</option>
-          </select>
-        </div>
+        <AdminSelect label="Type" error={errors.type?.message} {...register('type')}>
+          <option value="PERCENTAGE">Percentage off</option>
+          <option value="FLAT_AMOUNT">Flat amount off</option>
+          <option value="FREE_SHIPPING">Free shipping</option>
+        </AdminSelect>
 
         {type === 'PERCENTAGE' && (
           <TextField
@@ -277,35 +511,24 @@ function CreateCouponFormFields({
       </div>
 
       <div className={styles.formRow}>
-        <div className={styles.selectField}>
-          <label htmlFor="coupon-scope" className={styles.selectLabel}>
-            Scope
-          </label>
-          <select id="coupon-scope" className={styles.select} {...register('scopeType')}>
-            <option value="STORE_WIDE">Store-wide</option>
-            <option value="CATEGORY">Specific category</option>
-          </select>
-        </div>
+        <AdminSelect label="Scope" error={errors.scopeType?.message} {...register('scopeType')}>
+          <option value="STORE_WIDE">Store-wide</option>
+          <option value="CATEGORY">Specific category</option>
+        </AdminSelect>
 
         {scopeType === 'CATEGORY' && (
-          <div className={styles.selectField}>
-            <label htmlFor="coupon-category" className={styles.selectLabel}>
-              Category
-            </label>
-            <select id="coupon-category" className={styles.select} {...register('categoryId')}>
-              <option value="">Select a category</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-            {errors.categoryId && (
-              <p className={styles.error} role="alert">
-                {errors.categoryId.message}
-              </p>
-            )}
-          </div>
+          <AdminSelect
+            label="Category"
+            error={errors.categoryId?.message}
+            {...register('categoryId')}
+          >
+            <option value="">Select a category</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </AdminSelect>
         )}
       </div>
 
