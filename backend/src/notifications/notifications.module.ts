@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { EmailService } from './email/email.service';
 import { NotificationsService } from './notifications.service';
 import { OutboxPoller } from './outbox/outbox.poller';
@@ -14,7 +13,8 @@ import { OutboxPoller } from './outbox/outbox.poller';
  * transaction).
  */
 @Module({
-  imports: [ScheduleModule.forRoot()],
+  // OutboxPoller's @Cron is discovered by the single schedule-module
+  // registration in AppModule — a second one here double-runs every job.
   providers: [NotificationsService, OutboxPoller, EmailService],
   exports: [NotificationsService],
 })

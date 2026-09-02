@@ -44,6 +44,22 @@ export interface RazorpayOrderPayment {
   method?: string;
 }
 
+/** A Razorpay call that failed, translated into something diagnosable.
+ * Carries the upstream HTTP status / error code when the SDK actually
+ * received a response; `transport` is true when it did not (DNS, TLS,
+ * timeout, blocked egress) — the case the SDK mangles, see below. */
+export class RazorpayApiError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number | undefined,
+    readonly code: string | undefined,
+    readonly transport: boolean,
+  ) {
+    super(message);
+    this.name = 'RazorpayApiError';
+  }
+}
+
 /**
  * Thin wrapper around the Razorpay SDK. Razorpay order is created once per
  * Order and reused across retries (§12) — never re-created on
@@ -107,7 +123,17 @@ export class RazorpayService implements OnModuleInit {
     razorpayOrderId: string,
   ): Promise<RazorpayOrderPayment[]> {
     const client = this.getClient();
-    const res = await client.orders.fetchPayments(razorpayOrderId);
+    let res: Awaited<ReturnType<typeof client.orders.fetchPayments>>;
+    try {
+      res = await client.orders.fetchPayments(razorpayOrderId);
+    } catch (err: unknown) {
+      // Same SDK error-shape hazard as createOrder — translate so the
+      // reconciliation cron logs a real cause, not a bare TypeError. Still
+      // throws; the caller's retry/skip behavior is unchanged.
+      throw this.translateSdkError('fetchOrderPayments', err, {
+        razorpayOrderId,
+      });
+    }
     const items = Array.isArray(res.items) ? res.items : [];
     return items.map((p) => ({
       id: p.id,
@@ -136,12 +162,112 @@ export class RazorpayService implements OnModuleInit {
     // Passed as a decimal STRING, never Number(bigint) — the SDK's `amount`
     // field accepts `number | string`; a string sidesteps any bigint→float
     // precision question entirely (see completion report).
-    const order = await client.orders.create({
-      amount: params.amountPaise.toString(),
-      currency: params.currency,
-      receipt: params.receipt,
-    });
+    let order: { id: string };
+    try {
+      order = await client.orders.create({
+        amount: params.amountPaise.toString(),
+        currency: params.currency,
+        receipt: params.receipt,
+      });
+    } catch (err: unknown) {
+      throw this.translateSdkError('createOrder', err, {
+        amountPaise: params.amountPaise.toString(),
+        currency: params.currency,
+      });
+    }
+    if (!order?.id) {
+      throw new RazorpayApiError(
+        'Razorpay order creation returned no order id',
+        undefined,
+        undefined,
+        false,
+      );
+    }
     return { id: order.id };
+  }
+
+  /**
+   * Translate whatever the Razorpay SDK threw into a diagnosable error, log
+   * non-secret context, and re-throw. NEVER swallows and NEVER returns a
+   * fake result — the caller still fails.
+   *
+   * The SDK (razorpay@2.9.8) throws two incompatible shapes:
+   *  - real API errors  -> a plain object `{ statusCode, error: { code,
+   *    description, ... } }` (not an Error instance).
+   *  - transport errors -> its internal `normalizeError` does
+   *    `throw { statusCode: err.response.status, ... }` with no guard, so
+   *    when axios rejects WITHOUT a response (DNS failure, TLS, timeout,
+   *    blocked outbound network) it dereferences `undefined.status` and
+   *    throws `TypeError: Cannot read properties of undefined (reading
+   *    'status')`, discarding the real cause. That masked TypeError is the
+   *    observed checkout 500. We can't un-break the SDK, but we can name
+   *    the failure instead of surfacing a bare TypeError.
+   */
+  private translateSdkError(
+    op: string,
+    err: unknown,
+    context: Record<string, string>,
+  ): RazorpayApiError {
+    const ctx = Object.entries(context)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(' ');
+
+    // Shape 1: the SDK's normalized API error object.
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'statusCode' in err &&
+      typeof (err as { statusCode?: unknown }).statusCode === 'number'
+    ) {
+      const e = err as {
+        statusCode: number;
+        error?: { code?: string; description?: string };
+      };
+      const desc = e.error?.description ?? 'no description';
+      const code = e.error?.code;
+      this.logger.error(
+        `Razorpay ${op} rejected: HTTP ${e.statusCode}${
+          code ? ` code=${code}` : ''
+        } — ${desc} (${ctx})`,
+      );
+      return new RazorpayApiError(
+        `Razorpay ${op} failed: HTTP ${e.statusCode}${
+          code ? ` (${code})` : ''
+        } — ${desc}`,
+        e.statusCode,
+        code,
+        false,
+      );
+    }
+
+    // Shape 2: a transport failure — either the SDK's mangled TypeError, or
+    // a raw axios/network error that slipped through unnormalized.
+    const raw = err as
+      { code?: unknown; message?: unknown; name?: unknown } | undefined;
+    const netCode = typeof raw?.code === 'string' ? raw.code : undefined;
+    const mangled =
+      raw?.name === 'TypeError' &&
+      typeof raw.message === 'string' &&
+      raw.message.includes("reading 'status'");
+    const detail =
+      netCode ??
+      (mangled
+        ? 'no response from Razorpay'
+        : typeof raw?.message === 'string'
+          ? raw.message
+          : 'unknown transport error');
+    this.logger.error(
+      `Razorpay ${op} could not reach the API: ${detail} — check outbound ` +
+        `network access to api.razorpay.com and that RAZORPAY_KEY_ID/` +
+        `RAZORPAY_KEY_SECRET are set (${ctx})`,
+      err instanceof Error ? err.stack : undefined,
+    );
+    return new RazorpayApiError(
+      `Razorpay ${op} failed: could not reach Razorpay (${detail})`,
+      undefined,
+      netCode,
+      true,
+    );
   }
 
   /**

@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -17,7 +16,10 @@ import { PaymentReconciliationService } from './payment-reconciliation.service';
  * avoids a checkout<->payments circular dependency / forwardRef()).
  */
 @Module({
-  imports: [OrdersModule, RazorpayModule, ScheduleModule.forRoot()],
+  // @Cron jobs here (PaymentReconciliationService, WebhookProcessor) are
+  // discovered by the single schedule-module registration in AppModule — a
+  // second registration in this feature module double-runs every job.
+  imports: [OrdersModule, RazorpayModule],
   controllers: [PaymentsController],
   providers: [PaymentsService, WebhookProcessor, PaymentReconciliationService],
   exports: [PaymentsService],

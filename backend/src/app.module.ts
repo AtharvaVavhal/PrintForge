@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import configuration from './common/config/configuration';
@@ -62,6 +63,13 @@ import { UsersModule } from './users/users.module';
       throttlers: [{ ttl: 60_000, limit: 20 }],
       skipIf: () => process.env.NODE_ENV === 'test',
     }),
+    // Registered exactly once, app-wide. The ScheduleExplorer it installs
+    // discovers every @Cron/@Interval provider across all feature modules
+    // (payments reconciliation, notifications outbox, webhook retry) — a
+    // second forRoot() in a feature module registers the explorer twice and
+    // runs every job twice (see the double "ScheduleModule initialized" /
+    // reconciliation-ran-twice symptom).
+    ScheduleModule.forRoot(),
     PrismaModule,
     HealthModule,
     UsersModule,
