@@ -487,6 +487,12 @@ npm run dev
 
 ### Environment Configuration
 
+The values below are for local development. For the full per-variable matrix
+(required in dev / test / production, purpose, where each is provisioned) see
+[`docs/ops/ENVIRONMENT.md`](./docs/ops/ENVIRONMENT.md). In production
+(`NODE_ENV=production`) the backend fails fast at boot if a production-critical
+variable is missing.
+
 **`backend/.env`**
 ```env
 NODE_ENV=development
@@ -604,6 +610,20 @@ Only the architecture is frozen; everything below reflects actual implementation
 **Deployed.** Backend is live on Render, frontend is live on Vercel, both wired to real Razorpay test-mode credentials, Cloudinary, and a production Postgres instance.
 
 **Remaining before this is a finished launch:** a full live smoke test of the payment flow end to end (checkout → Razorpay test payment → webhook → order status update), production (not test-mode) Razorpay credentials, Resend configured for real transactional email, and DNS cutover to `printforge.in` for both the frontend and backend so the refresh-cookie's `SameSite` behavior matches the architecture's registrable-domain assumption.
+
+---
+
+## Operations
+
+Operational runbooks live in [`docs/ops/`](./docs/ops/):
+
+| Document | Purpose |
+|---|---|
+| [`ENVIRONMENT.md`](./docs/ops/ENVIRONMENT.md) | Every backend/frontend env var — required-when, purpose, format, provisioning. Backend boot fails fast on missing production-critical variables (`NODE_ENV=production`). |
+| [`DEPLOYMENT.md`](./docs/ops/DEPLOYMENT.md) | Pre-deploy checklist, Prisma migration procedure, deploy + rollback, incident basics (payments / webhooks / email). |
+| [`BACKUP-RESTORE.md`](./docs/ops/BACKUP-RESTORE.md) | Database backup responsibility, RPO/RTO assumptions, restore procedure — documented, not yet drilled. |
+| [`PRODUCTION-SMOKE-TEST.md`](./docs/ops/PRODUCTION-SMOKE-TEST.md) | Post-deploy checklist across infra, auth, commerce, payment, email, admin, upload, security. |
+| [`DEPENDENCY-ADVISORIES.md`](./docs/ops/DEPENDENCY-ADVISORIES.md) | Known `npm audit` findings and CI policy. |
 
 ---
 

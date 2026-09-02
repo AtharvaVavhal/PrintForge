@@ -8,6 +8,27 @@ on:
       - main
 
 jobs:
+  hygiene:
+    name: Hygiene
+    runs-on: ubuntu-latest
+
+    steps:
+      # Full history so the diff base (PR base, or previous commit on a
+      # push) is reachable.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Rejects trailing whitespace, a missing final newline, and leftover
+      # "<<<<<<< / ======= / >>>>>>>" merge-conflict markers in the changes
+      # this ref introduces (not the whole tree).
+      - name: Whitespace and conflict-marker check
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD~1)"; fi
+          echo "git diff --check ${BASE}..HEAD"
+          git diff --check "$BASE" HEAD
+
   backend:
     name: Backend
     runs-on: ubuntu-latest
@@ -52,6 +73,17 @@ jobs:
       - name: Install dependencies
         working-directory: backend
         run: npm ci
+
+      # Advisory only. The current tree has known advisories in build/CLI
+      # tooling that is NOT on the request path — bcrypt -> @mapbox/node-pre-gyp
+      # -> tar, and prisma(dev) -> @prisma/config -> deepmerge-ts. Neither is
+      # fixable without a major bump out of this phase's scope; both are
+      # tracked in docs/ops/DEPENDENCY-ADVISORIES.md. continue-on-error keeps
+      # the build green on the known set while still surfacing anything new.
+      - name: Audit dependencies (advisory)
+        working-directory: backend
+        continue-on-error: true
+        run: npm audit --omit=dev
 
       - name: Generate Prisma client
         working-directory: backend
@@ -127,6 +159,13 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+
+      # Runtime dependency tree is currently clean; fail the build only on
+      # a high/critical runtime advisory so transitive dev-tool noise never
+      # blocks CI.
+      - name: Audit dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Lint
         working-directory: frontend
