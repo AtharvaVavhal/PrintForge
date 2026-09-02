@@ -18,6 +18,7 @@ import { PrismaService } from '../common/database/prisma.service';
 import { decimalToPaise } from '../cart/pricing/money.util';
 import { isTransitionAllowed } from '../orders/state-machine/order-state-machine';
 import { RazorpayService } from './razorpay/razorpay.service';
+import { PaymentMismatchError } from './payment-mismatch.error';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import {
   InitiatePaymentView,
@@ -29,11 +30,17 @@ interface RazorpayPaymentEntity {
   id: string;
   order_id: string;
   amount: number | string;
+  currency?: string;
   status: string;
   method?: string;
   error_code?: string;
   error_description?: string;
 }
+
+const DEFAULT_CURRENCY = 'INR';
+
+/** Outcome of a reconciliation-driven capture attempt (Phase 13.3). */
+export type ReconcileCaptureResult = 'PAID' | 'ALREADY_TERMINAL' | 'MISMATCH';
 
 export interface RazorpayWebhookPayload {
   event: string;
@@ -274,9 +281,24 @@ export class PaymentsService {
     }
 
     const razorpayEventId = this.extractWebhookEventId(headerEventId, payload);
+    // Timestamps use `now() AT TIME ZONE 'UTC'` — the bare `timestamp`
+    // columns store a UTC wall clock exactly as every Prisma
+    // `@default(now())` write does, so the retry poller's
+    // `availableAt <= new Date()` comparison lines up regardless of the DB
+    // session timezone. (A plain SQL `now()` here would store local wall
+    // clock and skew that comparison.)
     await this.prisma.$queryRaw`
-      INSERT INTO webhook_events (id, "razorpayEventId", payload, status, "createdAt", "updatedAt")
-      VALUES (${randomUUID()}, ${razorpayEventId}, ${JSON.stringify(payload)}::jsonb, 'RECEIVED', now(), now())
+      INSERT INTO webhook_events (id, "razorpayEventId", payload, status, attempts, "availableAt", "createdAt", "updatedAt")
+      VALUES (
+        ${randomUUID()},
+        ${razorpayEventId},
+        ${JSON.stringify(payload)}::jsonb,
+        'RECEIVED',
+        0,
+        (now() AT TIME ZONE 'UTC'),
+        (now() AT TIME ZONE 'UTC'),
+        (now() AT TIME ZONE 'UTC')
+      )
       ON CONFLICT ("razorpayEventId") DO NOTHING
     `;
   }
@@ -382,18 +404,17 @@ export class PaymentsService {
     attempt: PaymentAttempt,
     paymentEntity: RazorpayPaymentEntity,
   ): Promise<void> {
-    // §12.1 defense-in-depth, non-blocking: log/alert on mismatch only.
-    const expectedPaise = decimalToPaise(order.total);
-    const actualPaise = BigInt(paymentEntity.amount);
-    if (expectedPaise !== actualPaise) {
-      this.logger.warn(
-        `Amount mismatch on captured payment for order ${order.id}: expected ${expectedPaise}, got ${actualPaise}`,
-      );
-      Sentry.captureMessage('Payment amount mismatch', {
-        level: 'warning',
-        extra: { orderId: order.id, expectedPaise: expectedPaise.toString(), actualPaise: actualPaise.toString() },
-      });
-    }
+    // §12.1 / Phase 13.3 §4 — a captured payment whose amount, currency,
+    // or Razorpay order id does not EXACTLY match this order is never
+    // accepted: this throws PaymentMismatchError, which rolls back the
+    // whole transaction (nothing partial) and is dead-lettered +
+    // Sentry-reported by WebhookProcessor.processOne. The order stays
+    // PENDING_PAYMENT for investigation.
+    this.assertCapturedPaymentMatchesOrder(order, {
+      razorpayOrderId: paymentEntity.order_id,
+      amountPaise: BigInt(paymentEntity.amount),
+      currency: paymentEntity.currency ?? DEFAULT_CURRENCY,
+    });
 
     // Deliberately no try/catch here: a P2002 on the partial unique index
     // (a concurrent verify/webhook already captured a different attempt
@@ -421,6 +442,28 @@ export class PaymentsService {
       return; // duplicate delivery of an event we already applied — no-op
     }
 
+    if (!isTransitionAllowed(order.status, OrderStatus.PAID)) {
+      // The attempt is now correctly recorded CAPTURED (money WAS taken),
+      // but the order is no longer PENDING_PAYMENT — e.g. reconciliation
+      // already gave up on it as stale. Do NOT force an illegal
+      // transition; surface it loudly for a human instead.
+      this.logger.error(
+        `Captured payment for order ${order.id} which is in ${order.status}, not PENDING_PAYMENT — attempt recorded CAPTURED, order left as-is`,
+      );
+      Sentry.captureMessage('Captured payment on a non-pending order', {
+        level: 'error',
+        tags: { area: 'payments_capture_state' },
+        extra: {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          orderStatus: order.status,
+          razorpayOrderId: order.razorpayOrderId ?? '',
+          razorpayPaymentId: paymentEntity.id,
+        },
+      });
+      return;
+    }
+
     const transitioned = await this.transitionOrder(
       tx,
       order,
@@ -430,6 +473,47 @@ export class PaymentsService {
     );
     if (transitioned) {
       await this.insertOutboxEvent(tx, 'ORDER_PAID', order);
+    }
+  }
+
+  /**
+   * Exact, non-floating comparison of a Razorpay-reported capture against
+   * what this order should have been charged (Phase 13.3 §4). Currency is
+   * compared as an exact string; amount as bigint paise via the same
+   * decimalToPaise the checkout total was built with. Throws
+   * PaymentMismatchError on ANY discrepancy so no caller can mark a
+   * mismatched payment PAID.
+   */
+  assertCapturedPaymentMatchesOrder(
+    order: Pick<Order, 'razorpayOrderId' | 'currency' | 'total'>,
+    captured: {
+      razorpayOrderId: string;
+      amountPaise: bigint;
+      currency: string;
+    },
+  ): void {
+    if (
+      order.razorpayOrderId &&
+      captured.razorpayOrderId !== order.razorpayOrderId
+    ) {
+      throw new PaymentMismatchError(
+        'RAZORPAY_ORDER_ID_MISMATCH',
+        `expected ${order.razorpayOrderId}, got ${captured.razorpayOrderId}`,
+      );
+    }
+    const expectedCurrency = order.currency || DEFAULT_CURRENCY;
+    if (captured.currency !== expectedCurrency) {
+      throw new PaymentMismatchError(
+        'CURRENCY_MISMATCH',
+        `expected ${expectedCurrency}, got ${captured.currency}`,
+      );
+    }
+    const expectedPaise = decimalToPaise(order.total);
+    if (captured.amountPaise !== expectedPaise) {
+      throw new PaymentMismatchError(
+        'AMOUNT_MISMATCH',
+        `expected ${expectedPaise} paise, got ${captured.amountPaise} paise`,
+      );
     }
   }
 
@@ -472,6 +556,222 @@ export class PaymentsService {
         order,
         OrderStatus.PAYMENT_FAILED,
       );
+    }
+  }
+
+  // ─── Reconciliation (Phase 13.3 — called only by PaymentReconciliationService) ──
+
+  /**
+   * Apply a captured Razorpay payment discovered by reconciliation (the
+   * frontend `verify` callback never arrived AND no webhook was
+   * processed). Same guarantees as the webhook capture path:
+   *
+   *  - amount / currency / razorpay-order-id verified EXACTLY first
+   *    (assertCapturedPaymentMatchesOrder) — a mismatch returns 'MISMATCH'
+   *    and transitions nothing;
+   *  - the order row is SELECT ... FOR UPDATE-locked, so two instances
+   *    that both fetched the same Razorpay payment serialize here and only
+   *    one performs the transition (the other sees a non-pending status
+   *    and no-ops);
+   *  - the CAS on paymentAttempt + the partial unique index
+   *    (`payment_attempts WHERE status='CAPTURED'`) are the ultimate
+   *    single-writer backstop, identical to the webhook path;
+   *  - the same OrderStatusHistory row + ORDER_PAID outbox event are
+   *    written, once, on the branch that actually transitioned.
+   *
+   * The Razorpay API call itself happens in the caller, outside any
+   * transaction (§13 preamble) — this method only takes the already-
+   * fetched, normalized payment.
+   */
+  async reconcileCapturedPayment(
+    order: Order,
+    captured: {
+      id: string;
+      razorpayOrderId: string;
+      amountPaise: bigint;
+      currency: string;
+      method?: string;
+    },
+  ): Promise<ReconcileCaptureResult> {
+    try {
+      this.assertCapturedPaymentMatchesOrder(order, {
+        razorpayOrderId: captured.razorpayOrderId,
+        amountPaise: captured.amountPaise,
+        currency: captured.currency,
+      });
+    } catch (err) {
+      if (err instanceof PaymentMismatchError) {
+        this.logger.error(
+          `Reconciliation mismatch for order ${order.id}: ${err.message} — NOT marking PAID`,
+        );
+        Sentry.captureException(err, {
+          level: 'error',
+          tags: { area: 'reconciliation_mismatch', reason: err.reason },
+          extra: {
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            orderStatus: order.status,
+            razorpayOrderId: order.razorpayOrderId ?? '',
+            razorpayPaymentId: captured.id,
+          },
+        });
+        return 'MISMATCH';
+      }
+      throw err;
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<{ status: OrderStatus }[]>`
+          SELECT status FROM orders WHERE id = ${order.id} FOR UPDATE
+        `;
+        const current = locked[0];
+        if (!current || current.status !== OrderStatus.PENDING_PAYMENT) {
+          return 'ALREADY_TERMINAL';
+        }
+        const alreadyCaptured = await tx.paymentAttempt.findFirst({
+          where: { orderId: order.id, status: PaymentAttemptStatus.CAPTURED },
+        });
+        if (alreadyCaptured) {
+          return 'ALREADY_TERMINAL';
+        }
+
+        // Reuse the row for this payment id, or the latest still-open
+        // attempt for this Razorpay order, or create one (webhook-before-
+        // local-row case — §12.1).
+        const existing = await tx.paymentAttempt.findFirst({
+          where: {
+            orderId: order.id,
+            OR: [
+              { razorpayPaymentId: captured.id },
+              {
+                razorpayOrderId: order.razorpayOrderId ?? undefined,
+                status: PaymentAttemptStatus.INITIATED,
+              },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        const attemptId =
+          existing?.id ??
+          (
+            await tx.paymentAttempt.create({
+              data: {
+                orderId: order.id,
+                razorpayOrderId:
+                  order.razorpayOrderId ?? captured.razorpayOrderId,
+                amountPaise: captured.amountPaise,
+                currency: captured.currency,
+                status: PaymentAttemptStatus.INITIATED,
+              },
+            })
+          ).id;
+
+        const upd = await tx.paymentAttempt.updateMany({
+          where: {
+            id: attemptId,
+            status: { not: PaymentAttemptStatus.CAPTURED },
+          },
+          data: {
+            status: PaymentAttemptStatus.CAPTURED,
+            razorpayPaymentId: captured.id,
+            method: captured.method ?? null,
+            capturedAt: new Date(),
+          },
+        });
+        if (upd.count !== 1) {
+          return 'ALREADY_TERMINAL';
+        }
+
+        const transitioned = await this.transitionOrder(
+          tx,
+          { ...order, status: current.status },
+          OrderStatus.PAID,
+          null,
+          'Payment captured (reconciliation)',
+        );
+        if (transitioned) {
+          await this.insertOutboxEvent(tx, 'ORDER_PAID', order);
+        }
+        return 'PAID';
+      });
+    } catch (err) {
+      if (this.isUniqueConstraintViolation(err)) {
+        // A concurrent webhook/verify captured a different attempt for
+        // this order between our FOR UPDATE and the CAS — the partial
+        // unique index rolled us back. Not our transition to make.
+        this.logger.log(
+          `reconcileCapturedPayment: order ${order.id} captured concurrently — no-op`,
+        );
+        return 'ALREADY_TERMINAL';
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Mark a genuinely-stale, still-unpaid order PAYMENT_FAILED (Phase 13.3
+   * §5). Called by reconciliation ONLY after an authoritative Razorpay
+   * `fetchOrderPayments` confirmed there is no captured/authorized payment
+   * for this order and the order is past the give-up threshold.
+   *
+   * Uses the existing state machine: PENDING_PAYMENT -> PAYMENT_FAILED is a
+   * legal transition (the customer can still retry it later, exactly as
+   * after a real payment failure). Not CANCELLED — the frozen §14 state
+   * machine has no PENDING_PAYMENT -> CANCELLED edge, and inventing one is
+   * a destructive policy change out of scope here. No financial/order rows
+   * are deleted. FOR UPDATE-locked + CAS, so it's idempotent and
+   * multi-instance safe.
+   */
+  async failStalePendingOrder(order: Order): Promise<boolean> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<{ status: OrderStatus }[]>`
+          SELECT status FROM orders WHERE id = ${order.id} FOR UPDATE
+        `;
+        const current = locked[0];
+        if (!current || current.status !== OrderStatus.PENDING_PAYMENT) {
+          return false;
+        }
+        // Never fail an order that somehow has a captured attempt.
+        const captured = await tx.paymentAttempt.findFirst({
+          where: { orderId: order.id, status: PaymentAttemptStatus.CAPTURED },
+        });
+        if (captured) {
+          return false;
+        }
+
+        // Bookkeeping: any still-open attempt is now abandoned.
+        await tx.paymentAttempt.updateMany({
+          where: {
+            orderId: order.id,
+            status: PaymentAttemptStatus.INITIATED,
+          },
+          data: { status: PaymentAttemptStatus.ABANDONED },
+        });
+
+        const transitioned = await this.transitionOrder(
+          tx,
+          { ...order, status: current.status },
+          OrderStatus.PAYMENT_FAILED,
+          null,
+          'Payment not completed — order expired by reconciliation (no captured Razorpay payment)',
+        );
+        if (transitioned) {
+          await this.insertOutboxEvent(
+            tx,
+            'ORDER_STATUS_CHANGED',
+            order,
+            OrderStatus.PAYMENT_FAILED,
+          );
+        }
+        return transitioned !== null;
+      });
+    } catch (err) {
+      if (this.isUniqueConstraintViolation(err)) {
+        return false;
+      }
+      throw err;
     }
   }
 

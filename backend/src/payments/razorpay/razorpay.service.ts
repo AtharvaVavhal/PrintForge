@@ -30,6 +30,20 @@ export interface RazorpayRefundResult {
   status: 'pending' | 'processed' | 'failed';
 }
 
+/** One payment Razorpay has recorded against a Razorpay order, normalized
+ * to this codebase's conventions (bigint paise, never a float). Used by
+ * server-side reconciliation only. */
+export interface RazorpayOrderPayment {
+  id: string;
+  razorpayOrderId: string;
+  amountPaise: bigint;
+  currency: string;
+  /** 'created' | 'authorized' | 'captured' | 'refunded' | 'failed' */
+  status: string;
+  captured: boolean;
+  method?: string;
+}
+
 /**
  * Thin wrapper around the Razorpay SDK. Razorpay order is created once per
  * Order and reused across retries (§12) — never re-created on
@@ -74,6 +88,36 @@ export class RazorpayService implements OnModuleInit {
       );
     }
     return this.client;
+  }
+
+  /** Whether the SDK client is initialized (keys present). Reconciliation
+   * uses this to skip cleanly in environments where Razorpay isn't
+   * configured (local dev, the e2e suite) rather than throwing every run. */
+  isConfigured(): boolean {
+    return this.client !== undefined;
+  }
+
+  /**
+   * Server-side reconciliation only — never reachable from any HTTP route.
+   * Fetches every payment Razorpay has recorded against one of OUR
+   * Razorpay orders. `amount` comes back as integer paise; normalized to
+   * bigint here so downstream comparison is exact (§11 — never a float).
+   */
+  async fetchOrderPayments(
+    razorpayOrderId: string,
+  ): Promise<RazorpayOrderPayment[]> {
+    const client = this.getClient();
+    const res = await client.orders.fetchPayments(razorpayOrderId);
+    const items = Array.isArray(res.items) ? res.items : [];
+    return items.map((p) => ({
+      id: p.id,
+      razorpayOrderId: p.order_id,
+      amountPaise: BigInt(p.amount),
+      currency: p.currency,
+      status: p.status,
+      captured: p.captured === true,
+      method: typeof p.method === 'string' ? p.method : undefined,
+    }));
   }
 
   /** Public key id — safe to hand to the frontend's Checkout.js widget. */

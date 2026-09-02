@@ -58,11 +58,15 @@ enum PaymentAttemptStatus {
 }
 
 // §12.3 — durably-received / processed ledger for the two-phase webhook design.
+// FAILED is the terminal dead-letter state, reached after the bounded retry
+// budget is exhausted or a non-retryable error (e.g. a payment/amount
+// mismatch whose payload will never succeed) — Phase 13.3.
 enum WebhookEventStatus {
   RECEIVED
   PROCESSED
   PROCESSING_FAILED
   IGNORED
+  FAILED
 }
 
 // §12.2 — transactional outbox.
@@ -539,17 +543,26 @@ model OrderStatusHistory {
 
 // ─── Payments infrastructure (internal-only, no REST surface — §20) ──────
 
-// Inserted only after signature verification (§12.3).
+// Inserted only after signature verification (§12.3). Retry bookkeeping
+// (attempts / availableAt / lastError / processedAt) mirrors OutboxEvent's
+// exactly — the webhook poller now uses the same bounded-retry +
+// exponential-backoff + dead-letter policy the outbox poller already had
+// (Phase 13.3).
 model WebhookEvent {
   id              String              @id @default(uuid())
   razorpayEventId String              @unique
   payload         Json
   status          WebhookEventStatus  @default(RECEIVED)
 
+  attempts        Int                 @default(0)
+  availableAt     DateTime            @default(now())
+  lastError       String?
+  processedAt     DateTime?
+
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  @@index([status])
+  @@index([status, availableAt])
   @@map("webhook_events")
 }
 
