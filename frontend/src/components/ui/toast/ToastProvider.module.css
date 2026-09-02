@@ -51,9 +51,9 @@
 }
 
 .info {
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  color: var(--color-text);
+  background: var(--color-info-bg);
+  border-color: var(--color-info-ring);
+  color: var(--color-info);
 }
 
 .error {

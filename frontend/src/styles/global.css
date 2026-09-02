@@ -17,7 +17,7 @@ body {
   font-size: 16px;
   line-height: 1.5;
   color: var(--color-text);
-  background: var(--color-bg);
+  background: var(--color-canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -39,7 +39,11 @@ p {
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-primary);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
 }
 
 button {
