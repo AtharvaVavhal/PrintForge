@@ -7,6 +7,7 @@ import MockAdapter from 'axios-mock-adapter'
 import { apiClient } from '@/services/api/client'
 import { createMockAuthContext, renderWithProviders } from '@/test/test-utils'
 import type { AuthContextValue } from '@/features/auth/authContext'
+import { savePendingCartAdd } from '@/utils/pendingCartAdd'
 import { ProductDetailPage } from './ProductDetailPage'
 
 const SAMPLE_PRODUCT = {
@@ -264,7 +265,8 @@ describe('ProductDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /increase/i }))
     await user.click(screen.getByRole('button', { name: 'Add to cart' }))
 
-    expect(await screen.findByText('Added to cart.')).toBeInTheDocument()
+    expect(await screen.findByText('Added to cart')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View cart' })).toHaveAttribute('href', '/cart')
     expect(mock.history.post).toHaveLength(1)
     expect(JSON.parse(mock.history.post[0].data as string)).toEqual({
       productId: 'prod-1',
@@ -288,6 +290,50 @@ describe('ProductDetailPage', () => {
 
     expect(await screen.findByText('Login Page')).toBeInTheDocument()
     expect(mock.history.post).toHaveLength(0)
+  })
+
+  it('resumes a pending add configured before login, then confirms with a View cart toast (UX-03)', async () => {
+    mock.onGet('/products/ceramic-mug').reply(200, { success: true, data: SAMPLE_PRODUCT })
+    mock.onPost('/cart/items').reply(201, {
+      success: true,
+      data: {
+        id: 'item-1',
+        productId: 'prod-1',
+        productName: 'Ceramic Mug',
+        variantId: 'var-1',
+        variantLabel: 'Large',
+        quantity: 3,
+        unitPrice: '175.00',
+        lineTotal: '525.00',
+        isAvailable: true,
+        unavailableReason: null,
+        customizations: [],
+      },
+      meta: { subtotal: '525.00', itemCount: 3 },
+    })
+
+    // As if AddToCartControls stashed this on a logged-out click.
+    savePendingCartAdd({
+      productId: 'prod-1',
+      slug: 'ceramic-mug',
+      variantId: 'var-1',
+      quantity: 3,
+      customizations: [],
+    })
+
+    renderAtSlug('ceramic-mug', AUTHENTICATED)
+
+    expect(await screen.findByText('Added to cart')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View cart' })).toHaveAttribute('href', '/cart')
+
+    const addCalls = mock.history.post.filter((r) => r.url === '/cart/items')
+    expect(addCalls).toHaveLength(1)
+    expect(JSON.parse(addCalls[0].data as string)).toEqual({
+      productId: 'prod-1',
+      variantId: 'var-1',
+      quantity: 3,
+      customizations: [],
+    })
   })
 
   it('surfaces the server validation error when adding to cart is rejected', async () => {

@@ -180,7 +180,7 @@ describe('AccountPage', () => {
     await user.type(cityField, 'Delhi')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByText('Your profile has been updated.')).toBeInTheDocument()
+    expect(await screen.findByText('Profile updated')).toBeInTheDocument()
     expect(screen.getByText(/Delhi/)).toBeInTheDocument()
     expect(screen.queryByLabelText('City')).not.toBeInTheDocument()
   })

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Package, ChevronRight } from 'lucide-react'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useUpdateProfile } from '@/hooks/useUpdateProfile'
+import { useToast } from '@/components/ui/toast/useToast'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
@@ -37,12 +38,11 @@ function buildProfilePatch(values: AccountFormValues, original: UserProfileView)
 export function AccountPage() {
   const { data, isLoading, isError, error } = useCurrentUser()
   const updateProfile = useUpdateProfile()
+  const { showToast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
-  const [justSaved, setJustSaved] = useState(false)
 
   function startEditing() {
     updateProfile.reset()
-    setJustSaved(false)
     setIsEditing(true)
   }
 
@@ -56,7 +56,7 @@ export function AccountPage() {
     try {
       await updateProfile.mutateAsync(patch)
       setIsEditing(false)
-      setJustSaved(true)
+      showToast({ message: 'Profile updated', variant: 'success' })
     } catch {
       // Stay in edit mode with the user's typed values intact — the error
       // is read off updateProfile.error and rendered inside the form below.
@@ -91,7 +91,6 @@ export function AccountPage() {
 
             {!isEditing ? (
               <>
-                {justSaved && <Alert variant="success">Your profile has been updated.</Alert>}
                 <dl className={styles.details}>
                   <dt>Email</dt>
                   <dd>{data.email}</dd>

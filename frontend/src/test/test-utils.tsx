@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 import { AuthContext, type AuthContextValue } from '@/features/auth/authContext'
+import { ToastProvider } from '@/components/ui/toast/ToastProvider'
 
 /** A stub AuthContextValue — pages under test consume `useAuth()` without
  * needing a real AuthProvider (no mount-time /auth/refresh call, no
@@ -49,7 +50,9 @@ export function renderWithProviders(
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={initialEntries}>
-        <AuthContext.Provider value={authValue}>{ui}</AuthContext.Provider>
+        <AuthContext.Provider value={authValue}>
+          <ToastProvider>{ui}</ToastProvider>
+        </AuthContext.Provider>
       </MemoryRouter>
     </QueryClientProvider>,
   )

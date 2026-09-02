@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Package } from 'lucide-react'
 import { useUpdateCartItem } from '@/hooks/useUpdateCartItem'
 import { useRemoveCartItem } from '@/hooks/useRemoveCartItem'
+import { useToast } from '@/components/ui/toast/useToast'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { formatPrice } from '@/utils/formatPrice'
 import { Button } from '@/components/ui/Button'
@@ -37,6 +38,7 @@ interface CartLineItemProps {
 export function CartLineItem({ item }: CartLineItemProps) {
   const updateItem = useUpdateCartItem()
   const removeItem = useRemoveCartItem()
+  const { showToast } = useToast()
   const [removeError, setRemoveError] = useState<string | null>(null)
 
   const isMutating = updateItem.isPending || removeItem.isPending
@@ -49,6 +51,7 @@ export function CartLineItem({ item }: CartLineItemProps) {
   function handleRemove() {
     setRemoveError(null)
     removeItem.mutate(item.id, {
+      onSuccess: () => showToast({ message: 'Item removed from cart', variant: 'info' }),
       onError: (err) => setRemoveError(getApiErrorMessage(err)),
     })
   }

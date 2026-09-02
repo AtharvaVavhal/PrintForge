@@ -39,6 +39,18 @@
   gap: 1.5rem;
 }
 
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.breakdownNote {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
 @media (min-width: 721px) {
   .summaryColumn {
     position: sticky;

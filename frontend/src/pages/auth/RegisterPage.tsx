@@ -1,10 +1,11 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useApiError } from '@/hooks/useApiError'
 import { registerSchema, type RegisterFormValues } from '@/schemas/auth.schema'
 import { ROUTES } from '@/constants/routes'
+import { postAuthDestination } from '@/features/auth/postAuthDestination'
 import { AuthFormShell } from '@/features/auth/AuthFormShell'
 import { TextField } from '@/components/ui/TextField'
 import { Button } from '@/components/ui/Button'
@@ -14,6 +15,7 @@ import shellStyles from '@/features/auth/AuthFormShell.module.css'
 export function RegisterPage() {
   const { register: registerAccount } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { message: formError, captureError, clearError } = useApiError()
 
   const {
@@ -26,7 +28,7 @@ export function RegisterPage() {
     clearError()
     try {
       await registerAccount(values.email, values.password)
-      void navigate(ROUTES.HOME, { replace: true })
+      void navigate(postAuthDestination(location), { replace: true })
     } catch (error) {
       captureError(error)
     }

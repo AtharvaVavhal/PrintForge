@@ -6,6 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import MockAdapter from 'axios-mock-adapter'
 import { apiClient } from '@/services/api/client'
 import { AuthContext } from '@/features/auth/authContext'
+import { ToastProvider } from '@/components/ui/toast/ToastProvider'
 import { createMockAuthContext, createTestQueryClient } from '@/test/test-utils'
 import type { RazorpayCheckoutOptions } from '@/types/razorpay'
 import { CheckoutPage } from './CheckoutPage'
@@ -36,6 +37,49 @@ function buildCart() {
     itemCount: 2,
     subtotal: '300.00',
   }
+}
+
+const PROFILE_NO_ADDRESS = {
+  id: 'user-1',
+  email: 'shopper@example.test',
+  addressLine1: null,
+  addressLine2: null,
+  city: null,
+  state: null,
+  postalCode: null,
+  country: null,
+  phone: null,
+  role: 'CUSTOMER',
+  createdAt: '2026-01-01T00:00:00.000Z',
+}
+
+const PROFILE_WITH_ADDRESS = {
+  ...{
+    id: 'user-1',
+    email: 'shopper@example.test',
+    role: 'CUSTOMER',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  addressLine1: '221B Baker Street',
+  addressLine2: null,
+  city: 'Mumbai',
+  state: 'MH',
+  postalCode: '400001',
+  country: 'India',
+  phone: '9876543210',
+}
+
+/** Base (no-coupon) preview shape returned by POST /checkout/validate — the
+ * total the customer sees before payment (UX-06). */
+const BASE_PREVIEW = {
+  subtotal: '300.00',
+  shippingFee: '49.00',
+  discountAmount: '0.00',
+  taxableAmount: '300.00',
+  taxAmount: '0.00',
+  taxMode: 'INCLUSIVE',
+  total: '349.00',
+  couponCode: null,
 }
 
 const ORDER_VIEW = {
@@ -75,16 +119,21 @@ function ConfirmationStub() {
   return <div data-testid="confirmation-stub">Order {id}</div>
 }
 
-function renderCheckout() {
+let checkoutMock: MockAdapter
+
+function renderCheckout(profile: Record<string, unknown> = PROFILE_NO_ADDRESS) {
+  checkoutMock.onGet('/users/me').reply(200, { success: true, data: profile })
   const queryClient = createTestQueryClient()
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/checkout']}>
         <AuthContext.Provider value={AUTH_VALUE}>
-          <Routes>
-            <Route path="/checkout" element={<CheckoutPage />} />
-            <Route path="/orders/:id" element={<ConfirmationStub />} />
-          </Routes>
+          <ToastProvider>
+            <Routes>
+              <Route path="/checkout" element={<CheckoutPage />} />
+              <Route path="/orders/:id" element={<ConfirmationStub />} />
+            </Routes>
+          </ToastProvider>
         </AuthContext.Provider>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -113,7 +162,12 @@ describe('CheckoutPage', () => {
 
   beforeEach(() => {
     mock = new MockAdapter(apiClient)
+    checkoutMock = mock
     mock.onGet('/cart').reply(200, { success: true, data: buildCart() })
+    // /users/me is registered by renderCheckout() (per test, so the
+    // address-prefill test can vary it); each test registers its own
+    // /checkout/validate handler(s) — the shipping form renders whether
+    // or not the base preview resolves.
     razorpayInstances = []
     // A plain `function`, not an arrow function — arrow functions have no
     // [[Construct]] slot, so `new Razorpay(...)` (openCheckout.ts) would
@@ -266,35 +320,78 @@ describe('CheckoutPage', () => {
     expect(retryPaymentCalls).toHaveLength(2)
   })
 
-  it('applies a coupon on submit (not on keystroke) and shows the returned discount/shipping/total preview', async () => {
-    const user = userEvent.setup()
-    mock.onPost('/checkout/validate').reply(200, {
-      success: true,
-      data: { subtotal: '300.00', shippingFee: '49.00', discountAmount: '30.00', total: '319.00', couponCode: 'SAVE10' },
-    })
+  it('shows a server-authoritative total (subtotal + shipping + tax) before payment (UX-06)', async () => {
+    mock.onPost('/checkout/validate').reply(200, { success: true, data: BASE_PREVIEW })
 
     renderCheckout()
     await screen.findByLabelText('Recipient name')
 
+    // The full breakdown — not just the cart subtotal — is visible with no
+    // coupon and before "Pay now".
+    expect(await screen.findByText('₹349.00')).toBeInTheDocument()
+    const validateCall = mock.history.post.find((r) => r.url === '/checkout/validate')
+    expect(validateCall).toBeDefined()
+    expect(JSON.parse(validateCall!.data as string)).toEqual({})
+  })
+
+  it('prefills the shipping form from the saved profile address, still editable (UX-07)', async () => {
+    const user = userEvent.setup()
+    mock.onPost('/checkout/validate').reply(200, { success: true, data: BASE_PREVIEW })
+
+    renderCheckout(PROFILE_WITH_ADDRESS)
+
+    const addressField = await screen.findByLabelText('Address line 1')
+    expect(addressField).toHaveValue('221B Baker Street')
+    expect(screen.getByLabelText('City')).toHaveValue('Mumbai')
+    expect(screen.getByLabelText('Phone number')).toHaveValue('9876543210')
+    expect(screen.getByText(/Prefilled from your saved address/)).toBeInTheDocument()
+
+    await user.clear(addressField)
+    await user.type(addressField, '10 Downing Street')
+    expect(addressField).toHaveValue('10 Downing Street')
+  })
+
+  it('applies a coupon on submit (not on keystroke) and shows the returned discount/shipping/total preview', async () => {
+    const user = userEvent.setup()
+    // Specific { couponCode } matcher first, base ({}) fallback second.
+    mock.onPost('/checkout/validate', { couponCode: 'save10' }).reply(200, {
+      success: true,
+      data: { ...BASE_PREVIEW, discountAmount: '30.00', total: '319.00', couponCode: 'SAVE10' },
+    })
+    mock.onPost('/checkout/validate').reply(200, { success: true, data: BASE_PREVIEW })
+
+    renderCheckout()
+    await screen.findByLabelText('Recipient name')
+
+    const couponValidateCalls = () =>
+      mock.history.post.filter(
+        (r) =>
+          r.url === '/checkout/validate' &&
+          Boolean((JSON.parse(r.data as string) as { couponCode?: string }).couponCode),
+      )
+
     await user.type(screen.getByLabelText('Coupon code'), 'save10')
-    expect(mock.history.post.filter((r) => r.url === '/checkout/validate')).toHaveLength(0)
+    expect(couponValidateCalls()).toHaveLength(0)
 
     await user.click(screen.getByRole('button', { name: 'Apply' }))
 
-    expect(await screen.findByText('SAVE10')).toBeInTheDocument()
+    // Applied state: the code shows and can be removed.
+    expect(await screen.findByRole('button', { name: 'Remove' })).toBeInTheDocument()
+    expect(screen.getAllByText('SAVE10').length).toBeGreaterThanOrEqual(1)
+    // Breakdown reflects the discounted total.
     expect(screen.getByText('−₹30.00')).toBeInTheDocument()
     expect(screen.getByText('₹319.00')).toBeInTheDocument()
-    const validateCalls = mock.history.post.filter((r) => r.url === '/checkout/validate')
-    expect(validateCalls).toHaveLength(1)
-    expect(JSON.parse(validateCalls[0].data as string)).toEqual({ couponCode: 'save10' })
+    expect(couponValidateCalls()).toHaveLength(1)
+    expect(JSON.parse(couponValidateCalls()[0].data as string)).toEqual({ couponCode: 'save10' })
   })
 
   it("surfaces the backend's specific coupon rejection message, not a generic one", async () => {
     const user = userEvent.setup()
-    mock.onPost('/checkout/validate').reply(400, {
+    mock.onPost('/checkout/validate', { couponCode: 'OLDCODE' }).reply(400, {
       success: false,
       error: { code: 'BAD_REQUEST', message: 'This coupon has expired', details: [] },
     })
+    mock.onPost('/checkout/validate').reply(200, { success: true, data: BASE_PREVIEW })
 
     renderCheckout()
     await screen.findByLabelText('Recipient name')
@@ -307,10 +404,11 @@ describe('CheckoutPage', () => {
 
   it('passes the applied coupon code through to the real order, and the confirmation page shows the discount', async () => {
     const user = userEvent.setup()
-    mock.onPost('/checkout/validate').reply(200, {
+    mock.onPost('/checkout/validate', { couponCode: 'save10' }).reply(200, {
       success: true,
-      data: { subtotal: '300.00', shippingFee: '49.00', discountAmount: '30.00', total: '319.00', couponCode: 'SAVE10' },
+      data: { ...BASE_PREVIEW, discountAmount: '30.00', total: '319.00', couponCode: 'SAVE10' },
     })
+    mock.onPost('/checkout/validate').reply(200, { success: true, data: BASE_PREVIEW })
     mock.onPost('/checkout/orders').reply(201, {
       success: true,
       data: { ...ORDER_VIEW, total: '319.00', discountAmount: '30.00', couponCode: 'SAVE10' },

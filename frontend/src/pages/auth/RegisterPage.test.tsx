@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMockAuthContext, renderWithProviders } from '@/test/test-utils'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { AuthContext } from '@/features/auth/authContext'
+import { ToastProvider } from '@/components/ui/toast/ToastProvider'
+import {
+  createMockAuthContext,
+  createTestQueryClient,
+  renderWithProviders,
+} from '@/test/test-utils'
 import { RegisterPage } from './RegisterPage'
 
 async function fillAndSubmit(
@@ -87,5 +95,37 @@ describe('RegisterPage', () => {
         'CorrectHorseBattery9!',
       )
     })
+  })
+
+  it('returns to the pre-auth destination after registering, not always home (UX-04)', async () => {
+    const user = userEvent.setup()
+    const authValue = createMockAuthContext()
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <AuthContext.Provider value={authValue}>
+          <MemoryRouter
+            initialEntries={[
+              { pathname: '/register', state: { from: { pathname: '/checkout', search: '' } } },
+            ]}
+          >
+            <ToastProvider>
+              <Routes>
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/checkout" element={<div>Checkout page</div>} />
+                <Route path="/" element={<div>Home page</div>} />
+              </Routes>
+            </ToastProvider>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>,
+    )
+
+    await fillAndSubmit(user, {
+      password: 'CorrectHorseBattery9!',
+      confirmPassword: 'CorrectHorseBattery9!',
+    })
+
+    expect(await screen.findByText('Checkout page')).toBeInTheDocument()
+    expect(screen.queryByText('Home page')).not.toBeInTheDocument()
   })
 })

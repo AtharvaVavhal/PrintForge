@@ -4,6 +4,12 @@
   gap: 1rem;
 }
 
+.prefilledNote {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
 .row {
   display: grid;
   grid-template-columns: 1fr 1fr;

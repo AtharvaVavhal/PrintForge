@@ -5,15 +5,12 @@ import { useAuth } from '@/hooks/useAuth'
 import { useApiError } from '@/hooks/useApiError'
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { ROUTES } from '@/constants/routes'
+import { postAuthDestination } from '@/features/auth/postAuthDestination'
 import { AuthFormShell } from '@/features/auth/AuthFormShell'
 import { TextField } from '@/components/ui/TextField'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import shellStyles from '@/features/auth/AuthFormShell.module.css'
-
-interface LocationState {
-  from?: { pathname: string }
-}
 
 export function LoginPage() {
   const { login } = useAuth()
@@ -31,8 +28,7 @@ export function LoginPage() {
     clearError()
     try {
       await login(values.email, values.password)
-      const state = location.state as LocationState | null
-      void navigate(state?.from?.pathname ?? ROUTES.HOME, { replace: true })
+      void navigate(postAuthDestination(location), { replace: true })
     } catch (error) {
       captureError(error)
     }
