@@ -88,12 +88,13 @@ export function Header() {
           </div>
         </div>
 
-        {/* Bottom navigation row - Desktop MegaMenu */}
-        <nav className={styles.navRowDesktop} aria-label="Categories">
+        {/* Bottom navigation row - Desktop category menu */}
+        <nav className={styles.navRowDesktop} aria-label="Product categories">
           <div className={styles.navInnerDesktop}>
-            {!treeLoading && <MegaMenuBar categories={categories} />}
-            {treeLoading && (
+            {treeLoading ? (
               <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
+            ) : (
+              <MegaMenuBar categories={categories} />
             )}
           </div>
         </nav>
@@ -119,9 +120,17 @@ export function Header() {
 
             <HeaderSearch variant="drawer" onSubmitted={() => setMobileOpen(false)} />
 
-            {!treeLoading && <CategoryAccordion categories={categories} />}
-            {treeLoading && (
+            <NavLink
+              to={ROUTES.PRODUCTS}
+              className={styles.mobileAllProducts}
+              onClick={() => setMobileOpen(false)}
+            >
+              All products
+            </NavLink>
+            {treeLoading ? (
               <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
+            ) : (
+              <CategoryAccordion categories={categories} />
             )}
 
             <div className={styles.mobileDrawerAccount}>

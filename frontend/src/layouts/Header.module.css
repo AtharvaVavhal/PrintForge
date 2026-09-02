@@ -337,6 +337,22 @@
   background: var(--color-surface);
 }
 
+.mobileAllProducts {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-strong);
+  text-decoration: none;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-md);
+}
+
+.mobileAllProducts:hover,
+.mobileAllProducts:focus-visible {
+  background: var(--color-surface);
+  outline: none;
+}
+
 .mobileDrawerAccount {
   display: flex;
   flex-direction: column;
