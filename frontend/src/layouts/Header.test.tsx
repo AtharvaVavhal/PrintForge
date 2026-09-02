@@ -1,8 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
 import MockAdapter from 'axios-mock-adapter'
 import { apiClient } from '@/services/api/client'
-import { createMockAuthContext, renderWithProviders } from '@/test/test-utils'
+import { AuthContext } from '@/features/auth/authContext'
+import { ToastProvider } from '@/components/ui/toast/ToastProvider'
+import {
+  createMockAuthContext,
+  createTestQueryClient,
+  renderWithProviders,
+} from '@/test/test-utils'
 import { Header } from './Header'
 
 const ADMIN = {
@@ -76,5 +85,63 @@ describe('Header', () => {
     expect(
       within(drawer).getByPlaceholderText('Search products…'),
     ).toBeInTheDocument()
+  })
+
+  it('carries the current storefront location as state.from on the "Sign up" link (UX-04)', async () => {
+    const user = userEvent.setup()
+    function StateEcho() {
+      const loc = useLocation()
+      return <div data-testid="reg-state">{JSON.stringify(loc.state)}</div>
+    }
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <AuthContext.Provider value={createMockAuthContext({ status: 'unauthenticated' })}>
+          <MemoryRouter initialEntries={['/products?category=mugs']}>
+            <ToastProvider>
+              <Header />
+              <Routes>
+                <Route path="/products" element={<div>catalog</div>} />
+                <Route path="/register" element={<StateEcho />} />
+              </Routes>
+            </ToastProvider>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>,
+    )
+
+    // desktop header "Sign up" (the drawer one reads "Create an account")
+    await user.click(screen.getByRole('link', { name: 'Sign up' }))
+
+    const state = JSON.parse(
+      screen.getByTestId('reg-state').textContent || 'null',
+    ) as { from?: { pathname?: string; search?: string } } | null
+    expect(state?.from?.pathname).toBe('/products')
+    expect(state?.from?.search).toBe('?category=mugs')
+  })
+
+  it('omits state.from on "Sign up" when the header is already on an auth page', async () => {
+    const user = userEvent.setup()
+    function StateEcho() {
+      const loc = useLocation()
+      return <div data-testid="reg-state">{JSON.stringify(loc.state)}</div>
+    }
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <AuthContext.Provider value={createMockAuthContext({ status: 'unauthenticated' })}>
+          <MemoryRouter initialEntries={['/login']}>
+            <ToastProvider>
+              <Header />
+              <Routes>
+                <Route path="/login" element={<div>login</div>} />
+                <Route path="/register" element={<StateEcho />} />
+              </Routes>
+            </ToastProvider>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>,
+    )
+
+    await user.click(screen.getByRole('link', { name: 'Sign up' }))
+    expect(screen.getByTestId('reg-state').textContent).toBe('null')
   })
 })

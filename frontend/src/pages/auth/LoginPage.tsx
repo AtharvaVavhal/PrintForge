@@ -40,7 +40,15 @@ export function LoginPage() {
       subtitle="Welcome back to PrintForge."
       footer={
         <>
-          Don&apos;t have an account? <Link to={ROUTES.REGISTER}>Sign up</Link>
+          {/* Forward whatever router state this page was reached with — when
+              ProtectedRoute / AddToCartControls / ReviewList redirect here
+              they set `state.from`, and RegisterPage needs it too so a
+              customer who signs up (rather than logs in) still returns to
+              the flow they were pushed out of (UX-04). */}
+          Don&apos;t have an account?{' '}
+          <Link to={ROUTES.REGISTER} state={location.state as unknown}>
+            Sign up
+          </Link>
           <br />
           <Link to={ROUTES.FORGOT_PASSWORD}>Forgot your password?</Link>
         </>

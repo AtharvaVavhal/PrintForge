@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { ShoppingCart, Menu, X, User } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
@@ -18,6 +18,16 @@ export function Header() {
   const { data: cart } = useCart()
   const { data: categoryTree, isLoading: treeLoading } = useCategoryTree()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const location = useLocation()
+
+  // "Sign up" carries the current page as `state.from` so a customer who
+  // registers from the storefront chrome returns to where they were, the
+  // same way ProtectedRoute forwards it (UX-04). Skipped on the auth pages
+  // themselves so registration can't resolve back to /login or /register.
+  // "Log in" is unchanged.
+  const onAuthPage =
+    location.pathname === ROUTES.LOGIN || location.pathname === ROUTES.REGISTER
+  const registerState = onAuthPage ? undefined : { from: location }
 
   const categories = categoryTree ?? []
   const isAuthenticated = status === 'authenticated' && Boolean(user)
@@ -80,7 +90,11 @@ export function Header() {
                 <NavLink to={ROUTES.LOGIN} className={styles.navLink}>
                   Log in
                 </NavLink>
-                <NavLink to={ROUTES.REGISTER} className={styles.signUpLink}>
+                <NavLink
+                  to={ROUTES.REGISTER}
+                  state={registerState}
+                  className={styles.signUpLink}
+                >
                   Sign up
                 </NavLink>
               </>
@@ -171,6 +185,7 @@ export function Header() {
                   </NavLink>
                   <NavLink
                     to={ROUTES.REGISTER}
+                    state={registerState}
                     className={styles.mobileAccountLink}
                     onClick={() => setMobileOpen(false)}
                   >
