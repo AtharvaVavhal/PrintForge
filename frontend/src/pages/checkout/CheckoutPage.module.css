@@ -26,10 +26,24 @@
   gap: 1rem;
 }
 
+.sectionHeading {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-strong);
+}
+
 .summaryColumn {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+@media (min-width: 721px) {
+  .summaryColumn {
+    position: sticky;
+    top: calc(var(--space-6) + 1px);
+  }
 }
 
 .skeletonBlock {

@@ -1,9 +1,14 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Package, ChevronRight } from 'lucide-react'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useUpdateProfile } from '@/hooks/useUpdateProfile'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { LogoutButton } from '@/features/auth/LogoutButton'
 import { ProfileForm } from '@/features/account/ProfileForm'
 import type { AccountFormValues } from '@/schemas/account.schema'
 import type { UpdateProfilePayload, UserProfileView } from '@/types/auth'
@@ -44,7 +49,6 @@ export function AccountPage() {
     if (!data) return
     const patch = buildProfilePatch(values, data)
     if (Object.keys(patch).length === 0) {
-      // Nothing actually changed — no reason to round-trip an empty PATCH.
       setIsEditing(false)
       return
     }
@@ -54,53 +58,77 @@ export function AccountPage() {
       setJustSaved(true)
     } catch {
       // Stay in edit mode with the user's typed values intact — the error
-      // itself is read off updateProfile.error and rendered inside the
-      // still-mounted form below.
+      // is read off updateProfile.error and rendered inside the form below.
     }
   }
+
+  const addressLine = data?.addressLine1
+    ? [data.addressLine1, data.addressLine2, data.city, data.state, data.postalCode, data.country]
+        .filter(Boolean)
+        .join(', ')
+    : 'No address on file yet.'
 
   return (
     <section className={styles.wrap}>
       <h1>My account</h1>
 
-      {isLoading && <p>Loading your profile…</p>}
+      {isLoading && <Skeleton className={styles.skeleton} />}
       {isError && <Alert variant="error">{getApiErrorMessage(error)}</Alert>}
 
-      {data && !isEditing && (
-        <>
-          {justSaved && <Alert variant="success">Your profile has been updated.</Alert>}
+      {data && (
+        <div className={styles.grid}>
+          <div className={styles.card}>
+            <div className={styles.cardHead}>
+              <h2 className={styles.cardTitle}>Profile</h2>
+              {!isEditing && (
+                <Button variant="secondary" onClick={startEditing}>
+                  Edit profile
+                </Button>
+              )}
+            </div>
 
-          <dl className={styles.details}>
-            <dt>Email</dt>
-            <dd>{data.email}</dd>
+            {!isEditing ? (
+              <>
+                {justSaved && <Alert variant="success">Your profile has been updated.</Alert>}
+                <dl className={styles.details}>
+                  <dt>Email</dt>
+                  <dd>{data.email}</dd>
+                  <dt>Address</dt>
+                  <dd>{addressLine}</dd>
+                  <dt>Phone</dt>
+                  <dd>{data.phone ?? 'Not provided'}</dd>
+                </dl>
+              </>
+            ) : (
+              <ProfileForm
+                profile={data}
+                isSubmitting={updateProfile.isPending}
+                submitError={updateProfile.isError ? getApiErrorMessage(updateProfile.error) : null}
+                onSubmit={(values) => void handleSave(values)}
+                onCancel={() => setIsEditing(false)}
+              />
+            )}
+          </div>
 
-            <dt>Address</dt>
-            <dd>
-              {data.addressLine1
-                ? [data.addressLine1, data.addressLine2, data.city, data.state, data.postalCode, data.country]
-                    .filter(Boolean)
-                    .join(', ')
-                : 'No address on file yet.'}
-            </dd>
+          <div className={styles.side}>
+            <Link to={ROUTES.ORDERS} className={styles.linkCard}>
+              <Package size={20} aria-hidden="true" />
+              <span className={styles.linkCardBody}>
+                <span className={styles.linkCardTitle}>Your orders</span>
+                <span className={styles.linkCardText}>Track orders and download invoices</span>
+              </span>
+              <ChevronRight size={18} aria-hidden="true" />
+            </Link>
 
-            <dt>Phone</dt>
-            <dd>{data.phone ?? 'Not provided'}</dd>
-          </dl>
-
-          <Button className={styles.editButton} onClick={startEditing}>
-            Edit profile
-          </Button>
-        </>
-      )}
-
-      {data && isEditing && (
-        <ProfileForm
-          profile={data}
-          isSubmitting={updateProfile.isPending}
-          submitError={updateProfile.isError ? getApiErrorMessage(updateProfile.error) : null}
-          onSubmit={(values) => void handleSave(values)}
-          onCancel={() => setIsEditing(false)}
-        />
+            <div className={styles.card}>
+              <h2 className={styles.cardTitle}>Sign out</h2>
+              <p className={styles.signOutText}>
+                End your session on this device.
+              </p>
+              <LogoutButton />
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

@@ -14,10 +14,16 @@ interface CartSummaryProps {
 /** Checkout is blocked while any line is unavailable (§10/§20: an
  * unavailable item is a distinct, visible state — not something the
  * customer can just check out through). Subtotal is server-computed
- * (CartView.subtotal), rendered as-is, never recomputed here. */
+ * (CartView.subtotal), rendered as-is, never recomputed here. Shipping and
+ * tax are deliberately not shown: the cart API doesn't provide them and
+ * they're only known once the order is created. */
 export function CartSummary({ subtotal, itemCount, hasUnavailableItems }: CartSummaryProps) {
   return (
-    <div className={styles.summary}>
+    <aside className={styles.summary} aria-labelledby="cart-summary-heading">
+      <h2 id="cart-summary-heading" className={styles.heading}>
+        Summary
+      </h2>
+
       <div className={styles.row}>
         <span>Items</span>
         <span>{itemCount}</span>
@@ -26,6 +32,10 @@ export function CartSummary({ subtotal, itemCount, hasUnavailableItems }: CartSu
         <span>Subtotal</span>
         <span className={styles.subtotal}>{formatPrice(subtotal)}</span>
       </div>
+
+      <p className={styles.note}>
+        Shipping, discounts, and tax are calculated at checkout.
+      </p>
 
       {hasUnavailableItems && (
         <Alert variant="error">
@@ -42,6 +52,6 @@ export function CartSummary({ subtotal, itemCount, hasUnavailableItems }: CartSu
           <Button className={styles.checkoutButton}>Proceed to checkout</Button>
         </Link>
       )}
-    </div>
+    </aside>
   )
 }

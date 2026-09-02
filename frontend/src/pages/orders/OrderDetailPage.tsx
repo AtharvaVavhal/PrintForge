@@ -1,15 +1,17 @@
 import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useOrder } from '@/hooks/useOrder'
-import { orderInvoicePath } from '@/constants/routes'
+import { orderInvoicePath, ROUTES } from '@/constants/routes'
 import { useRetryPayment } from '@/hooks/useRetryPayment'
 import { useRazorpayCheckout } from '@/features/checkout/useRazorpayCheckout'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { PriceBreakdown } from '@/features/checkout/PriceBreakdown'
 import { formatPrice } from '@/utils/formatPrice'
+import { formatDate } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/apiError'
-import type { OrderStatus } from '@/types/orders'
+import type { OrderStatus, PaymentAttemptView } from '@/types/orders'
 import { ORDER_STATUS_LABELS, orderStatusTone } from '@/features/orders/orderStatus'
 import styles from './OrderDetailPage.module.css'
 
@@ -25,6 +27,13 @@ const INVOICEABLE_STATUSES = new Set<OrderStatus>([
   'DELIVERED',
   'REFUNDED',
 ])
+
+const PAYMENT_ATTEMPT_LABELS: Record<PaymentAttemptView['status'], string> = {
+  INITIATED: 'Payment started',
+  CAPTURED: 'Payment received',
+  FAILED: 'Payment failed',
+  ABANDONED: 'Payment not completed',
+}
 
 /**
  * GET /orders/:id — the destination after checkout's Razorpay flow, and
@@ -92,11 +101,20 @@ export function OrderDetailPage() {
   }
 
   const canRetryPayment = RETRYABLE_STATUSES.has(order.status)
+  const latestAttempt = order.paymentAttempts.at(-1)
+  const timeline = [...order.statusHistory].reverse()
 
   return (
     <section className={styles.wrap}>
+      <p className={styles.backLink}>
+        <Link to={ROUTES.ORDERS}>← All orders</Link>
+      </p>
+
       <div className={styles.header}>
-        <h1>Order {order.orderNumber}</h1>
+        <div>
+          <h1>Order {order.orderNumber}</h1>
+          <p className={styles.placedAt}>Placed {formatDate(order.createdAt)}</p>
+        </div>
         <span className={styles.statusBadge} data-tone={orderStatusTone(order.status)}>
           {ORDER_STATUS_LABELS[order.status]}
         </span>
@@ -119,47 +137,73 @@ export function OrderDetailPage() {
       )}
 
       <div className={styles.layout}>
-        <ul className={styles.lines}>
-          {order.items.map((item) => (
-            <li key={item.id} className={styles.line}>
-              <div>
-                <p className={styles.name}>{item.productName}</p>
-                {item.variantLabel && <p className={styles.meta}>{item.variantLabel}</p>}
-                <p className={styles.meta}>Qty {item.quantity}</p>
-              </div>
-              <span className={styles.lineTotal}>{formatPrice(item.lineTotal)}</span>
-            </li>
-          ))}
-        </ul>
+        <div className={styles.mainCol}>
+          <h2 className={styles.heading}>Items</h2>
+          <ul className={styles.lines}>
+            {order.items.map((item) => (
+              <li key={item.id} className={styles.line}>
+                <div>
+                  <p className={styles.name}>{item.productName}</p>
+                  {item.variantLabel && <p className={styles.meta}>{item.variantLabel}</p>}
+                  <p className={styles.meta}>
+                    {formatPrice(item.unitPrice)} × {item.quantity}
+                  </p>
+                  {item.customizations.length > 0 && (
+                    <ul className={styles.customizations}>
+                      {item.customizations.map((c, ci) => (
+                        <li key={ci}>
+                          {c.fieldLabel}: {c.textValue ?? (c.uploadedFileId ? 'file uploaded' : '—')}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <span className={styles.lineTotal}>{formatPrice(item.lineTotal)}</span>
+              </li>
+            ))}
+          </ul>
+
+          {timeline.length > 0 && (
+            <>
+              <h2 className={styles.heading}>Order timeline</h2>
+              <ol className={styles.timeline}>
+                {timeline.map((entry, i) => (
+                  <li key={i} className={styles.timelineItem}>
+                    <span className={styles.timelineStatus}>
+                      {ORDER_STATUS_LABELS[entry.toStatus]}
+                    </span>
+                    <span className={styles.timelineDate}>{formatDate(entry.createdAt)}</span>
+                    {entry.note && <span className={styles.timelineNote}>{entry.note}</span>}
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+        </div>
 
         <div className={styles.sidebar}>
           <div className={styles.summaryBlock}>
-            <div className={styles.row}>
-              <span>Subtotal</span>
-              <span>{formatPrice(order.subtotal)}</span>
-            </div>
-            {order.couponCode && (
-              <div className={styles.row}>
-                <span>
-                  Discount (<strong>{order.couponCode}</strong>)
-                </span>
-                <span className={styles.discount}>−{formatPrice(order.discountAmount)}</span>
-              </div>
+            <h2 className={styles.heading}>Payment summary</h2>
+            <PriceBreakdown
+              subtotal={order.subtotal}
+              shippingFee={order.shippingFee}
+              discountAmount={order.discountAmount}
+              couponCode={order.couponCode}
+              taxAmount={order.taxAmount}
+              taxMode={order.taxMode}
+              taxRatePercent={order.taxRatePercent}
+              total={order.total}
+            />
+            {latestAttempt && (
+              <p className={styles.paymentStatus}>
+                {PAYMENT_ATTEMPT_LABELS[latestAttempt.status]}
+                {latestAttempt.method ? ` · ${latestAttempt.method}` : ''}
+                {latestAttempt.capturedAt ? ` · ${formatDate(latestAttempt.capturedAt)}` : ''}
+              </p>
             )}
-            {Number(order.taxAmount) > 0 && (
-              <div className={styles.row}>
-                <span>
-                  GST
-                  {order.taxRatePercent ? ` (${order.taxRatePercent}%)` : ''}
-                  {order.taxMode === 'INCLUSIVE' ? ' — included' : ''}
-                </span>
-                <span>{formatPrice(order.taxAmount)}</span>
-              </div>
+            {order.needsManualRefund && (
+              <p className={styles.paymentStatus}>A refund for this order is being processed.</p>
             )}
-            <div className={styles.row}>
-              <span>Total</span>
-              <span className={styles.total}>{formatPrice(order.total)}</span>
-            </div>
           </div>
 
           {INVOICEABLE_STATUSES.has(order.status) && (

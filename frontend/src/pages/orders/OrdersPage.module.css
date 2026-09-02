@@ -7,6 +7,24 @@
   gap: 1.5rem;
 }
 
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.header h1 {
+  margin: 0;
+}
+
+.count {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .list {
   display: flex;
   flex-direction: column;

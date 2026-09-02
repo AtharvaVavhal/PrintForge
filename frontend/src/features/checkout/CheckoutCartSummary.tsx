@@ -29,6 +29,9 @@ export function CheckoutCartSummary({ cart }: CheckoutCartSummaryProps) {
         <span>Subtotal</span>
         <span className={styles.subtotal}>{formatPrice(cart.subtotal)}</span>
       </div>
+      <p className={styles.note}>
+        Shipping, any discount, and tax are calculated when you place the order.
+      </p>
     </div>
   )
 }

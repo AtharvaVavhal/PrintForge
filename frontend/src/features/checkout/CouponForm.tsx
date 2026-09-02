@@ -9,8 +9,8 @@ import {
 import { TextField } from '@/components/ui/TextField'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
-import { formatPrice } from '@/utils/formatPrice'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { PriceBreakdown } from './PriceBreakdown'
 import type { CheckoutPreviewView } from '@/types/coupons'
 import styles from './CouponForm.module.css'
 
@@ -72,35 +72,14 @@ export function CouponForm({ appliedPreview, onApplied }: CouponFormProps) {
           </Button>
         </div>
 
-        <dl className={styles.breakdown}>
-          <div className={styles.breakdownRow}>
-            <dt>Subtotal</dt>
-            <dd>{formatPrice(appliedPreview.subtotal)}</dd>
-          </div>
-          <div className={styles.breakdownRow}>
-            <dt>Shipping</dt>
-            <dd>{formatPrice(appliedPreview.shippingFee)}</dd>
-          </div>
-          {Number(appliedPreview.discountAmount) > 0 && (
-            <div className={styles.breakdownRow}>
-              <dt>Discount</dt>
-              <dd className={styles.discount}>−{formatPrice(appliedPreview.discountAmount)}</dd>
-            </div>
-          )}
-          {Number(appliedPreview.taxAmount) > 0 && (
-            <div className={styles.breakdownRow}>
-              <dt>
-                GST
-                {appliedPreview.taxMode === 'INCLUSIVE' ? ' (included)' : ''}
-              </dt>
-              <dd>{formatPrice(appliedPreview.taxAmount)}</dd>
-            </div>
-          )}
-          <div className={styles.breakdownRow}>
-            <dt>Total</dt>
-            <dd className={styles.total}>{formatPrice(appliedPreview.total)}</dd>
-          </div>
-        </dl>
+        <PriceBreakdown
+          subtotal={appliedPreview.subtotal}
+          shippingFee={appliedPreview.shippingFee}
+          discountAmount={appliedPreview.discountAmount}
+          taxAmount={appliedPreview.taxAmount}
+          taxMode={appliedPreview.taxMode}
+          total={appliedPreview.total}
+        />
       </div>
     )
   }

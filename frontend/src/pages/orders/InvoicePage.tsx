@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useInvoice, useAdminInvoice } from '@/hooks/useInvoice'
 import { Alert } from '@/components/ui/Alert'
@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { formatPrice } from '@/utils/formatPrice'
 import { formatDate } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { orderDetailPath } from '@/constants/routes'
 import styles from './InvoicePage.module.css'
 
 /**
@@ -48,6 +49,11 @@ export function InvoicePage() {
   return (
     <section className={styles.wrap}>
       <div className={styles.toolbar}>
+        {!isAdmin && (
+          <Link to={orderDetailPath(invoice.orderId)} className={styles.backLink}>
+            ← Back to order
+          </Link>
+        )}
         <Button type="button" onClick={() => window.print()}>
           Print / save as PDF
         </Button>

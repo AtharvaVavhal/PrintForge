@@ -1,7 +1,7 @@
 import type { CheckoutOrderView } from '@/types/checkout'
-import { formatPrice } from '@/utils/formatPrice'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { PriceBreakdown } from './PriceBreakdown'
 import styles from './OrderPendingPayment.module.css'
 
 interface OrderPendingPaymentProps {
@@ -26,29 +26,34 @@ export function OrderPendingPayment({ order, error, onRetry, isProcessing, isScr
 
   return (
     <div className={styles.wrap}>
-      <h2 className={styles.heading}>Order {order.orderNumber}</h2>
-      <p className={styles.subheading}>
-        Your order has been placed and is waiting on payment — it is not lost if you close this
-        window.
-      </p>
-
-      {order.couponCode && (
-        <div className={styles.discountRow}>
-          <span>
-            Discount (<strong>{order.couponCode}</strong>)
-          </span>
-          <span className={styles.discount}>−{formatPrice(order.discountAmount)}</span>
-        </div>
-      )}
-
-      <div className={styles.totalRow}>
-        <span>Total</span>
-        <span className={styles.total}>{formatPrice(order.total)}</span>
+      <div className={styles.head}>
+        <p className={styles.eyebrow}>Order placed · awaiting payment</p>
+        <h2 className={styles.heading}>Order {order.orderNumber}</h2>
+        <p className={styles.subheading}>
+          Your order is saved. If you close this window it will be waiting for you under
+          “My orders” — you can pay anytime.
+        </p>
       </div>
+
+      <PriceBreakdown
+        subtotal={order.subtotal}
+        shippingFee={order.shippingFee}
+        discountAmount={order.discountAmount}
+        couponCode={order.couponCode}
+        taxAmount={order.taxAmount}
+        taxMode={order.taxMode}
+        taxRatePercent={order.taxRatePercent}
+        total={order.total}
+      />
 
       {error && <Alert variant="error">{error}</Alert>}
 
-      <Button onClick={onRetry} isLoading={isDisabled} className={styles.payButton} disabled={isDisabled}>
+      <Button
+        onClick={onRetry}
+        isLoading={isDisabled}
+        className={styles.payButton}
+        disabled={isDisabled}
+      >
         {isScriptLoading ? 'Loading payment…' : error ? 'Retry payment' : 'Pay now'}
       </Button>
     </div>

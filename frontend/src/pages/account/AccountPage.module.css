@@ -1,25 +1,116 @@
 .wrap {
   max-width: var(--container-max);
   margin: 0 auto;
-  padding: 2.5rem var(--container-padding);
+  padding: 2.5rem var(--container-padding) 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.skeleton {
+  height: 12rem;
+  width: 100%;
+  border-radius: var(--radius-lg);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .details {
-  margin-top: 1.5rem;
+  margin: 0;
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0.5rem 1.5rem;
+  gap: var(--space-2) var(--space-5);
 }
 
 .details dt {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .details dd {
   margin: 0;
+  color: var(--color-text);
 }
 
-.editButton {
-  margin-top: 1.5rem;
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.linkCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  color: var(--color-text-strong);
+  text-decoration: none;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.linkCard:hover,
+.linkCard:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+  outline: none;
+}
+
+.linkCardBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.linkCardTitle {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--text-sm);
+}
+
+.linkCardText {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.signOutText {
+  margin: var(--space-2) 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
 }

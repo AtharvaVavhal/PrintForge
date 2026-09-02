@@ -171,6 +171,34 @@ describe('CartPage', () => {
     expect(screen.getByRole('spinbutton', { name: 'Quantity' })).toHaveValue(2)
   })
 
+  it('disables the quantity steppers and Remove while a mutation is in flight', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/cart').reply(200, { success: true, data: buildCart([buildItem()]) })
+    // A PATCH that never resolves during the test — the controls must lock.
+    mock.onPatch('/cart/items/item-1').reply(() => new Promise(() => {}))
+
+    render(<CartPage />)
+    await screen.findByText('Ceramic Mug')
+
+    await user.click(screen.getByRole('button', { name: /increase/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /increase/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /decrease/i })).toBeDisabled()
+    })
+  })
+
+  it('shows a neutral placeholder for each line — never a fabricated product image', async () => {
+    mock.onGet('/cart').reply(200, { success: true, data: buildCart([buildItem()]) })
+
+    render(<CartPage />)
+    await screen.findByText('Ceramic Mug')
+
+    // No <img> is invented for cart lines (the cart API carries no image URL).
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
   it('removes a line via DELETE and updates the subtotal', async () => {
     const user = userEvent.setup()
     mock.onGet('/cart').replyOnce(200, { success: true, data: buildCart([buildItem()]) })

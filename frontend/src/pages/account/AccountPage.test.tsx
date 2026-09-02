@@ -55,6 +55,16 @@ describe('AccountPage', () => {
     expect(screen.queryByRole('button', { name: /change password/i })).not.toBeInTheDocument()
   })
 
+  it('links to the orders page and offers a sign-out action', async () => {
+    mock.onGet('/users/me').reply(200, { success: true, data: buildProfile() })
+
+    renderWithProviders(<AccountPage />, { authValue: AUTH_VALUE })
+
+    await screen.findByText('shopper@example.test')
+    expect(screen.getByRole('link', { name: /your orders/i })).toHaveAttribute('href', '/orders')
+    expect(screen.getByRole('button', { name: /log out/i })).toBeInTheDocument()
+  })
+
   it('shows "No address on file yet" and "Not provided" when the profile has no address/phone', async () => {
     mock.onGet('/users/me').reply(
       200,

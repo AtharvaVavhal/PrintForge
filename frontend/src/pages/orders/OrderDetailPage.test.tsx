@@ -123,6 +123,33 @@ describe('OrderDetailPage', () => {
     expect(screen.getByText('−₹30.00')).toBeInTheDocument()
   })
 
+  it('renders the shipping fee, order timeline, and payment status when the API provides them', async () => {
+    mock.onGet('/orders/order-1').reply(200, {
+      success: true,
+      data: {
+        ...buildOrder('SHIPPED'),
+        shippingFee: '49.00',
+        total: '349.00',
+        statusHistory: [
+          { fromStatus: null, toStatus: 'PAID', changedByUserId: null, note: null, createdAt: '2026-01-01T00:00:00.000Z' },
+          { fromStatus: 'PAID', toStatus: 'SHIPPED', changedByUserId: 'admin-1', note: 'Handed to courier', createdAt: '2026-01-03T00:00:00.000Z' },
+        ],
+        paymentAttempts: [
+          { id: 'pa-1', status: 'CAPTURED', amountPaise: '34900', method: 'upi', failureCode: null, failureReason: null, createdAt: '2026-01-01T00:00:00.000Z', capturedAt: '2026-01-01T00:01:00.000Z', refunds: [] },
+        ],
+      },
+    })
+
+    renderOrderDetail()
+
+    await screen.findByText('₹349.00')
+    expect(screen.getByText('Shipping')).toBeInTheDocument()
+    expect(screen.getByText('₹49.00')).toBeInTheDocument()
+    expect(screen.getByText('Order timeline')).toBeInTheDocument()
+    expect(screen.getByText('Handed to courier')).toBeInTheDocument()
+    expect(screen.getByText(/Payment received/)).toBeInTheDocument()
+  })
+
   it('never renders "Payment confirmed" for a still-PENDING_PAYMENT order, regardless of what the checkout flow assumed', async () => {
     mock.onGet('/orders/order-1').reply(200, { success: true, data: buildOrder('PENDING_PAYMENT') })
 

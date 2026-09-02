@@ -28,7 +28,15 @@ export function OrdersPage() {
 
   return (
     <section className={styles.wrap}>
-      <h1>Your orders</h1>
+      <div className={styles.header}>
+        <h1>Your orders</h1>
+        {ordersQuery.data && ordersQuery.data.items.length > 0 && (
+          <p className={styles.count}>
+            {ordersQuery.data.meta.total}{' '}
+            {ordersQuery.data.meta.total === 1 ? 'order' : 'orders'}
+          </p>
+        )}
+      </div>
 
       {ordersQuery.isPending && <OrderListSkeleton />}
 

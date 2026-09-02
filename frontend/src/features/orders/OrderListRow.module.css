@@ -1,18 +1,30 @@
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
   align-items: center;
   gap: 1.5rem;
   padding: 1rem 1.25rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  background: var(--color-bg);
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .row:hover {
   border-color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+
+.chevron {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 .primary {
@@ -61,5 +73,9 @@
   .total {
     margin-left: auto;
     min-width: 0;
+  }
+
+  .chevron {
+    display: none;
   }
 }

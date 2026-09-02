@@ -1,45 +1,39 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  max-width: 440px;
-  padding: 2rem;
+  gap: var(--space-5);
+  max-width: 460px;
+  padding: var(--space-6);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  background: var(--color-bg);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent);
 }
 
 .heading {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
 }
 
 .subheading {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.9375rem;
-}
-
-.discountRow {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.9375rem;
-}
-
-.discount {
-  color: var(--color-success);
-}
-
-.totalRow {
-  display: flex;
-  justify-content: space-between;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-  font-weight: 600;
-}
-
-.total {
-  color: var(--color-text-strong);
-  font-size: 1.125rem;
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .payButton {

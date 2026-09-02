@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { ChevronRight } from 'lucide-react'
 import type { OrderListItemView } from '@/types/orders'
 import { orderDetailPath } from '@/constants/routes'
 import { formatPrice } from '@/utils/formatPrice'
@@ -25,6 +26,7 @@ export function OrderListRow({ order }: OrderListRowProps) {
         {order.itemCount} {order.itemCount === 1 ? 'item' : 'items'}
       </span>
       <span className={styles.total}>{formatPrice(order.total)}</span>
+      <ChevronRight size={18} aria-hidden="true" className={styles.chevron} />
     </Link>
   )
 }

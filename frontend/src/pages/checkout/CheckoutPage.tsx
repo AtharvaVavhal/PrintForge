@@ -185,6 +185,7 @@ export function CheckoutPage() {
       {scriptLoadError && <PaymentLoadError message={scriptLoadError} onRetry={() => setScriptLoadError(null)} />}
       <div className={styles.layout}>
         <div className={styles.formColumn}>
+          <h2 className={styles.sectionHeading}>Delivery details</h2>
           {createOrder.isError && <Alert variant="error">{getApiErrorMessage(createOrder.error)}</Alert>}
           <ShippingForm
             onSubmit={(values) => void handleSubmitShipping(values)}
@@ -192,10 +193,10 @@ export function CheckoutPage() {
             isScriptLoading={isLoadingScript}
           />
         </div>
-        <div className={styles.summaryColumn}>
+        <aside className={styles.summaryColumn} aria-label="Order summary and payment">
           <CheckoutCartSummary cart={cart} />
           <CouponForm appliedPreview={couponPreview} onApplied={setCouponPreview} />
-        </div>
+        </aside>
       </div>
     </section>
   )

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Package } from 'lucide-react'
 import { useUpdateCartItem } from '@/hooks/useUpdateCartItem'
 import { useRemoveCartItem } from '@/hooks/useRemoveCartItem'
 import { getApiErrorMessage } from '@/utils/apiError'
@@ -28,11 +29,17 @@ interface CartLineItemProps {
  * The input stays disabled while a mutation is in flight so rapid clicks
  * can't race each other; on error the cache is untouched, so the
  * displayed quantity simply reverts to the last server-confirmed value.
+ *
+ * CartItemView carries no image URL or product slug, so the line shows a
+ * neutral placeholder (never a fabricated thumbnail) and the name is plain
+ * text rather than a link back to the PDP.
  */
 export function CartLineItem({ item }: CartLineItemProps) {
   const updateItem = useUpdateCartItem()
   const removeItem = useRemoveCartItem()
   const [removeError, setRemoveError] = useState<string | null>(null)
+
+  const isMutating = updateItem.isPending || removeItem.isPending
 
   function handleQuantityChange(quantity: number) {
     updateItem.reset()
@@ -47,7 +54,11 @@ export function CartLineItem({ item }: CartLineItemProps) {
   }
 
   return (
-    <li className={styles.line}>
+    <li className={styles.line} data-unavailable={!item.isAvailable || undefined}>
+      <div className={styles.media} aria-hidden="true">
+        <Package size={22} strokeWidth={1.5} />
+      </div>
+
       <div className={styles.details}>
         <p className={styles.name}>{item.productName}</p>
         {item.variantLabel && <p className={styles.meta}>{item.variantLabel}</p>}
@@ -60,6 +71,7 @@ export function CartLineItem({ item }: CartLineItemProps) {
             ))}
           </ul>
         )}
+        <p className={styles.unitPrice}>{formatPrice(item.unitPrice)} each</p>
 
         {!item.isAvailable && item.unavailableReason && (
           <Alert variant="error">{UNAVAILABLE_MESSAGES[item.unavailableReason]}</Alert>
@@ -71,16 +83,16 @@ export function CartLineItem({ item }: CartLineItemProps) {
       </div>
 
       <div className={styles.controls}>
+        <p className={styles.lineTotal}>{formatPrice(item.lineTotal)}</p>
         <QuantityInput
           value={item.quantity}
           onChange={handleQuantityChange}
-          disabled={updateItem.isPending || removeItem.isPending}
+          disabled={isMutating}
         />
-        <p className={styles.unitPrice}>{formatPrice(item.unitPrice)} each</p>
-        <p className={styles.lineTotal}>{formatPrice(item.lineTotal)}</p>
         <Button
           variant="ghost"
           isLoading={removeItem.isPending}
+          disabled={isMutating}
           onClick={handleRemove}
           className={styles.removeButton}
         >

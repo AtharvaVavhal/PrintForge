@@ -18,10 +18,19 @@ export function CartPage() {
     return (
       <section className={styles.wrap}>
         <h1>Your cart</h1>
-        <div className={styles.skeletonList}>
-          <Skeleton className={styles.skeletonLine} />
-          <Skeleton className={styles.skeletonLine} />
-          <Skeleton className={styles.skeletonLine} />
+        <div className={styles.layout}>
+          <div className={styles.skeletonList} aria-busy="true" aria-label="Loading your cart">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={styles.skeletonRow}>
+                <Skeleton className={styles.skeletonMedia} />
+                <div className={styles.skeletonText}>
+                  <Skeleton className={styles.skeletonLineWide} />
+                  <Skeleton className={styles.skeletonLineNarrow} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <Skeleton className={styles.skeletonSummary} />
         </div>
       </section>
     )
@@ -46,7 +55,12 @@ export function CartPage() {
 
   return (
     <section className={styles.wrap}>
-      <h1>Your cart</h1>
+      <h1>
+        Your cart{' '}
+        <span className={styles.count}>
+          ({cart.itemCount} {cart.itemCount === 1 ? 'item' : 'items'})
+        </span>
+      </h1>
       <div className={styles.layout}>
         <ul className={styles.lines}>
           {cart.items.map((item) => (
