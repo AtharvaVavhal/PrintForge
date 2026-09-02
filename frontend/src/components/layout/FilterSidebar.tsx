@@ -4,8 +4,9 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { TextField } from '@/components/ui/TextField'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
-import type { CategoryTreeNode, FilterState } from '@/types/catalog'
+import type { FilterState } from '@/types/catalog'
 import { RATING_OPTIONS, SORT_OPTIONS } from '@/types/catalog'
+import { findCategoryPath } from '@/features/catalog/categoryTree'
 import { cn } from '@/utils/cn'
 import styles from './FilterSidebar.module.css'
 
@@ -15,24 +16,6 @@ interface FilterSidebarProps {
   onClearAll: () => void
   onFiltersChange?: () => void
   headingId?: string
-}
-
-function findCategoryPath(
-  nodes: CategoryTreeNode[],
-  categoryId?: string,
-  path: CategoryTreeNode[] = [],
-): CategoryTreeNode[] {
-  if (!categoryId) return []
-
-  for (const node of nodes) {
-    const nextPath = [...path, node]
-    if (node.id === categoryId) return nextPath
-
-    const childPath = findCategoryPath(node.children, categoryId, nextPath)
-    if (childPath.length > 0) return childPath
-  }
-
-  return []
 }
 
 function toOptionalNumber(value: string | null): number | undefined {

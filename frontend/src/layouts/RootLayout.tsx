@@ -7,9 +7,12 @@ import styles from './RootLayout.module.css'
 export function RootLayout() {
   return (
     <div className={styles.shell}>
+      <a href="#main-content" className={styles.skipLink}>
+        Skip to main content
+      </a>
       <AnnouncementBar />
       <Header />
-      <main className={styles.main}>
+      <main id="main-content" className={styles.main} tabIndex={-1}>
         <Outlet />
       </main>
       <Footer />

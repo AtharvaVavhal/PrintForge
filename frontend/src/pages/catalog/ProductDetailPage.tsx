@@ -1,12 +1,15 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useProduct } from '@/hooks/useProduct'
+import { useCategoryTree } from '@/hooks/useCategoryTree'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { formatPrice } from '@/utils/formatPrice'
 import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { ProductImage } from '@/features/catalog/ProductImage'
+import { Breadcrumbs, type Crumb } from '@/components/ui/Breadcrumbs'
+import { ProductGallery } from '@/features/catalog/ProductGallery'
+import { findCategoryPath } from '@/features/catalog/categoryTree'
 import { VariantSelector } from '@/features/cart/VariantSelector'
 import { AddToCartControls } from '@/features/cart/AddToCartControls'
 import {
@@ -33,6 +36,7 @@ const EMPTY_CUSTOMIZATION_STATE: CustomizationFormState = {
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>()
   const { data: product, isPending, isError, error } = useProduct(slug)
+  const { data: categoryTree = [] } = useCategoryTree()
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const [customization, setCustomization] = useState<CustomizationFormState>(
     EMPTY_CUSTOMIZATION_STATE,
@@ -41,6 +45,11 @@ export function ProductDetailPage() {
   const handleCustomizationChange = useCallback((state: CustomizationFormState) => {
     setCustomization(state)
   }, [])
+
+  const categoryPath = useMemo(
+    () => findCategoryPath(categoryTree, product?.categoryId),
+    [categoryTree, product?.categoryId],
+  )
 
   if (isPending) {
     return (
@@ -69,10 +78,24 @@ export function ProductDetailPage() {
   const total =
     Number(product.basePrice) + Number(selectedVariant?.priceDelta ?? 0) + customization.surcharge
 
+  const breadcrumbs: Crumb[] = [
+    { label: 'Home', to: ROUTES.HOME },
+    { label: 'All products', to: ROUTES.PRODUCTS },
+    ...categoryPath.map((node) => ({
+      label: node.name,
+      to: `${ROUTES.PRODUCTS}?categoryId=${node.id}`,
+    })),
+    { label: product.name },
+  ]
+
   return (
     <section className={styles.wrap}>
+      <div className={styles.breadcrumbs}>
+        <Breadcrumbs items={breadcrumbs} />
+      </div>
+
       <div className={styles.gallery}>
-        <ProductImage key={product.id} images={product.images} label={product.name} />
+        <ProductGallery key={product.id} images={product.images} label={product.name} />
       </div>
 
       <div className={styles.info}>

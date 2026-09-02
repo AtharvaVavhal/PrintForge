@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useProducts } from '@/hooks/useProducts'
+import { useCategoryTree } from '@/hooks/useCategoryTree'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { Breadcrumbs, type Crumb } from '@/components/ui/Breadcrumbs'
 import { FilterSidebar } from '@/components/layout/FilterSidebar'
 import { FilterTrigger, MobileFilterDrawer } from '@/components/layout/MobileFilterDrawer'
+import { ActiveFilterChips } from '@/features/catalog/ActiveFilterChips'
+import { findCategoryPath } from '@/features/catalog/categoryTree'
 import { EmptyCatalog } from '@/features/catalog/EmptyCatalog'
 import { ProductCard } from '@/features/catalog/ProductCard'
 import { ProductGridSkeleton } from '@/features/catalog/ProductGridSkeleton'
@@ -46,6 +51,35 @@ export function ProductListPage() {
 
   const hasProductFilters = Boolean(categoryId || minPrice !== undefined || maxPrice !== undefined || minRating !== undefined || sort)
   const hasResultFilters = Boolean(search || hasProductFilters)
+
+  const { data: categoryTree = [] } = useCategoryTree()
+  const categoryPath = useMemo(
+    () => findCategoryPath(categoryTree, categoryId),
+    [categoryTree, categoryId],
+  )
+  const activeCategory = categoryPath.at(-1)
+
+  const pageTitle = activeCategory
+    ? activeCategory.name
+    : search
+      ? 'Search results'
+      : 'All products'
+
+  const breadcrumbs: Crumb[] = [
+    { label: 'Home', to: ROUTES.HOME },
+    activeCategory || search
+      ? { label: 'All products', to: ROUTES.PRODUCTS }
+      : { label: 'All products' },
+    ...categoryPath.map((node, index) => ({
+      label: node.name,
+      to:
+        index === categoryPath.length - 1
+          ? undefined
+          : `${ROUTES.PRODUCTS}?categoryId=${node.id}`,
+    })),
+    ...(search && !activeCategory ? [{ label: `“${search}”` }] : []),
+  ]
+
   const productsQuery = useProducts({
     categoryId,
     search,
@@ -81,10 +115,14 @@ export function ProductListPage() {
 
   return (
     <section className={styles.wrap}>
+      <Breadcrumbs items={breadcrumbs} />
+
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>Shop</h1>
-          {search && <p className={styles.searchResultLabel}>Results for "{search}"</p>}
+          <h1 className={styles.title}>{pageTitle}</h1>
+          {search && activeCategory && (
+            <p className={styles.searchResultLabel}>Results for "{search}"</p>
+          )}
         </div>
         {productsQuery.data && (
           <p className={styles.resultCount} aria-live="polite">
@@ -92,6 +130,8 @@ export function ProductListPage() {
           </p>
         )}
       </div>
+
+      <ActiveFilterChips />
 
       <div className={styles.mobileFilterBar}>
         <FilterTrigger

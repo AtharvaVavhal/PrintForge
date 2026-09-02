@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { apiClient } from '@/services/api/client'
@@ -112,6 +112,44 @@ describe('ProductListPage', () => {
       minRating: 4,
       sort: 'price_asc',
     })
+  })
+
+  it('uses the category name as the page title and breadcrumb when a category is active', async () => {
+    mock.onGet('/categories/tree').reply(200, CATEGORY_TREE_RESPONSE)
+    mock.onGet('/products').reply(200, productsResponse([SAMPLE_PRODUCT]))
+
+    renderWithProviders(<ProductListPage />, {
+      initialEntries: ['/products?categoryId=cat-2'],
+    })
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Tumblers' }),
+    ).toBeInTheDocument()
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByRole('link', { name: 'All products' })).toBeInTheDocument()
+    expect(within(crumbs).getByRole('link', { name: 'Mugs' })).toHaveAttribute(
+      'href',
+      '/products?categoryId=cat-1',
+    )
+  })
+
+  it('shows an active-filter chip that clears just its own filter', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/categories/tree').reply(200, CATEGORY_TREE_RESPONSE)
+    mock.onGet('/products').reply(200, productsResponse([SAMPLE_PRODUCT]))
+
+    renderWithProviders(<ProductListPage />, {
+      initialEntries: ['/products?minRating=4&minPrice=100'],
+    })
+
+    await screen.findByText('Ceramic Mug')
+    await user.click(await screen.findByRole('button', { name: /4\+ stars/ }))
+
+    await waitFor(() => {
+      const params = (mock.history.get.at(-1)?.params ?? {}) as Record<string, unknown>
+      expect(params.minRating).toBeUndefined()
+    })
+    expect(mock.history.get.at(-1)?.params).toMatchObject({ minPrice: 100 })
   })
 
   it('updates category and sub-category filters from the sidebar', async () => {
