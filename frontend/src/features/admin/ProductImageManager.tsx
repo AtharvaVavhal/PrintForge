@@ -1,9 +1,12 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useUploadFile } from '@/hooks/useUploadFile'
 import { useAddProductImage } from '@/hooks/useAddProductImage'
 import { useRemoveProductImage } from '@/hooks/useRemoveProductImage'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { Modal } from '@/components/ui/Modal'
+import { AdminBadge } from '@/components/admin/AdminBadge'
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState'
 import { getApiErrorMessage } from '@/utils/apiError'
 import type { ProductImage } from '@/types/catalog'
 import styles from './ProductImageManager.module.css'
@@ -15,21 +18,18 @@ interface ProductImageManagerProps {
 }
 
 /**
- * Reuses useUploadFile (POST /uploads, same endpoint the Phase 3
- * customization file fields use) rather than a bespoke upload path — an
- * admin uploading a product photo is just another authenticated upload;
- * `resolveUrl` on the backend already gives product-purpose uploads the
- * public 'upload' delivery type (uploads.service.ts's role-based
- * inference: ADMIN -> 'product'). Two requests in sequence (upload, then
- * POST /products/:id/images referencing the resulting uploadedFileId) —
- * no single combined endpoint exists.
+ * Reuses useUploadFile (POST /uploads) then POST /products/:id/images —
+ * no single combined endpoint exists. Removal is a real
+ * DELETE /products/:id/images/:imageId, so it goes through a confirmation.
  */
 export function ProductImageManager({ productId, images, onImagesChange }: ProductImageManagerProps) {
+  const headingId = useId()
   const uploadFile = useUploadFile()
   const addImage = useAddProductImage(productId)
   const removeImage = useRemoveProductImage(productId)
   const [error, setError] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function handleFileSelected(file: File) {
@@ -59,15 +59,18 @@ export function ProductImageManager({ productId, images, onImagesChange }: Produ
       setError(getApiErrorMessage(err))
     } finally {
       setRemovingId(null)
+      setPendingRemoveId(null)
     }
   }
 
   const isUploading = uploadFile.isPending || addImage.isPending
 
   return (
-    <div className={styles.wrap}>
+    <section aria-labelledby={headingId} className={styles.section}>
       <div className={styles.header}>
-        <h2 className={styles.heading}>Images</h2>
+        <h2 id={headingId} className={styles.heading}>
+          Images
+        </h2>
         <Button
           type="button"
           variant="secondary"
@@ -91,26 +94,67 @@ export function ProductImageManager({ productId, images, onImagesChange }: Produ
       {error && <Alert variant="error">{error}</Alert>}
 
       {images.length === 0 ? (
-        <p className={styles.empty}>No images yet.</p>
+        <AdminEmptyState
+          title="No images yet"
+          description="Upload a PNG or JPEG. The first image becomes the primary one."
+        />
       ) : (
-        <div className={styles.grid}>
+        <ul className={styles.grid}>
           {images.map((image) => (
-            <div key={image.id} className={styles.tile}>
-              <img src={image.url} alt="" className={styles.thumbnail} />
-              {image.isPrimary && <span className={styles.primaryFlag}>Primary</span>}
+            <li key={image.id} className={styles.tile}>
+              <img
+                src={image.url}
+                alt={image.isPrimary ? 'Primary product image' : 'Product image'}
+                className={styles.thumbnail}
+              />
+              {image.isPrimary && (
+                <span className={styles.primaryFlag}>
+                  <AdminBadge variant="success">Primary</AdminBadge>
+                </span>
+              )}
               <Button
                 type="button"
                 variant="secondary"
                 className={styles.removeButton}
                 isLoading={removingId === image.id}
-                onClick={() => void handleRemove(image.id)}
+                onClick={() => setPendingRemoveId(image.id)}
               >
                 Remove
               </Button>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+
+      <Modal
+        isOpen={pendingRemoveId !== null}
+        onClose={() => setPendingRemoveId(null)}
+        title="Remove this image?"
+        size="sm"
+      >
+        <div className={styles.confirm}>
+          <p>The image is deleted permanently. This does not affect any orders that already used it.</p>
+          <div className={styles.confirmActions}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setPendingRemoveId(null)}
+              disabled={removeImage.isPending}
+            >
+              Keep image
+            </Button>
+            <Button
+              type="button"
+              isLoading={removeImage.isPending}
+              onClick={() => {
+                if (pendingRemoveId) void handleRemove(pendingRemoveId)
+              }}
+            >
+              Remove image
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </section>
   )
 }

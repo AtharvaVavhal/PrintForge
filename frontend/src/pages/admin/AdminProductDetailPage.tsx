@@ -13,11 +13,17 @@ import { ProductImageManager } from '@/features/admin/ProductImageManager'
 import { ProductReviewModeration } from '@/features/admin/ProductReviewModeration'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Skeleton } from '@/components/ui/Skeleton'
+import { Modal } from '@/components/ui/Modal'
+import { AdminPage } from '@/components/admin/AdminPage'
+import { AdminCard } from '@/components/admin/AdminCard'
+import { AdminBadge } from '@/components/admin/AdminBadge'
+import { AdminPageSkeleton } from '@/components/admin/AdminPageSkeleton'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { formatPrice } from '@/utils/formatPrice'
+import { formatDate } from '@/utils/formatDate'
 import { adminProductDetailPath, ROUTES } from '@/constants/routes'
 import { toCreateProductPayload, type AdminProductFormValues } from '@/schemas/adminProduct.schema'
-import type { Product } from '@/types/catalog'
+import type { Category, Product } from '@/types/catalog'
 import styles from './AdminProductDetailPage.module.css'
 
 const NEW_PRODUCT_ID = 'new'
@@ -44,27 +50,34 @@ function toFormValues(product: Product): AdminProductFormValues {
   }
 }
 
+function categoryName(categoryId: string, categories: Category[] | undefined): string {
+  return categories?.find((c) => c.id === categoryId)?.name ?? 'Category unavailable'
+}
+
 interface LocationState {
   product?: Product
 }
 
+function StatusBadge({ isActive }: { isActive: boolean }) {
+  return isActive ? (
+    <AdminBadge variant="success">Active</AdminBadge>
+  ) : (
+    <AdminBadge variant="neutral">Inactive</AdminBadge>
+  )
+}
+
 /**
- * Behind AdminRoute (App.tsx). `/admin/products/new` (the literal ":id"
- * value "new") is create mode. For an existing product this page prefers
- * the full Product object handed over via router `state` from
- * AdminProductRow's click (no extra request needed), and falls back to
- * GET /products/admin/:id (Phase 13.2 — admin-only, NOT isActive-
- * filtered) on a direct visit or a page refresh.
+ * Behind AdminRoute (App.tsx). `/admin/products/new` is create mode. For
+ * an existing product this page prefers the full Product handed over via
+ * router `state` from the products list, and falls back to GET
+ * /products/admin/:id (admin-only, NOT isActive-filtered) on a direct
+ * visit / refresh.
  *
- * Local component state (`product`) is the single source of truth for
- * this page once loaded — each sub-manager (VariantManager etc.) patches
- * it from its own mutation's response, never from a refetch.
- *
- * Reactivating a deactivated product (POST /products/:id/reactivate) is
- * reachable both here (right after deactivating) and by re-opening the
- * product from AdminProductsPage, which now lists inactive products too
- * (GET /products/admin). The public GET /products stays isActive-filtered,
- * so the storefront never shows a deactivated product.
+ * Local `product` state is the single source of truth once loaded — each
+ * sub-manager (VariantManager etc.) patches it from its own mutation's
+ * response, never from a refetch. Base fields, variants, customization
+ * fields, images, and review moderation are each their own
+ * endpoint/section; this page only composes them.
  */
 export function AdminProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -77,17 +90,9 @@ export function AdminProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(
     !isCreating && stateProduct && stateProduct.id === id ? stateProduct : null,
   )
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false)
 
-  // Direct visit / refresh with no router state: fetch by id via the
-  // admin-only GET /products/admin/:id (Phase 13.2). Not isActive-
-  // filtered, so a deactivated product loads here too — the reactivation
-  // dead-end is gone. Disabled once `product` is populated.
-  const adminProductQuery = useAdminProduct(
-    !isCreating && !product ? id : undefined,
-  )
-  // Adopt the fetched product into local state (the page's single source
-  // of truth once loaded — sub-managers patch it). Guarded set during
-  // render, per the React "you might not need an effect" guidance.
+  const adminProductQuery = useAdminProduct(!isCreating && !product ? id : undefined)
   if (!isCreating && !product && adminProductQuery.data) {
     setProduct(adminProductQuery.data)
   }
@@ -120,12 +125,11 @@ export function AdminProductDetailPage() {
     if (!product) return
     try {
       await deactivateProduct.mutateAsync()
-      // Stay on the page. The product also remains in the admin products
-      // list (GET /products/admin returns inactive rows), so it's still
-      // reachable later — but reactivating right here is the common case.
       setProduct((prev) => (prev ? { ...prev, isActive: false } : prev))
     } catch {
       // Error surfaced via deactivateProduct.isError below.
+    } finally {
+      setConfirmDeactivate(false)
     }
   }
 
@@ -139,91 +143,165 @@ export function AdminProductDetailPage() {
     }
   }
 
+  // ─── Create mode ───────────────────────────────────────────────────────
   if (isCreating) {
     return (
-      <section className={styles.wrap}>
-        <h1>New product</h1>
+      <AdminPage
+        title="New product"
+        breadcrumbs={[
+          { label: 'Products', to: ROUTES.ADMIN_PRODUCTS },
+          { label: 'New product' },
+        ]}
+      >
         {categoriesQuery.data && (
-          <ProductForm
-            categories={categoriesQuery.data}
-            defaultValues={EMPTY_FORM_VALUES}
-            isSubmitting={createProduct.isPending}
-            submitError={createProduct.isError ? getApiErrorMessage(createProduct.error) : null}
-            submitLabel="Create product"
-            onSubmit={(values) => void handleCreate(values)}
-          />
+          <AdminCard as="section" title="Product details">
+            <ProductForm
+              categories={categoriesQuery.data}
+              defaultValues={EMPTY_FORM_VALUES}
+              isSubmitting={createProduct.isPending}
+              submitError={createProduct.isError ? getApiErrorMessage(createProduct.error) : null}
+              submitLabel="Create product"
+              onSubmit={(values) => void handleCreate(values)}
+            />
+          </AdminCard>
         )}
-      </section>
+      </AdminPage>
     )
   }
 
+  // ─── Loading / not found ───────────────────────────────────────────────
   if (!product) {
+    if (adminProductQuery.isPending) {
+      return <AdminPageSkeleton rows={5} />
+    }
     return (
-      <section className={styles.wrap}>
-        <h1>Product</h1>
-        {adminProductQuery.isPending && <Skeleton className={styles.skeletonBlock} />}
-        {!adminProductQuery.isPending && (
-          <>
-            <Alert variant="error">
-              {adminProductQuery.isError
-                ? getApiErrorMessage(adminProductQuery.error)
-                : 'This product could not be found.'}
-            </Alert>
-            <p>
-              <Link to={ROUTES.ADMIN_PRODUCTS}>Back to products</Link>
-            </p>
-          </>
-        )}
-      </section>
+      <AdminPage
+        title="Product"
+        breadcrumbs={[{ label: 'Products', to: ROUTES.ADMIN_PRODUCTS }, { label: 'Product' }]}
+      >
+        <Alert variant="error">
+          {adminProductQuery.isError
+            ? getApiErrorMessage(adminProductQuery.error)
+            : 'This product could not be found.'}
+        </Alert>
+        <p>
+          <Link to={ROUTES.ADMIN_PRODUCTS} className={styles.backLink}>
+            Back to products
+          </Link>
+        </p>
+      </AdminPage>
     )
   }
+
+  // ─── Edit mode ─────────────────────────────────────────────────────────
+  const specEntries = product.specifications ? Object.entries(product.specifications) : []
 
   return (
-    <section className={styles.wrap}>
-      <div className={styles.header}>
-        <h1>{product.name}</h1>
-        {!product.isActive && <span className={styles.inactiveFlag}>Inactive</span>}
-        {product.isActive ? (
-          <Button
-            type="button"
-            variant="secondary"
-            isLoading={deactivateProduct.isPending}
-            onClick={() => void handleDeactivate()}
-          >
-            Deactivate
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            isLoading={reactivateProduct.isPending}
-            onClick={() => void handleReactivate()}
-          >
-            Reactivate
-          </Button>
-        )}
-      </div>
-
-      {deactivateProduct.isError && <Alert variant="error">{getApiErrorMessage(deactivateProduct.error)}</Alert>}
-      {reactivateProduct.isError && <Alert variant="error">{getApiErrorMessage(reactivateProduct.error)}</Alert>}
+    <AdminPage
+      breadcrumbs={[
+        { label: 'Products', to: ROUTES.ADMIN_PRODUCTS },
+        { label: product.name },
+      ]}
+      title={product.name}
+      description={`Slug: ${product.slug}`}
+      actions={
+        <>
+          <StatusBadge isActive={product.isActive} />
+          {product.isActive ? (
+            <Button
+              type="button"
+              variant="secondary"
+              isLoading={deactivateProduct.isPending}
+              onClick={() => setConfirmDeactivate(true)}
+            >
+              Deactivate
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              isLoading={reactivateProduct.isPending}
+              onClick={() => void handleReactivate()}
+            >
+              Reactivate
+            </Button>
+          )}
+        </>
+      }
+    >
+      {deactivateProduct.isError && (
+        <Alert variant="error">{getApiErrorMessage(deactivateProduct.error)}</Alert>
+      )}
+      {reactivateProduct.isError && (
+        <Alert variant="error">{getApiErrorMessage(reactivateProduct.error)}</Alert>
+      )}
       {!product.isActive && !reactivateProduct.isError && (
         <Alert variant="info">
-          This product is deactivated and hidden from the storefront. It still appears in the admin products
-          list (filter by “Inactive only”) and can be reactivated from there or here.
+          This product is deactivated and hidden from the storefront. It still appears in the admin
+          products list (filter by “Inactive only”) and can be reactivated from there or here.
         </Alert>
       )}
 
-      {categoriesQuery.isPending && <Skeleton className={styles.skeletonBlock} />}
+      <AdminCard as="section" title="Product information">
+        <dl className={styles.info}>
+          <div className={styles.infoRow}>
+            <dt>Category</dt>
+            <dd>{categoryName(product.categoryId, categoriesQuery.data)}</dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Base price</dt>
+            <dd>{formatPrice(product.basePrice)}</dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Minimum quantity</dt>
+            <dd>{product.minQuantity}</dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Maximum quantity</dt>
+            <dd>{product.maxQuantity ?? 'No limit'}</dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Rating</dt>
+            <dd>
+              {product.avgRating !== null
+                ? `${product.avgRating} · ${product.reviewCount} ${product.reviewCount === 1 ? 'review' : 'reviews'}`
+                : 'No reviews yet'}
+            </dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Created</dt>
+            <dd>{formatDate(product.createdAt)}</dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Specifications</dt>
+            <dd>
+              {specEntries.length === 0 ? (
+                <span className={styles.muted}>None</span>
+              ) : (
+                <ul className={styles.specList}>
+                  {specEntries.map(([key, value]) => (
+                    <li key={key}>
+                      <span className={styles.specKey}>{key}</span>: {String(value)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </AdminCard>
 
-      {categoriesQuery.data && (
-        <ProductForm
-          categories={categoriesQuery.data}
-          defaultValues={toFormValues(product)}
-          isSubmitting={updateProduct.isPending}
-          submitError={updateProduct.isError ? getApiErrorMessage(updateProduct.error) : null}
-          submitLabel="Save changes"
-          onSubmit={(values) => void handleUpdate(values)}
-        />
-      )}
+      <AdminCard as="section" title="Product details">
+        {categoriesQuery.data && (
+          <ProductForm
+            categories={categoriesQuery.data}
+            defaultValues={toFormValues(product)}
+            isSubmitting={updateProduct.isPending}
+            submitError={updateProduct.isError ? getApiErrorMessage(updateProduct.error) : null}
+            submitLabel="Save changes"
+            onSubmit={(values) => void handleUpdate(values)}
+          />
+        )}
+      </AdminCard>
 
       <VariantManager
         productId={product.id}
@@ -246,6 +324,37 @@ export function AdminProductDetailPage() {
       />
 
       <ProductReviewModeration productId={product.id} />
-    </section>
+
+      <Modal
+        isOpen={confirmDeactivate}
+        onClose={() => setConfirmDeactivate(false)}
+        title="Deactivate this product?"
+        size="sm"
+      >
+        <div className={styles.confirm}>
+          <p>
+            It will be hidden from the storefront immediately. It stays in the admin catalog (filter
+            “Inactive only”) and you can reactivate it at any time.
+          </p>
+          <div className={styles.confirmActions}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setConfirmDeactivate(false)}
+              disabled={deactivateProduct.isPending}
+            >
+              Keep active
+            </Button>
+            <Button
+              type="button"
+              isLoading={deactivateProduct.isPending}
+              onClick={() => void handleDeactivate()}
+            >
+              Deactivate
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </AdminPage>
   )
 }

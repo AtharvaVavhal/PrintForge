@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateCustomizationField } from '@/hooks/useCreateCustomizationField'
@@ -11,6 +11,10 @@ import {
 import { TextField } from '@/components/ui/TextField'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { AdminCard } from '@/components/admin/AdminCard'
+import { AdminTable } from '@/components/admin/AdminTable'
+import { AdminSelect } from '@/components/admin/AdminSelect'
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState'
 import { getApiErrorMessage } from '@/utils/apiError'
 import type { CustomizationField } from '@/types/catalog'
 import styles from './CustomizationFieldManager.module.css'
@@ -30,6 +34,8 @@ const SURCHARGE_TYPE_LABELS: Record<CustomizationFieldFormValues['surchargeType'
   PER_CHARACTER: 'Per character',
 }
 
+const TABLE_COLUMNS = 5
+
 interface CustomizationFieldManagerProps {
   productId: string
   fields: CustomizationField[]
@@ -37,15 +43,14 @@ interface CustomizationFieldManagerProps {
 }
 
 /** POST/PATCH /products/:id/customization-fields[/:fieldId] only — no
- * delete endpoint (matches variants: nothing in this admin surface removes
- * a field, only edits it). `constraints` is edited as raw JSON text
- * (jsonObjectField in the schema) rather than a bespoke per-type editor —
- * a deliberate scope cut; see the phase report. */
+ * delete endpoint (matches variants: this surface only edits a field,
+ * never removes it). `constraints` is edited as raw JSON text. */
 export function CustomizationFieldManager({
   productId,
   fields,
   onFieldsChange,
 }: CustomizationFieldManagerProps) {
+  const headingId = useId()
   const createField = useCreateCustomizationField(productId)
   const updateField = useUpdateCustomizationField(productId)
   const [isAdding, setIsAdding] = useState(false)
@@ -57,7 +62,7 @@ export function CustomizationFieldManager({
       onFieldsChange([...fields, created])
       setIsAdding(false)
     } catch {
-      // Error surfaced via createField.isError below.
+      // Error surfaced via createField.isError in the add form.
     }
   }
 
@@ -70,14 +75,16 @@ export function CustomizationFieldManager({
       onFieldsChange(fields.map((f) => (f.id === fieldId ? updated : f)))
       setEditingId(null)
     } catch {
-      // Error surfaced via updateField.isError below.
+      // Error surfaced via updateField.isError in the edit form.
     }
   }
 
   return (
-    <div className={styles.wrap}>
+    <section aria-labelledby={headingId} className={styles.section}>
       <div className={styles.header}>
-        <h2 className={styles.heading}>Customization fields</h2>
+        <h2 id={headingId} className={styles.heading}>
+          Customization fields
+        </h2>
         <Button
           type="button"
           variant="secondary"
@@ -90,52 +97,8 @@ export function CustomizationFieldManager({
         </Button>
       </div>
 
-      {fields.length === 0 && !isAdding && <p className={styles.empty}>No customization fields yet.</p>}
-
-      {fields.length > 0 && (
-        <ul className={styles.list}>
-          {fields.map((field) =>
-            editingId === field.id ? (
-              <li key={field.id} className={styles.row}>
-                <CustomizationFieldFormFields
-                  defaultValues={{
-                    label: field.label,
-                    type: field.type,
-                    isRequired: field.isRequired,
-                    sortOrder: String(field.sortOrder),
-                    helpText: field.helpText ?? '',
-                    constraints: field.constraints ? JSON.stringify(field.constraints) : '',
-                    surchargeType: field.surchargeType,
-                    surchargeAmount: field.surchargeAmount === '0.00' ? '' : field.surchargeAmount,
-                  }}
-                  onSubmit={(values) => void handleUpdate(field.id, values)}
-                  onCancel={() => setEditingId(null)}
-                  isSubmitting={updateField.isPending}
-                  submitError={updateField.isError ? getApiErrorMessage(updateField.error) : null}
-                  submitLabel="Save"
-                />
-              </li>
-            ) : (
-              <li key={field.id} className={styles.row}>
-                <div className={styles.summary}>
-                  <span className={styles.label}>{field.label}</span>
-                  <span className={styles.meta}>
-                    {FIELD_TYPE_LABELS[field.type]}
-                    {field.isRequired ? ' · Required' : ''}
-                    {field.surchargeType !== 'NONE' ? ` · ${SURCHARGE_TYPE_LABELS[field.surchargeType]}` : ''}
-                  </span>
-                </div>
-                <Button type="button" variant="secondary" onClick={() => setEditingId(field.id)}>
-                  Edit
-                </Button>
-              </li>
-            ),
-          )}
-        </ul>
-      )}
-
       {isAdding && (
-        <div className={styles.addForm}>
+        <AdminCard as="section" title="New customization field">
           <CustomizationFieldFormFields
             defaultValues={{
               label: '',
@@ -152,9 +115,90 @@ export function CustomizationFieldManager({
             submitError={createField.isError ? getApiErrorMessage(createField.error) : null}
             submitLabel="Add field"
           />
-        </div>
+        </AdminCard>
       )}
-    </div>
+
+      {fields.length === 0 ? (
+        <AdminEmptyState
+          title="No customization fields yet"
+          description="Add a field to let customers personalise this product at checkout."
+        />
+      ) : (
+        <AdminCard flush>
+          <AdminTable caption="Product customization fields">
+            <AdminTable.Head>
+              <AdminTable.Row>
+                <AdminTable.HeaderCell>Label</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Type</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Required</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Surcharge</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Actions</AdminTable.HeaderCell>
+              </AdminTable.Row>
+            </AdminTable.Head>
+            <AdminTable.Body>
+              {fields.map((field) => (
+                <Fragment key={field.id}>
+                  <AdminTable.Row>
+                    <AdminTable.Cell>
+                      <span className={styles.label}>{field.label}</span>
+                    </AdminTable.Cell>
+                    <AdminTable.Cell>{FIELD_TYPE_LABELS[field.type]}</AdminTable.Cell>
+                    <AdminTable.Cell>{field.isRequired ? 'Required' : 'Optional'}</AdminTable.Cell>
+                    <AdminTable.Cell>
+                      {field.surchargeType === 'NONE'
+                        ? '—'
+                        : SURCHARGE_TYPE_LABELS[field.surchargeType]}
+                    </AdminTable.Cell>
+                    <AdminTable.Cell>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingId(field.id)
+                          setIsAdding(false)
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </AdminTable.Cell>
+                  </AdminTable.Row>
+                  {editingId === field.id && (
+                    <AdminTable.Row>
+                      <AdminTable.Cell colSpan={TABLE_COLUMNS}>
+                        <AdminCard as="section" title="Edit customization field">
+                          <CustomizationFieldFormFields
+                            defaultValues={{
+                              label: field.label,
+                              type: field.type,
+                              isRequired: field.isRequired,
+                              sortOrder: String(field.sortOrder),
+                              helpText: field.helpText ?? '',
+                              constraints: field.constraints
+                                ? JSON.stringify(field.constraints)
+                                : '',
+                              surchargeType: field.surchargeType,
+                              surchargeAmount:
+                                field.surchargeAmount === '0.00' ? '' : field.surchargeAmount,
+                            }}
+                            onSubmit={(values) => void handleUpdate(field.id, values)}
+                            onCancel={() => setEditingId(null)}
+                            isSubmitting={updateField.isPending}
+                            submitError={
+                              updateField.isError ? getApiErrorMessage(updateField.error) : null
+                            }
+                            submitLabel="Save"
+                          />
+                        </AdminCard>
+                      </AdminTable.Cell>
+                    </AdminTable.Row>
+                  )}
+                </Fragment>
+              ))}
+            </AdminTable.Body>
+          </AdminTable>
+        </AdminCard>
+      )}
+    </section>
   )
 }
 
@@ -200,18 +244,13 @@ function CustomizationFieldFormFields({
       <div className={styles.formRow}>
         <TextField label="Label" error={errors.label?.message} {...register('label')} />
 
-        <div className={styles.selectField}>
-          <label htmlFor="field-type" className={styles.selectLabel}>
-            Type
-          </label>
-          <select id="field-type" className={styles.select} {...register('type')}>
-            {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <AdminSelect label="Type" {...register('type')}>
+          {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </AdminSelect>
 
         <label className={styles.checkboxLabel}>
           <input type="checkbox" {...register('isRequired')} />
@@ -228,18 +267,13 @@ function CustomizationFieldFormFields({
           {...register('sortOrder')}
         />
 
-        <div className={styles.selectField}>
-          <label htmlFor="field-surcharge-type" className={styles.selectLabel}>
-            Surcharge
-          </label>
-          <select id="field-surcharge-type" className={styles.select} {...register('surchargeType')}>
-            {Object.entries(SURCHARGE_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <AdminSelect label="Surcharge" {...register('surchargeType')}>
+          {Object.entries(SURCHARGE_TYPE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </AdminSelect>
 
         <TextField
           label="Surcharge amount (optional)"
@@ -250,10 +284,14 @@ function CustomizationFieldFormFields({
         />
       </div>
 
-      <TextField label="Help text (optional)" error={errors.helpText?.message} {...register('helpText')} />
+      <TextField
+        label="Help text (optional)"
+        error={errors.helpText?.message}
+        {...register('helpText')}
+      />
 
       <div className={styles.field}>
-        <label htmlFor="field-constraints" className={styles.selectLabel}>
+        <label htmlFor="field-constraints" className={styles.textareaLabel}>
           Constraints (optional JSON — e.g. {'{"maxLength":40}'} or {'{"options":["Red","Blue"]}'})
         </label>
         <textarea
@@ -262,7 +300,9 @@ function CustomizationFieldFormFields({
           rows={2}
           {...register('constraints')}
         />
-        {errors.constraints?.message && <p className={styles.errorText}>{errors.constraints.message}</p>}
+        {errors.constraints?.message && (
+          <p className={styles.errorText}>{errors.constraints.message}</p>
+        )}
       </div>
 
       <div className={styles.formActions}>

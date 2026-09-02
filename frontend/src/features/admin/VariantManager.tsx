@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useCreateVariant } from '@/hooks/useCreateVariant'
@@ -11,6 +11,10 @@ import {
 import { TextField } from '@/components/ui/TextField'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { AdminCard } from '@/components/admin/AdminCard'
+import { AdminTable } from '@/components/admin/AdminTable'
+import { AdminBadge } from '@/components/admin/AdminBadge'
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState'
 import { formatPrice } from '@/utils/formatPrice'
 import { getApiErrorMessage } from '@/utils/apiError'
 import type { ProductVariant } from '@/types/catalog'
@@ -22,14 +26,16 @@ interface VariantManagerProps {
   onVariantsChange: (variants: ProductVariant[]) => void
 }
 
+const TABLE_COLUMNS = 4
+
 /**
  * POST/PATCH /products/:id/variants[/:variantId] only — no delete
- * endpoint exists (a variant is "removed" from sale via isAvailable:false,
- * same soft-disable spirit as Product.isActive). At most one row edits at
- * a time (`editingId`), so the single shared `updateVariant` mutation's
- * pending/error state unambiguously belongs to whichever row is open.
+ * endpoint (a variant is "removed" from sale via isAvailable:false, same
+ * soft-disable spirit as Product.isActive). At most one row edits at a
+ * time (`editingId`).
  */
 export function VariantManager({ productId, variants, onVariantsChange }: VariantManagerProps) {
+  const headingId = useId()
   const createVariant = useCreateVariant(productId)
   const updateVariant = useUpdateVariant(productId)
   const [isAdding, setIsAdding] = useState(false)
@@ -41,8 +47,7 @@ export function VariantManager({ productId, variants, onVariantsChange }: Varian
       onVariantsChange([...variants, created])
       setIsAdding(false)
     } catch {
-      // Error surfaced via createVariant.isError below; form stays open
-      // with what was typed.
+      // Error surfaced via createVariant.isError in the add form.
     }
   }
 
@@ -55,14 +60,16 @@ export function VariantManager({ productId, variants, onVariantsChange }: Varian
       onVariantsChange(variants.map((v) => (v.id === variantId ? updated : v)))
       setEditingId(null)
     } catch {
-      // Error surfaced via updateVariant.isError below; row stays in edit mode.
+      // Error surfaced via updateVariant.isError in the edit form.
     }
   }
 
   return (
-    <div className={styles.wrap}>
+    <section aria-labelledby={headingId} className={styles.section}>
       <div className={styles.header}>
-        <h2 className={styles.heading}>Variants</h2>
+        <h2 id={headingId} className={styles.heading}>
+          Variants
+        </h2>
         <Button
           type="button"
           variant="secondary"
@@ -75,44 +82,8 @@ export function VariantManager({ productId, variants, onVariantsChange }: Varian
         </Button>
       </div>
 
-      {variants.length === 0 && !isAdding && <p className={styles.empty}>No variants yet.</p>}
-
-      {variants.length > 0 && (
-        <ul className={styles.list}>
-          {variants.map((variant) =>
-            editingId === variant.id ? (
-              <li key={variant.id} className={styles.row}>
-                <VariantFormFields
-                  defaultValues={{
-                    label: variant.label,
-                    priceDelta: variant.priceDelta === '0.00' ? '' : variant.priceDelta,
-                    isAvailable: variant.isAvailable,
-                  }}
-                  onSubmit={(values) => void handleUpdate(variant.id, values)}
-                  onCancel={() => setEditingId(null)}
-                  isSubmitting={updateVariant.isPending}
-                  submitError={updateVariant.isError ? getApiErrorMessage(updateVariant.error) : null}
-                  submitLabel="Save"
-                />
-              </li>
-            ) : (
-              <li key={variant.id} className={styles.row}>
-                <span className={styles.label}>{variant.label}</span>
-                <span className={styles.delta}>
-                  {Number(variant.priceDelta) !== 0 ? formatPrice(variant.priceDelta) : '—'}
-                </span>
-                {!variant.isAvailable && <span className={styles.flag}>Unavailable</span>}
-                <Button type="button" variant="secondary" onClick={() => setEditingId(variant.id)}>
-                  Edit
-                </Button>
-              </li>
-            ),
-          )}
-        </ul>
-      )}
-
       {isAdding && (
-        <div className={styles.addForm}>
+        <AdminCard as="section" title="New variant">
           <VariantFormFields
             defaultValues={{ label: '', priceDelta: '', isAvailable: true }}
             onSubmit={(values) => void handleCreate(values)}
@@ -120,9 +91,84 @@ export function VariantManager({ productId, variants, onVariantsChange }: Varian
             submitError={createVariant.isError ? getApiErrorMessage(createVariant.error) : null}
             submitLabel="Add variant"
           />
-        </div>
+        </AdminCard>
       )}
-    </div>
+
+      {variants.length === 0 ? (
+        <AdminEmptyState
+          title="No variants yet"
+          description="Add a variant to offer this product in more than one option."
+        />
+      ) : (
+        <AdminCard flush>
+          <AdminTable caption="Product variants">
+            <AdminTable.Head>
+              <AdminTable.Row>
+                <AdminTable.HeaderCell>Label</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell align="end">Price delta</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Availability</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Actions</AdminTable.HeaderCell>
+              </AdminTable.Row>
+            </AdminTable.Head>
+            <AdminTable.Body>
+              {variants.map((variant) => (
+                <Fragment key={variant.id}>
+                  <AdminTable.Row>
+                    <AdminTable.Cell>
+                      <span className={styles.label}>{variant.label}</span>
+                    </AdminTable.Cell>
+                    <AdminTable.Cell align="end">
+                      {Number(variant.priceDelta) !== 0 ? formatPrice(variant.priceDelta) : '—'}
+                    </AdminTable.Cell>
+                    <AdminTable.Cell>
+                      {variant.isAvailable ? (
+                        <AdminBadge variant="success">Available</AdminBadge>
+                      ) : (
+                        <AdminBadge variant="neutral">Unavailable</AdminBadge>
+                      )}
+                    </AdminTable.Cell>
+                    <AdminTable.Cell>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingId(variant.id)
+                          setIsAdding(false)
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </AdminTable.Cell>
+                  </AdminTable.Row>
+                  {editingId === variant.id && (
+                    <AdminTable.Row>
+                      <AdminTable.Cell colSpan={TABLE_COLUMNS}>
+                        <AdminCard as="section" title="Edit variant">
+                          <VariantFormFields
+                            defaultValues={{
+                              label: variant.label,
+                              priceDelta: variant.priceDelta === '0.00' ? '' : variant.priceDelta,
+                              isAvailable: variant.isAvailable,
+                            }}
+                            onSubmit={(values) => void handleUpdate(variant.id, values)}
+                            onCancel={() => setEditingId(null)}
+                            isSubmitting={updateVariant.isPending}
+                            submitError={
+                              updateVariant.isError ? getApiErrorMessage(updateVariant.error) : null
+                            }
+                            submitLabel="Save"
+                          />
+                        </AdminCard>
+                      </AdminTable.Cell>
+                    </AdminTable.Row>
+                  )}
+                </Fragment>
+              ))}
+            </AdminTable.Body>
+          </AdminTable>
+        </AdminCard>
+      )}
+    </section>
   )
 }
 

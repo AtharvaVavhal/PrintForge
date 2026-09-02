@@ -4,6 +4,7 @@ import { adminProductSchema, type AdminProductFormValues } from '@/schemas/admin
 import { TextField } from '@/components/ui/TextField'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { AdminSelect } from '@/components/admin/AdminSelect'
 import type { Category } from '@/types/catalog'
 import styles from './ProductForm.module.css'
 
@@ -19,11 +20,9 @@ interface ProductFormProps {
 /**
  * Base product fields only (categoryId, name, slug, basePrice,
  * minQuantity, maxQuantity, specifications) — variants, customization
- * fields, and images are managed by their own sibling components
- * (VariantManager/CustomizationFieldManager/ProductImageManager) on
- * AdminProductDetailPage, not folded into this form, since they're
- * separate POST/PATCH endpoints with their own success/error states, not
- * sub-fields of one PATCH /products/:id body.
+ * fields, and images are managed by their own sibling components on
+ * AdminProductDetailPage, since they're separate endpoints with their own
+ * success/error states, not sub-fields of one PATCH /products/:id body.
  */
 export function ProductForm({
   categories,
@@ -46,27 +45,21 @@ export function ProductForm({
     <form className={styles.form} onSubmit={(e) => void handleSubmit(onSubmit)(e)} noValidate>
       {submitError && <Alert variant="error">{submitError}</Alert>}
 
-      <div className={styles.field}>
-        <label htmlFor="product-category" className={styles.selectLabel}>
-          Category
-        </label>
-        <select id="product-category" className={styles.select} {...register('categoryId')}>
-          <option value="">Select a category…</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-        {errors.categoryId?.message && <p className={styles.errorText}>{errors.categoryId.message}</p>}
-      </div>
+      <AdminSelect
+        label="Category"
+        error={errors.categoryId?.message}
+        {...register('categoryId')}
+      >
+        <option value="">Select a category…</option>
+        {categories.map((category) => (
+          <option key={category.id} value={category.id}>
+            {category.name}
+          </option>
+        ))}
+      </AdminSelect>
 
       <TextField label="Name" error={errors.name?.message} {...register('name')} />
-      <TextField
-        label="Slug"
-        error={errors.slug?.message}
-        {...register('slug')}
-      />
+      <TextField label="Slug" error={errors.slug?.message} {...register('slug')} />
 
       <div className={styles.row}>
         <TextField
@@ -93,7 +86,7 @@ export function ProductForm({
       </div>
 
       <div className={styles.field}>
-        <label htmlFor="product-specifications" className={styles.selectLabel}>
+        <label htmlFor="product-specifications" className={styles.textareaLabel}>
           Specifications (optional JSON — e.g. {'{"material":"ceramic","capacityMl":350}'})
         </label>
         <textarea
