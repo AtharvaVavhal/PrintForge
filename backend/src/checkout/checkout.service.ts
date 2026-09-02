@@ -14,6 +14,7 @@ import { OrdersService } from '../orders/orders.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { OrderLinePricing, PricingService } from './pricing/pricing.service';
+import { TaxService } from './tax/tax.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CheckoutPreviewView, OrderView } from './dto/order-view.interface';
 
@@ -63,7 +64,39 @@ export class CheckoutService {
     private readonly idempotencyService: IdempotencyService,
     private readonly pricingService: PricingService,
     private readonly couponsService: CouponsService,
+    private readonly taxService: TaxService,
   ) {}
+
+  /**
+   * Splits the tax-inclusive goods value (subtotal − discount) into its
+   * net + GST components per the current admin tax config, and returns the
+   * amount (if any) that a tax-EXCLUSIVE regime would add on top of the
+   * existing total. For the default INCLUSIVE / disabled config this is a
+   * structural no-op: `taxToAddPaise` is 0, so `total` and the Razorpay
+   * amount never change (Phase 13.4 §6).
+   */
+  private applyTax(computation: ReturnType<TaxService['computeTax']>): {
+    taxToAddPaise: bigint;
+    orderTaxFields: {
+      taxMode: string;
+      taxableAmount: string;
+      taxAmount: string;
+      taxRateSnapshot: string | null;
+    };
+  } {
+    return {
+      taxToAddPaise:
+        computation.mode === 'EXCLUSIVE' && computation.applied
+          ? computation.taxAmountPaise
+          : 0n,
+      orderTaxFields: {
+        taxMode: computation.mode,
+        taxableAmount: paiseToDecimalString(computation.taxableAmountPaise),
+        taxAmount: paiseToDecimalString(computation.taxAmountPaise),
+        taxRateSnapshot: computation.taxRateSnapshot,
+      },
+    };
+  }
 
   async checkout(
     userId: string,
@@ -182,10 +215,21 @@ export class CheckoutService {
         };
       }
 
+      // Tax split (Phase 13.4). Base is the tax-inclusive goods value.
+      // For the default INCLUSIVE/disabled config `taxToAddPaise` is 0 —
+      // `total` is byte-for-byte what it was before this phase.
+      const taxConfig = await this.taxService.getConfig(tx);
+      const taxComputation = this.taxService.computeTax(
+        subtotalPaise - discountPaise,
+        taxConfig,
+      );
+      const { taxToAddPaise, orderTaxFields } = this.applyTax(taxComputation);
+
       const totalPaise = this.pricingService.computeOrderTotal({
         subtotalPaise,
         shippingFeePaise: finalShippingFeePaise,
         discountPaise,
+        taxToAddPaise,
       });
 
       const orderNumber = await this.ordersService.generateOrderNumber(tx);
@@ -199,6 +243,10 @@ export class CheckoutService {
           shippingFee: paiseToDecimalString(finalShippingFeePaise),
           total: paiseToDecimalString(totalPaise),
           discountAmount: paiseToDecimalString(discountPaise),
+          taxMode: orderTaxFields.taxMode,
+          taxableAmount: orderTaxFields.taxableAmount,
+          taxAmount: orderTaxFields.taxAmount,
+          taxRateSnapshot: orderTaxFields.taxRateSnapshot,
           couponId: couponClaim?.couponId,
           couponCode: couponClaim?.couponCode,
           shippingRecipientName: dto.shippingRecipientName,
@@ -335,16 +383,27 @@ export class CheckoutService {
       normalizedCouponCode = preview.couponCode;
     }
 
+    const taxConfig = await this.taxService.getConfig(this.prisma);
+    const taxComputation = this.taxService.computeTax(
+      subtotalPaise - discountPaise,
+      taxConfig,
+    );
+    const { taxToAddPaise, orderTaxFields } = this.applyTax(taxComputation);
+
     const totalPaise = this.pricingService.computeOrderTotal({
       subtotalPaise,
       shippingFeePaise: finalShippingFeePaise,
       discountPaise,
+      taxToAddPaise,
     });
 
     return {
       subtotal: paiseToDecimalString(subtotalPaise),
       shippingFee: paiseToDecimalString(finalShippingFeePaise),
       discountAmount: paiseToDecimalString(discountPaise),
+      taxableAmount: orderTaxFields.taxableAmount,
+      taxAmount: orderTaxFields.taxAmount,
+      taxMode: orderTaxFields.taxMode,
       total: paiseToDecimalString(totalPaise),
       couponCode: normalizedCouponCode,
     };
@@ -448,6 +507,12 @@ export class CheckoutService {
       discountAmount: paiseToDecimalString(
         decimalToPaise(order.discountAmount),
       ),
+      taxableAmount: paiseToDecimalString(decimalToPaise(order.taxableAmount)),
+      taxAmount: paiseToDecimalString(decimalToPaise(order.taxAmount)),
+      taxMode: order.taxMode,
+      taxRatePercent: order.taxRateSnapshot
+        ? new Prisma.Decimal(order.taxRateSnapshot).mul(100).toFixed(2)
+        : null,
       couponCode: order.couponCode,
       currency: order.currency,
       shippingRecipientName: order.shippingRecipientName,

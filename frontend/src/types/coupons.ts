@@ -91,6 +91,11 @@ export interface CheckoutPreviewView {
   subtotal: string
   shippingFee: string
   discountAmount: string
+  /** Tax preview (Phase 13.4) — "0.00" until a client-confirmed GST rate
+   * is enabled; never authoritative. */
+  taxableAmount: string
+  taxAmount: string
+  taxMode: string
   total: string
   couponCode: string | null
 }

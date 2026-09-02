@@ -1,5 +1,6 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAdminOrder } from '@/hooks/useAdminOrder'
+import { orderInvoicePath } from '@/constants/routes'
 import { useUpdateAdminOrderStatus } from '@/hooks/useUpdateAdminOrderStatus'
 import { OrderStatusForm } from '@/features/admin/OrderStatusForm'
 import { Alert } from '@/components/ui/Alert'
@@ -20,6 +21,15 @@ import styles from './AdminOrderDetailPage.module.css'
  * see OrderStatusForm's doc comment for why this never duplicates
  * order-state-machine.ts client-side.
  */
+const INVOICEABLE_STATUSES = new Set<OrderStatus>([
+  'PAID',
+  'CONFIRMED',
+  'IN_PRODUCTION',
+  'SHIPPED',
+  'DELIVERED',
+  'REFUNDED',
+])
+
 export function AdminOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: order, isPending, isError, error } = useAdminOrder(id!)
@@ -96,10 +106,24 @@ export function AdminOrderDetailPage() {
                 <span className={styles.discount}>−{formatPrice(order.discountAmount)}</span>
               </div>
             )}
+            {Number(order.taxAmount) > 0 && (
+              <div className={styles.row}>
+                <span>
+                  GST{order.taxRatePercent ? ` (${order.taxRatePercent}%)` : ''}
+                  {order.taxMode === 'INCLUSIVE' ? ' — included' : ''}
+                </span>
+                <span>{formatPrice(order.taxAmount)}</span>
+              </div>
+            )}
             <div className={styles.row}>
               <span>Total</span>
               <span className={styles.total}>{formatPrice(order.total)}</span>
             </div>
+            {INVOICEABLE_STATUSES.has(order.status) && (
+              <p className={styles.invoiceLink}>
+                <Link to={orderInvoicePath(order.id)}>View / print invoice</Link>
+              </p>
+            )}
           </div>
 
           <div className={styles.summaryBlock}>

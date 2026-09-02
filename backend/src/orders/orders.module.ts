@@ -3,6 +3,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { ProductsModule } from '../products/products.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { UsersModule } from '../users/users.module';
+import { InvoicesModule } from '../invoices/invoices.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
@@ -20,7 +21,13 @@ import { OrdersService } from './orders.service';
  * see OrdersService.performCancellation's doc comment.
  */
 @Module({
-  imports: [UsersModule, ProductsModule, UploadsModule, NotificationsModule],
+  imports: [
+    UsersModule,
+    ProductsModule,
+    UploadsModule,
+    NotificationsModule,
+    InvoicesModule,
+  ],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

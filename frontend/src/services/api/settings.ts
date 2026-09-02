@@ -44,9 +44,14 @@ export interface AdminSettingView {
   key: string
   label: string
   description: string
-  kind: 'money' | 'text'
+  kind: 'money' | 'text' | 'boolean' | 'enum' | 'percent'
   value: string
   default: string
+  /** Allowed values for `kind: 'enum'`. */
+  options?: string[]
+  /** True for values that must be supplied by the client/accountant and
+   * ship blank (Phase 13.4) — the admin UI flags these as pending. */
+  pendingClientInput?: boolean
 }
 
 /** GET /admin/settings — admin-role required server-side. Only the

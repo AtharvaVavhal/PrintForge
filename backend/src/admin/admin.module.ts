@@ -5,6 +5,7 @@ import { UsersModule } from '../users/users.module';
 import { ReviewsModule } from '../reviews/reviews.module';
 import { CouponsModule } from '../coupons/coupons.module';
 import { AppSettingModule } from '../app-setting/app-setting.module';
+import { InvoicesModule } from '../invoices/invoices.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -29,6 +30,7 @@ import { AdminService } from './admin.service';
     ReviewsModule,
     CouponsModule,
     AppSettingModule,
+    InvoicesModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

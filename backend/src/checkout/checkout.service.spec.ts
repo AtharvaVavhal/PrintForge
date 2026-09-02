@@ -23,6 +23,7 @@ describe('CheckoutService.toOrderView — shippingFee read-back', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   }
 
@@ -52,6 +53,12 @@ describe('CheckoutService.toOrderView — shippingFee read-back', () => {
       shippingFee: new Prisma.Decimal(values.shippingFee),
       total: new Prisma.Decimal(values.total),
       discountAmount: new Prisma.Decimal(values.discountAmount),
+      taxableAmount: new Prisma.Decimal(values.subtotal).minus(
+        new Prisma.Decimal(values.discountAmount),
+      ),
+      taxAmount: new Prisma.Decimal('0.00'),
+      taxMode: 'INCLUSIVE',
+      taxRateSnapshot: null,
       couponCode: values.couponCode,
       currency: 'INR',
       razorpayOrderId: null,

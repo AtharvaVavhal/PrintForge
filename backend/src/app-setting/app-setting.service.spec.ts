@@ -150,6 +150,110 @@ describe('AppSettingService — configurable settings', () => {
     });
   });
 
+  describe('updateConfigurable — tax settings (Phase 13.4)', () => {
+    it('accepts tax.enabled true/false and normalizes case', async () => {
+      const { service } = buildService();
+      expect(
+        (await service.updateConfigurable('tax.enabled', 'TRUE')).value,
+      ).toBe('true');
+      expect(
+        (await service.updateConfigurable('tax.enabled', 'false')).value,
+      ).toBe('false');
+    });
+
+    it('rejects a non-boolean tax.enabled', async () => {
+      const { service } = buildService();
+      await expect(
+        service.updateConfigurable('tax.enabled', 'yes'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('accepts INCLUSIVE and rejects an unknown pricing mode', async () => {
+      const { service } = buildService();
+      expect(
+        (await service.updateConfigurable('tax.pricingMode', 'INCLUSIVE'))
+          .value,
+      ).toBe('INCLUSIVE');
+      await expect(
+        service.updateConfigurable('tax.pricingMode', 'HYBRID'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('LOCKS tax-EXCLUSIVE pricing — it cannot be set via the admin path (Phase 13.4 hardening)', async () => {
+      const { service, upsert } = buildService();
+      await expect(
+        service.updateConfigurable('tax.pricingMode', 'EXCLUSIVE'),
+      ).rejects.toThrow(/business confirmation/i);
+      expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it('only offers INCLUSIVE as a selectable pricing mode', async () => {
+      const { service } = buildService();
+      const list = await service.listConfigurable();
+      const mode = list.find((s) => s.key === 'tax.pricingMode');
+      expect(mode?.options).toEqual(['INCLUSIVE']);
+    });
+
+    it('accepts a GST rate in 0..100 with 2dp, rejects out-of-range / junk', async () => {
+      const { service } = buildService();
+      expect(
+        (await service.updateConfigurable('tax.ratePercent', '18')).value,
+      ).toBe('18.00');
+      for (const bad of ['-1', '150', 'eighteen', '5.005']) {
+        await expect(
+          service.updateConfigurable('tax.ratePercent', bad),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      }
+    });
+
+    it('surfaces the pending-client-input flag on the tax rate', async () => {
+      const { service } = buildService();
+      const list = await service.listConfigurable();
+      const rate = list.find((s) => s.key === 'tax.ratePercent');
+      expect(rate?.pendingClientInput).toBe(true);
+      expect(rate?.value).toBe('0.00');
+    });
+  });
+
+  describe('updateConfigurable — invoice settings (Phase 13.4)', () => {
+    it('validates the invoice prefix', async () => {
+      const { service } = buildService();
+      expect(
+        (await service.updateConfigurable('invoice.numberPrefix', 'inv/'))
+          .value,
+      ).toBe('INV/');
+      await expect(
+        service.updateConfigurable('invoice.numberPrefix', 'has spaces'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('accepts a blank GSTIN (pending) but rejects a malformed one', async () => {
+      const { service } = buildService();
+      expect(
+        (await service.updateConfigurable('invoice.sellerGstin', '')).value,
+      ).toBe('');
+      expect(
+        (
+          await service.updateConfigurable(
+            'invoice.sellerGstin',
+            '22aaaaa0000a1z5',
+          )
+        ).value,
+      ).toBe('22AAAAA0000A1Z5');
+      await expect(
+        service.updateConfigurable('invoice.sellerGstin', 'NOT-A-GSTIN'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('ships the seller identity fields blank and pending', async () => {
+      const { service } = buildService();
+      const list = await service.listConfigurable();
+      const name = list.find((s) => s.key === 'invoice.sellerLegalName');
+      expect(name?.value).toBe('');
+      expect(name?.pendingClientInput).toBe(true);
+    });
+  });
+
   describe('updateConfigurable — unknown / internal keys', () => {
     it('rejects a key that is not in the definition list', async () => {
       const { service, upsert } = buildService();

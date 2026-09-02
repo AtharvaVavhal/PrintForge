@@ -9,6 +9,7 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { PricingService } from './pricing/pricing.service';
+import { TaxService } from './tax/tax.service';
 
 /**
  * Depends on: cart, products, users, orders, payments. checkout -> payments
@@ -31,7 +32,7 @@ import { PricingService } from './pricing/pricing.service';
     CouponsModule,
   ],
   controllers: [CheckoutController],
-  providers: [CheckoutService, PricingService, IdempotencyService],
+  providers: [CheckoutService, PricingService, IdempotencyService, TaxService],
   exports: [CheckoutService],
 })
 export class CheckoutModule {}

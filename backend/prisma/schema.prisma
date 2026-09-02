@@ -381,6 +381,23 @@ model Order {
   couponCode      String?
   discountAmount  Decimal     @default(0) @db.Decimal(10, 2)
 
+  // ─── Tax snapshot (Phase 13.4) ────────────────────────────────────────
+  // Tax-INCLUSIVE pricing (pricing.service.ts / BLUEPRINT §4): the customer
+  // pays `total`, and `total` is UNCHANGED by any tax configuration.
+  // `taxAmount` is the GST component *extracted from within* the goods
+  // value (subtotal − discountAmount) and stays 0.00 until a
+  // client-confirmed rate is enabled in admin settings. `taxRateSnapshot`
+  // (fractional, e.g. 0.1800 for 18%) and `taxBreakdown` (CGST/SGST/IGST
+  // split — null until place-of-supply rules are confirmed) freeze the
+  // treatment used at checkout so an invoice never re-derives tax from
+  // current config. Invariant (INCLUSIVE): total = taxableAmount +
+  // taxAmount + shippingFee. See checkout.service.ts.
+  taxMode         String      @default("INCLUSIVE")
+  taxableAmount   Decimal     @default(0) @db.Decimal(10, 2)
+  taxAmount       Decimal     @default(0) @db.Decimal(10, 2)
+  taxRateSnapshot Decimal?    @db.Decimal(5, 4)
+  taxBreakdown    Json?
+
   razorpayOrderId String?     @unique
 
   // Immutable shipping snapshot — copied from User at creation time, never a
@@ -409,11 +426,52 @@ model Order {
   // merely referenced it once (PHASE-10-PROPOSAL.md §2.1).
   coupon          Coupon?                 @relation(fields: [couponId], references: [id], onDelete: SetNull)
   couponUsage     CouponUsage?
+  invoice         Invoice?
 
   @@index([userId])
   @@index([status])
   @@index([couponId])
   @@map("orders")
+}
+
+// ─── Invoicing (Phase 13.4) ─────────────────────────────────────────────
+
+// One immutable invoice per order (orderId is @unique → creation is
+// idempotent, no revisions in this phase). Every monetary field is a
+// snapshot copied from the Order's own already-immutable financial columns
+// at issue time; `sellerSnapshot` freezes the mutable admin-settings
+// seller identity (legal name / address / GSTIN / state — empty strings
+// until the client supplies them). Line items are read from the order's
+// immutable OrderItem rows, never re-projected from live Product/Category.
+// invoiceNumber comes from a DEDICATED counter (invoice_number_counter),
+// never the order-number counter; prefix is admin-configurable
+// (invoice.numberPrefix) and its statutory format is pending client
+// confirmation.
+model Invoice {
+  id              String   @id @default(uuid())
+  invoiceNumber   String   @unique
+  orderId         String   @unique
+  issuedAt        DateTime @default(now())
+
+  currency        String
+  subtotal        Decimal  @db.Decimal(10, 2)
+  discountAmount  Decimal  @db.Decimal(10, 2)
+  shippingFee     Decimal  @db.Decimal(10, 2)
+  taxableAmount   Decimal  @db.Decimal(10, 2)
+  taxAmount       Decimal  @db.Decimal(10, 2)
+  grandTotal      Decimal  @db.Decimal(10, 2)
+  taxMode         String
+  taxRateSnapshot Decimal? @db.Decimal(5, 4)
+  taxBreakdown    Json?
+
+  sellerSnapshot  Json
+
+  createdAt       DateTime @default(now())
+
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([issuedAt])
+  @@map("invoices")
 }
 
 // Snapshotted lines — never recomputed retroactively (§13.G).

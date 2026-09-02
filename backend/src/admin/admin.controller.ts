@@ -21,6 +21,7 @@ import { UpdateCouponDto } from '../coupons/dto/update-coupon.dto';
 import { ListAdminCouponsQueryDto } from '../coupons/dto/list-admin-coupons-query.dto';
 import { AppSettingService } from '../app-setting/app-setting.service';
 import { UpdateSettingDto } from '../app-setting/dto/update-setting.dto';
+import { InvoicesService } from '../invoices/invoices.service';
 import { AdminService } from './admin.service';
 import { ListAdminOrdersQueryDto } from './dto/list-admin-orders-query.dto';
 import { ListAdminCustomersQueryDto } from './dto/list-admin-customers-query.dto';
@@ -56,6 +57,7 @@ export class AdminController {
     private readonly reviewsService: ReviewsService,
     private readonly couponsService: CouponsService,
     private readonly appSettingService: AppSettingService,
+    private readonly invoicesService: InvoicesService,
   ) {}
 
   @Get('orders')
@@ -66,6 +68,19 @@ export class AdminController {
   @Get('orders/:id')
   async orderDetail(@Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.adminGetOrderDetail(id);
+  }
+
+  /** Admin view of any order's invoice (idempotent lazy creation for a
+   * paid order). Phase 13.4. */
+  @Get('orders/:id/invoice')
+  async orderInvoice(
+    @CurrentUser() admin: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.invoicesService.getInvoiceForOrder(id, {
+      userId: admin.id,
+      isAdmin: true,
+    });
   }
 
   @Patch('orders/:id/status')

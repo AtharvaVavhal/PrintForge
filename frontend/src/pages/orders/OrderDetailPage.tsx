@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useOrder } from '@/hooks/useOrder'
+import { orderInvoicePath } from '@/constants/routes'
 import { useRetryPayment } from '@/hooks/useRetryPayment'
 import { useRazorpayCheckout } from '@/features/checkout/useRazorpayCheckout'
 import { Alert } from '@/components/ui/Alert'
@@ -13,6 +14,17 @@ import { ORDER_STATUS_LABELS, orderStatusTone } from '@/features/orders/orderSta
 import styles from './OrderDetailPage.module.css'
 
 const RETRYABLE_STATUSES = new Set<OrderStatus>(['PENDING_PAYMENT', 'PAYMENT_FAILED'])
+
+/** Mirrors the backend INVOICEABLE_STATUSES gate — an invoice exists only
+ * once payment has succeeded (Phase 13.4). */
+const INVOICEABLE_STATUSES = new Set<OrderStatus>([
+  'PAID',
+  'CONFIRMED',
+  'IN_PRODUCTION',
+  'SHIPPED',
+  'DELIVERED',
+  'REFUNDED',
+])
 
 /**
  * GET /orders/:id — the destination after checkout's Razorpay flow, and
@@ -134,11 +146,27 @@ export function OrderDetailPage() {
                 <span className={styles.discount}>−{formatPrice(order.discountAmount)}</span>
               </div>
             )}
+            {Number(order.taxAmount) > 0 && (
+              <div className={styles.row}>
+                <span>
+                  GST
+                  {order.taxRatePercent ? ` (${order.taxRatePercent}%)` : ''}
+                  {order.taxMode === 'INCLUSIVE' ? ' — included' : ''}
+                </span>
+                <span>{formatPrice(order.taxAmount)}</span>
+              </div>
+            )}
             <div className={styles.row}>
               <span>Total</span>
               <span className={styles.total}>{formatPrice(order.total)}</span>
             </div>
           </div>
+
+          {INVOICEABLE_STATUSES.has(order.status) && (
+            <p className={styles.invoiceLink}>
+              <Link to={orderInvoicePath(order.id)}>View / print invoice</Link>
+            </p>
+          )}
 
           <div className={styles.summaryBlock}>
             <h2 className={styles.heading}>Shipping to</h2>

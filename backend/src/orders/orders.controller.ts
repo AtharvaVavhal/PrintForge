@@ -10,6 +10,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { OrdersService } from './orders.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 
@@ -22,7 +23,10 @@ import { CancelOrderDto } from './dto/cancel-order.dto';
  */
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly invoicesService: InvoicesService,
+  ) {}
 
   @Get()
   async list(
@@ -38,6 +42,19 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.ordersService.getOrderDetailForUser(user.id, id);
+  }
+
+  /** Owner-only. Lazily creates the invoice on first request for a paid
+   * order, then returns the same one (idempotent). Phase 13.4. */
+  @Get(':id/invoice')
+  async invoice(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.invoicesService.getInvoiceForOrder(id, {
+      userId: user.id,
+      isAdmin: false,
+    });
   }
 
   @Post(':id/cancel')

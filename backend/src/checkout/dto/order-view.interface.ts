@@ -43,6 +43,15 @@ export interface OrderView {
    * null, mirrors the stored orders.discountAmount column's own
    * never-null default (PHASE-10-PROPOSAL.md §2.1/C7). */
   discountAmount: string;
+  /** Tax snapshot (Phase 13.4). `taxAmount` is "0.00" until a
+   * client-confirmed GST rate is enabled in admin settings; with
+   * tax-INCLUSIVE pricing `total` is unchanged either way. `taxRatePercent`
+   * is the human-readable rate (e.g. "18.00") or null when no rate was
+   * applied. */
+  taxableAmount: string;
+  taxAmount: string;
+  taxMode: string;
+  taxRatePercent: string | null;
   /** Denormalized snapshot of the applied coupon's code, null when none
    * was applied. Never a live join back to `coupons` — same reasoning as
    * every other order-display snapshot field. */
@@ -68,6 +77,12 @@ export interface CheckoutPreviewView {
   subtotal: string;
   shippingFee: string;
   discountAmount: string;
+  /** Tax preview (Phase 13.4) — "0.00" until a client-confirmed rate is
+   * enabled; never authoritative, the real split is whatever the checkout
+   * transaction persists. */
+  taxableAmount: string;
+  taxAmount: string;
+  taxMode: string;
   total: string;
   /** Normalized (uppercased) echo of the coupon code that was actually
    * applied — null if none was provided. A provided-but-invalid code

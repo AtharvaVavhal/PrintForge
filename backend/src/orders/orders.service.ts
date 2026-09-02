@@ -534,6 +534,12 @@ export class OrdersService {
       discountAmount: paiseToDecimalString(
         decimalToPaise(order.discountAmount),
       ),
+      taxableAmount: paiseToDecimalString(decimalToPaise(order.taxableAmount)),
+      taxAmount: paiseToDecimalString(decimalToPaise(order.taxAmount)),
+      taxMode: order.taxMode,
+      taxRatePercent: order.taxRateSnapshot
+        ? new Prisma.Decimal(order.taxRateSnapshot).mul(100).toFixed(2)
+        : null,
       couponCode: order.couponCode,
       currency: order.currency,
       itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),

@@ -17,6 +17,8 @@ export const ROUTES = {
   /** react-router pattern for the detail route — build an actual link with
    * orderDetailPath(id) below, not this constant directly. */
   ORDER_DETAIL: '/orders/:id',
+  /** Customer invoice view (print-friendly). Build with orderInvoicePath(id). */
+  ORDER_INVOICE: '/orders/:id/invoice',
   CHECKOUT: '/checkout',
   /** Landed on by AdminRoute when a logged-in non-admin hits an /admin/*
    * route — a distinct "not authorized" outcome, not a redirect to LOGIN
@@ -56,6 +58,10 @@ export function productDetailPath(slug: string): string {
 
 export function orderDetailPath(id: string): string {
   return `/orders/${encodeURIComponent(id)}`
+}
+
+export function orderInvoicePath(id: string): string {
+  return `/orders/${encodeURIComponent(id)}/invoice`
 }
 
 export function adminOrderDetailPath(id: string): string {

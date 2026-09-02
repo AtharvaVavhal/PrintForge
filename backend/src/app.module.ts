@@ -14,6 +14,7 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 
 import { AdminModule } from './admin/admin.module';
 import { AppSettingModule } from './app-setting/app-setting.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { AuthModule } from './auth/auth.module';
 import { CartModule } from './cart/cart.module';
 import { CheckoutModule } from './checkout/checkout.module';
@@ -68,6 +69,7 @@ import { UsersModule } from './users/users.module';
     UploadsModule,
     CouponsModule,
     AppSettingModule,
+    InvoicesModule,
     ProductsModule,
     CartModule,
     OrdersModule,

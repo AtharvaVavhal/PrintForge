@@ -21,6 +21,7 @@ import { CartPage } from '@/pages/cart/CartPage'
 import { AccountPage } from '@/pages/account/AccountPage'
 import { OrdersPage } from '@/pages/orders/OrdersPage'
 import { OrderDetailPage } from '@/pages/orders/OrderDetailPage'
+import { InvoicePage } from '@/pages/orders/InvoicePage'
 import { CheckoutPage } from '@/pages/checkout/CheckoutPage'
 import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage'
 import { AdminOrdersPage } from '@/pages/admin/AdminOrdersPage'
@@ -71,6 +72,7 @@ function App() {
                 <Route path={ROUTES.ACCOUNT} element={<AccountPage />} />
                 <Route path={ROUTES.ORDERS} element={<OrdersPage />} />
                 <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
+                <Route path={ROUTES.ORDER_INVOICE} element={<InvoicePage />} />
                 <Route path={ROUTES.CHECKOUT} element={<CheckoutPage />} />
               </Route>
 

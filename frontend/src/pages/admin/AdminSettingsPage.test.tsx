@@ -91,7 +91,7 @@ describe('AdminSettingsPage', () => {
     await waitFor(() => expect(mock.history.patch).toHaveLength(1))
     const body = JSON.parse(mock.history.patch[0].data as string) as { value: string }
     expect(body).toEqual({ value: '49' })
-    expect(await screen.findByText(/shipping fee is now ₹49\.00/i)).toBeInTheDocument()
+    expect(await screen.findByText(/the value is now .49\.00./i)).toBeInTheDocument()
   })
 
   it('surfaces a server validation error without claiming success', async () => {

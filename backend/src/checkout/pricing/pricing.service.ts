@@ -38,13 +38,28 @@ export class PricingService {
     return lines.reduce((sum, line) => sum + line.lineTotalPaise, 0n);
   }
 
-  /** total = subtotal − discount + shippingFee (§11); discount defaults to 0 (no coupons in MVP). */
+  /**
+   * total = subtotal − discount + shippingFee + taxToAdd.
+   *
+   * `taxToAddPaise` is 0 for tax-INCLUSIVE pricing (the default — the GST
+   * is already inside `subtotal`, see TaxService) and for disabled tax, so
+   * `total` and the Razorpay amount are unchanged. It is only non-zero
+   * when an admin has explicitly switched to tax-EXCLUSIVE mode with a
+   * confirmed rate (Phase 13.4).
+   */
   computeOrderTotal(params: {
     subtotalPaise: bigint;
     shippingFeePaise: bigint;
     discountPaise?: bigint;
+    taxToAddPaise?: bigint;
   }): bigint {
     const discountPaise = params.discountPaise ?? 0n;
-    return params.subtotalPaise - discountPaise + params.shippingFeePaise;
+    const taxToAddPaise = params.taxToAddPaise ?? 0n;
+    return (
+      params.subtotalPaise -
+      discountPaise +
+      params.shippingFeePaise +
+      taxToAddPaise
+    );
   }
 }

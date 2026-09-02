@@ -92,6 +92,12 @@ export interface OrderDetailView extends OrderListItemView {
   /** Major-unit decimal string, "0.00" when no coupon was applied — never
    * null. */
   discountAmount: string
+  /** Tax snapshot (Phase 13.4). "0.00" tax until a client-confirmed GST
+   * rate is enabled; total unchanged under tax-inclusive pricing. */
+  taxableAmount: string
+  taxAmount: string
+  taxMode: string
+  taxRatePercent: string | null
   /** Denormalized snapshot of the applied coupon's code, null when none
    * was applied — never a live join back to coupons. */
   couponCode: string | null

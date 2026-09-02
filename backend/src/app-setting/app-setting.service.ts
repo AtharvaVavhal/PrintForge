@@ -14,6 +14,8 @@ export interface AdminSettingView {
   kind: AdminSettingKind;
   value: string;
   default: string;
+  options?: readonly string[];
+  pendingClientInput?: boolean;
 }
 
 @Injectable()
@@ -54,6 +56,8 @@ export class AppSettingService {
       kind: definition.kind,
       value: stored[definition.key] ?? definition.default,
       default: definition.default,
+      options: definition.options,
+      pendingClientInput: definition.pendingClientInput,
     }));
   }
 
@@ -87,6 +91,8 @@ export class AppSettingService {
       kind: definition.kind,
       value: result.value,
       default: definition.default,
+      options: definition.options,
+      pendingClientInput: definition.pendingClientInput,
     };
   }
 }

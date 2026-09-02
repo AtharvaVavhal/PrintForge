@@ -37,4 +37,23 @@ describe('PricingService', () => {
     });
     expect(total).toBe(1000n);
   });
+
+  it('leaves total unchanged when taxToAdd is 0 (tax-inclusive / disabled — Phase 13.4)', () => {
+    const total = service.computeOrderTotal({
+      subtotalPaise: 69500n,
+      shippingFeePaise: 5000n,
+      discountPaise: 1000n,
+      taxToAddPaise: 0n,
+    });
+    expect(total).toBe(73500n);
+  });
+
+  it('adds taxToAdd on top for tax-exclusive pricing (Phase 13.4)', () => {
+    const total = service.computeOrderTotal({
+      subtotalPaise: 10000n,
+      shippingFeePaise: 0n,
+      taxToAddPaise: 1800n,
+    });
+    expect(total).toBe(11800n);
+  });
 });

@@ -161,3 +161,8 @@
   height: 20rem;
   width: 100%;
 }
+
+.invoiceLink {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+}

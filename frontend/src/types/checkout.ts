@@ -36,6 +36,14 @@ export interface CheckoutOrderView {
    * null, mirrors the stored orders.discountAmount column's own
    * never-null default. */
   discountAmount: string
+  /** Tax snapshot (Phase 13.4). `taxAmount` is "0.00" until a
+   * client-confirmed GST rate is enabled; with tax-inclusive pricing the
+   * customer total is unchanged. `taxRatePercent` is the human-readable
+   * rate (e.g. "18.00") or null. */
+  taxableAmount: string
+  taxAmount: string
+  taxMode: string
+  taxRatePercent: string | null
   /** Denormalized snapshot of the applied coupon's code, null when none
    * was applied. */
   couponCode: string | null

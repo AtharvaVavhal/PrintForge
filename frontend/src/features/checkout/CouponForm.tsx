@@ -87,6 +87,15 @@ export function CouponForm({ appliedPreview, onApplied }: CouponFormProps) {
               <dd className={styles.discount}>−{formatPrice(appliedPreview.discountAmount)}</dd>
             </div>
           )}
+          {Number(appliedPreview.taxAmount) > 0 && (
+            <div className={styles.breakdownRow}>
+              <dt>
+                GST
+                {appliedPreview.taxMode === 'INCLUSIVE' ? ' (included)' : ''}
+              </dt>
+              <dd>{formatPrice(appliedPreview.taxAmount)}</dd>
+            </div>
+          )}
           <div className={styles.breakdownRow}>
             <dt>Total</dt>
             <dd className={styles.total}>{formatPrice(appliedPreview.total)}</dd>
