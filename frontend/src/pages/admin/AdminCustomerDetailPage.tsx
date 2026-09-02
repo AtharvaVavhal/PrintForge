@@ -1,94 +1,167 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAdminCustomer } from '@/hooks/useAdminCustomer'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { Alert } from '@/components/ui/Alert'
-import { Skeleton } from '@/components/ui/Skeleton'
+import { AdminPage } from '@/components/admin/AdminPage'
+import { AdminCard } from '@/components/admin/AdminCard'
+import { AdminTable } from '@/components/admin/AdminTable'
+import { AdminBadge } from '@/components/admin/AdminBadge'
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState'
+import { AdminPageSkeleton } from '@/components/admin/AdminPageSkeleton'
+import { OrderStatusBadge } from '@/features/orders/OrderStatusBadge'
 import { formatPrice } from '@/utils/formatPrice'
-import { AdminOrderRow } from '@/features/admin/AdminOrderRow'
+import { formatDate } from '@/utils/formatDate'
+import { adminOrderDetailPath, ROUTES } from '@/constants/routes'
 import styles from './AdminCustomerDetailPage.module.css'
 
-/** Behind AdminRoute (App.tsx). GET /admin/customers/:id — read-only, no
- * edit form anywhere on this page (the backend exposes no PATCH for
- * customer records, §19). */
+function StatusBadge({ isActive }: { isActive: boolean }) {
+  return isActive ? (
+    <AdminBadge variant="success">Active</AdminBadge>
+  ) : (
+    <AdminBadge variant="neutral">Inactive</AdminBadge>
+  )
+}
+
+/**
+ * Behind AdminRoute (App.tsx). GET /admin/customers/:id — read-only. The
+ * backend exposes no PATCH for customer records (§19), so there is no
+ * edit form or lifecycle action anywhere on this page. `recentOrders` is
+ * a fixed slice (the 5 newest, server-side) with no pagination meta, so
+ * there is no AdminPagination here — "View all orders" links through to
+ * the orders list filtered by this customer instead.
+ */
 export function AdminCustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: customer, isPending, isError, error } = useAdminCustomer(id!)
 
   if (isPending) {
-    return (
-      <section className={styles.wrap}>
-        <h1>Customer</h1>
-        <Skeleton className={styles.skeletonBlock} />
-      </section>
-    )
+    return <AdminPageSkeleton rows={4} />
   }
 
   if (isError) {
     return (
-      <section className={styles.wrap}>
-        <h1>Customer</h1>
+      <AdminPage
+        title="Customer"
+        breadcrumbs={[{ label: 'Customers', to: ROUTES.ADMIN_CUSTOMERS }, { label: 'Customer' }]}
+      >
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
-      </section>
+      </AdminPage>
     )
   }
 
+  const hasAddress = Boolean(customer.addressLine1)
+  const cityLine = [customer.city, customer.state, customer.postalCode].filter(Boolean).join(', ')
+
   return (
-    <section className={styles.wrap}>
-      <div className={styles.header}>
-        <h1>{customer.email}</h1>
-        {!customer.isActive && <span className={styles.inactiveFlag}>Inactive</span>}
-      </div>
-
+    <AdminPage
+      breadcrumbs={[
+        { label: 'Customers', to: ROUTES.ADMIN_CUSTOMERS },
+        { label: customer.email },
+      ]}
+      title={customer.email}
+      description={`Joined ${formatDate(customer.createdAt)}`}
+      actions={<StatusBadge isActive={customer.isActive} />}
+    >
       <div className={styles.statGrid}>
-        <div className={styles.statCard}>
-          <span className={styles.statLabel}>Orders</span>
-          <span className={styles.statValue}>{customer.orderCount}</span>
-        </div>
-        <div className={styles.statCard}>
-          <span className={styles.statLabel}>Total spend</span>
-          <span className={styles.statValue}>{formatPrice(customer.totalSpend)}</span>
-        </div>
+        <AdminCard as="section" title="Orders">
+          <p className={styles.statValue}>{customer.orderCount}</p>
+        </AdminCard>
+        <AdminCard as="section" title="Total spend">
+          <p className={styles.statValue}>{formatPrice(customer.totalSpend)}</p>
+        </AdminCard>
       </div>
 
-      <div className={styles.summaryBlock}>
-        <h2 className={styles.heading}>Address on file</h2>
-        {customer.addressLine1 ? (
-          <p className={styles.address}>
-            {customer.addressLine1}
-            {customer.addressLine2 && (
-              <>
-                <br />
-                {customer.addressLine2}
-              </>
-            )}
-            <br />
-            {customer.city}, {customer.state} {customer.postalCode}
-            <br />
-            {customer.country}
-            {customer.phone && (
-              <>
-                <br />
-                {customer.phone}
-              </>
-            )}
-          </p>
-        ) : (
-          <p className={styles.meta}>No address on file.</p>
-        )}
-      </div>
-
-      <div className={styles.section}>
-        <h2 className={styles.sectionHeading}>Recent orders</h2>
-        {customer.recentOrders.length === 0 ? (
-          <p className={styles.meta}>No orders yet.</p>
-        ) : (
-          <div className={styles.list}>
-            {customer.recentOrders.map((order) => (
-              <AdminOrderRow key={order.id} order={order} />
-            ))}
+      <AdminCard as="section" title="Customer information">
+        <dl className={styles.info}>
+          <div className={styles.infoRow}>
+            <dt>Email</dt>
+            <dd>{customer.email}</dd>
           </div>
+          <div className={styles.infoRow}>
+            <dt>Phone</dt>
+            <dd>{customer.phone ?? '—'}</dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Joined</dt>
+            <dd>{formatDate(customer.createdAt)}</dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Account status</dt>
+            <dd>
+              <StatusBadge isActive={customer.isActive} />
+            </dd>
+          </div>
+          <div className={styles.infoRow}>
+            <dt>Address</dt>
+            <dd>
+              {hasAddress ? (
+                <address className={styles.address}>
+                  <span>{customer.addressLine1}</span>
+                  {customer.addressLine2 && <span>{customer.addressLine2}</span>}
+                  {cityLine && <span>{cityLine}</span>}
+                  {customer.country && <span>{customer.country}</span>}
+                </address>
+              ) : (
+                <span className={styles.muted}>No address on file.</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </AdminCard>
+
+      <AdminCard
+        as="section"
+        flush
+        title="Recent orders"
+        actions={
+          <Link to={`${ROUTES.ADMIN_ORDERS}?userId=${customer.id}`} className={styles.headerLink}>
+            View all orders
+          </Link>
+        }
+      >
+        {customer.recentOrders.length === 0 ? (
+          <div className={styles.emptyPad}>
+            <AdminEmptyState
+              title="No orders yet"
+              description="This customer has not placed any orders."
+            />
+          </div>
+        ) : (
+          <AdminTable caption="Recent orders">
+            <AdminTable.Head>
+              <AdminTable.Row>
+                <AdminTable.HeaderCell>Order</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Date</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell align="center">Items</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell>Status</AdminTable.HeaderCell>
+                <AdminTable.HeaderCell align="end">Total</AdminTable.HeaderCell>
+              </AdminTable.Row>
+            </AdminTable.Head>
+            <AdminTable.Body>
+              {customer.recentOrders.map((order) => (
+                <AdminTable.Row key={order.id}>
+                  <AdminTable.Cell>
+                    <Link to={adminOrderDetailPath(order.id)} className={styles.orderLink}>
+                      {order.orderNumber}
+                    </Link>
+                  </AdminTable.Cell>
+                  <AdminTable.Cell>{formatDate(order.createdAt)}</AdminTable.Cell>
+                  <AdminTable.Cell align="center">{order.itemCount}</AdminTable.Cell>
+                  <AdminTable.Cell>
+                    <span className={styles.statusCell}>
+                      <OrderStatusBadge status={order.status} />
+                      {order.needsManualRefund && (
+                        <AdminBadge variant="warning">Refund pending</AdminBadge>
+                      )}
+                    </span>
+                  </AdminTable.Cell>
+                  <AdminTable.Cell align="end">{formatPrice(order.total)}</AdminTable.Cell>
+                </AdminTable.Row>
+              ))}
+            </AdminTable.Body>
+          </AdminTable>
         )}
-      </div>
-    </section>
+      </AdminCard>
+    </AdminPage>
   )
 }
