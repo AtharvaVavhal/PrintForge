@@ -5,6 +5,7 @@ import { AuthProvider } from '@/features/auth/AuthProvider'
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute'
 import { AdminRoute } from '@/features/auth/AdminRoute'
 import { RootLayout } from '@/layouts/RootLayout'
+import { AdminLayout } from '@/layouts/AdminLayout'
 import { HomePage } from '@/pages/home/HomePage'
 import { AboutPage } from '@/pages/static/AboutPage'
 import { ContactPage } from '@/pages/static/ContactPage'
@@ -38,11 +39,13 @@ import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
 import { ROUTES } from '@/constants/routes'
 
 /**
- * Router shell (§18). Public and protected routes are structurally
- * separate here: public routes sit directly under RootLayout, protected
- * routes are grouped under a second nested <Route> wrapped in
- * <ProtectedRoute> (a layout-route guard) — so which routes require auth
- * is visible from the tree shape itself, not from a per-page check.
+ * Router shell (§18). Route grouping is visible from the tree shape:
+ *   - public + protected storefront routes sit under <RootLayout> (the
+ *     storefront chrome), protected ones inside a <ProtectedRoute> guard.
+ *   - admin routes sit under <AdminRoute> (auth + role guard, unchanged)
+ *     and then <AdminLayout> (the dedicated admin shell) — deliberately
+ *     NOT under <RootLayout>, so admin pages never get the storefront
+ *     header / search / mega-menu / cart / footer.
  */
 function App() {
   return (
@@ -76,9 +79,15 @@ function App() {
                 <Route path={ROUTES.CHECKOUT} element={<CheckoutPage />} />
               </Route>
 
-              {/* Admin routes — authentication AND role === 'ADMIN'
-                  (AdminRoute), a strict superset of ProtectedRoute's check. */}
-              <Route element={<AdminRoute />}>
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+
+            {/* Admin — authentication AND role === 'ADMIN' (AdminRoute, a
+                strict superset of ProtectedRoute's check), then the
+                dedicated admin shell (AdminLayout). Same routes as before,
+                just relocated out of the storefront RootLayout. */}
+            <Route element={<AdminRoute />}>
+              <Route element={<AdminLayout />}>
                 <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboardPage />} />
                 <Route path={ROUTES.ADMIN_ORDERS} element={<AdminOrdersPage />} />
                 <Route path={ROUTES.ADMIN_ORDER_DETAIL} element={<AdminOrderDetailPage />} />
@@ -90,8 +99,6 @@ function App() {
                 <Route path={ROUTES.ADMIN_COUPONS} element={<AdminCouponsPage />} />
                 <Route path={ROUTES.ADMIN_SETTINGS} element={<AdminSettingsPage />} />
               </Route>
-
-              <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
