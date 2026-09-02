@@ -15,6 +15,8 @@ import { ReviewForm } from './ReviewForm'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { Stars } from '@/components/ui/Stars'
+import { Pagination } from '@/components/ui/Pagination'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { formatDate } from '@/utils/formatDate'
 import { ROUTES } from '@/constants/routes'
@@ -26,20 +28,6 @@ interface ReviewListProps {
 }
 
 const PAGE_SIZE = 10
-
-const STAR_COUNT = 5
-
-function ReviewStars({ rating }: { rating: number }) {
-  return (
-    <span className={styles.itemStars} aria-label={`${rating} out of 5 stars`}>
-      {Array.from({ length: STAR_COUNT }, (_, i) => (
-        <span key={i} className={i < rating ? styles.starFilled : styles.starEmpty} aria-hidden="true">
-          ★
-        </span>
-      ))}
-    </span>
-  )
-}
 
 /**
  * Paginated review list + the write/edit/delete surface for the current
@@ -136,7 +124,10 @@ export function ReviewList({ productId }: ReviewListProps) {
             return (
               <li key={review.id} className={styles.item}>
                 <div className={styles.itemHeader}>
-                  <ReviewStars rating={review.rating} />
+                  <Stars
+                    value={review.rating}
+                    aria-label={`${review.rating} out of 5 stars`}
+                  />
                   <span className={styles.author}>
                     Verified buyer{isOwn && <span className={styles.youTag}> (You)</span>}
                   </span>
@@ -188,22 +179,14 @@ export function ReviewList({ productId }: ReviewListProps) {
         </ul>
       )}
 
-      {meta && meta.totalPages > 1 && (
-        <div className={styles.pagination}>
-          <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Previous
-          </Button>
-          <span className={styles.pageIndicator}>
-            Page {meta.page} of {meta.totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            disabled={page >= meta.totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
+      {meta && (
+        <Pagination
+          page={meta.page}
+          totalPages={meta.totalPages}
+          onPageChange={setPage}
+          label="Reviews pagination"
+          scrollToTop={false}
+        />
       )}
 
       {!ownReview && !isWriting && (

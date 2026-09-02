@@ -43,6 +43,11 @@
   border-color: var(--color-accent);
 }
 
+.option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .optionSelected {
   border-color: var(--color-accent);
   background: var(--color-accent);

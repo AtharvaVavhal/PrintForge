@@ -1,0 +1,19 @@
+.stars {
+  display: inline-flex;
+  letter-spacing: 0.05em;
+  font-size: 0.9375rem;
+  line-height: 1;
+}
+
+.compact {
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
+.filled {
+  color: var(--color-accent);
+}
+
+.empty {
+  color: var(--color-border);
+}

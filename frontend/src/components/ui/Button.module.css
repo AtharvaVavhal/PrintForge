@@ -17,9 +17,38 @@
     opacity var(--transition-base) ease;
 }
 
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* Loading keeps the label (and therefore the width) — only the spinner is
+ * added, so sibling layout doesn't shift. */
+.label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.spinner {
+  flex: 0 0 auto;
+  animation: button-spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.6s;
+  }
+}
+
+@keyframes button-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .primary {

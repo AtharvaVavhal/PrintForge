@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { X, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { Button } from '@/components/ui/Button'
 import { FilterSidebar } from './FilterSidebar'
 import styles from './MobileFilterDrawer.module.css'
 
@@ -66,13 +67,21 @@ export function MobileFilterDrawer({
           </button>
         </div>
         <div className={styles.content}>
+          {/* No onFiltersChange: changing a filter updates the results
+              behind the drawer but never closes it (UX-11). The customer
+              closes it deliberately — via "Show results", the X, Escape,
+              or the overlay. */}
           <FilterSidebar
             activeCategoryId={activeCategoryId}
             hasActiveFilters={hasActiveFilters}
             onClearAll={onClearAll}
-            onFiltersChange={onClose}
             headingId="mobile-filter-sidebar-title"
           />
+        </div>
+        <div className={styles.footer}>
+          <Button onClick={onClose} className={styles.showResults}>
+            Show results
+          </Button>
         </div>
       </aside>
     </>

@@ -40,28 +40,6 @@
   color: var(--color-text-muted);
 }
 
-.statusBadge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-md);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  background: var(--color-surface);
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-.statusBadge[data-tone='success'] {
-  background: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.statusBadge[data-tone='error'] {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
-}
-
 .retryBlock {
   display: flex;
   flex-direction: column;

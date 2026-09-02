@@ -28,6 +28,13 @@ export function CurrencySelector() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // A disclosure control that opens to reveal its one already-selected
+  // option is pure clutter — render nothing until a second currency
+  // genuinely exists (UX-20). Pricing is unaffected either way.
+  if (CURRENCIES.length <= 1) {
+    return null;
+  }
+
   return (
     <div className={styles.wrapper} ref={dropdownRef}>
       <button

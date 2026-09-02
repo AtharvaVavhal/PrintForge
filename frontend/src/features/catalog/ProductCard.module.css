@@ -12,7 +12,7 @@
 }
 
 .card:hover,
-.card:focus-within {
+.card:has(:focus-visible) {
   box-shadow: var(--shadow-md);
   border-color: var(--color-accent);
 }
@@ -62,7 +62,7 @@
 }
 
 .nameLink:hover .name,
-.nameLink:focus .name {
+.nameLink:focus-visible .name {
   color: var(--color-accent);
 }
 

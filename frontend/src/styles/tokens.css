@@ -58,6 +58,11 @@
   --shadow-md: 0 6px 20px rgba(32, 29, 27, 0.12);
   --shadow-lg: 0 16px 40px rgba(32, 29, 27, 0.16);
 
+  /* One keyboard-focus ring for every interactive control — pair with
+   * `outline: none` and only ever under :focus-visible (never :focus), so
+   * a mouse/touch press never shows it. */
+  --focus-ring: 0 0 0 3px var(--color-accent-ring);
+
   color-scheme: light;
 
   /* Font weights */

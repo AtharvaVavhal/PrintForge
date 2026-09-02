@@ -5,8 +5,8 @@ import { useCategoryTree } from '@/hooks/useCategoryTree'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
 import { Breadcrumbs, type Crumb } from '@/components/ui/Breadcrumbs'
+import { Pagination } from '@/components/ui/Pagination'
 import { FilterSidebar } from '@/components/layout/FilterSidebar'
 import { FilterTrigger, MobileFilterDrawer } from '@/components/layout/MobileFilterDrawer'
 import { ActiveFilterChips } from '@/features/catalog/ActiveFilterChips'
@@ -206,27 +206,12 @@ export function ProductListPage() {
                 ))}
               </div>
 
-              {productsQuery.data.meta.totalPages > 1 && (
-                <div className={styles.pagination}>
-                  <Button
-                    variant="secondary"
-                    disabled={page <= 1}
-                    onClick={() => goToPage(page - 1)}
-                  >
-                    Previous
-                  </Button>
-                  <span className={styles.pageIndicator}>
-                    Page {productsQuery.data.meta.page} of {productsQuery.data.meta.totalPages}
-                  </span>
-                  <Button
-                    variant="secondary"
-                    disabled={page >= productsQuery.data.meta.totalPages}
-                    onClick={() => goToPage(page + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
+              <Pagination
+                page={productsQuery.data.meta.page}
+                totalPages={productsQuery.data.meta.totalPages}
+                onPageChange={goToPage}
+                label="Products pagination"
+              />
             </>
           )}
         </div>

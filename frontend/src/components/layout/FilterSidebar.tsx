@@ -1,14 +1,18 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { TextField } from '@/components/ui/TextField'
+import { Stars } from '@/components/ui/Stars'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import type { FilterState } from '@/types/catalog'
 import { RATING_OPTIONS, SORT_OPTIONS } from '@/types/catalog'
 import { findCategoryPath } from '@/features/catalog/categoryTree'
 import { cn } from '@/utils/cn'
 import styles from './FilterSidebar.module.css'
+
+const PRICE_DEBOUNCE_MS = 400
 
 interface FilterSidebarProps {
   activeCategoryId?: string
@@ -70,32 +74,42 @@ export function FilterSidebar({
     patchSearchParams({ categoryId })
   }
 
-  function handleMinPriceChange(value: string) {
-    const nextMin = value ? Number(value) : undefined
-    if (
-      nextMin !== undefined &&
-      currentFilters.maxPrice !== undefined &&
-      nextMin > currentFilters.maxPrice
-    ) {
-      patchSearchParams({ minPrice: nextMin, maxPrice: nextMin })
-      return
-    }
-
-    patchSearchParams({ minPrice: nextMin })
+  // Price inputs are typed into a local draft for instant feedback; the URL
+  // (and therefore the product refetch + history entry) is only updated
+  // once typing pauses, or immediately on blur (UX-10). The draft re-syncs
+  // to the URL when it changes from elsewhere (Clear all, a removed chip) —
+  // done as a render-time reconcile, the React-recommended alternative to a
+  // sync effect.
+  const urlMinPrice = searchParams.get('minPrice') ?? ''
+  const urlMaxPrice = searchParams.get('maxPrice') ?? ''
+  const [priceDraft, setPriceDraft] = useState({ min: urlMinPrice, max: urlMaxPrice })
+  const [syncedUrl, setSyncedUrl] = useState({ min: urlMinPrice, max: urlMaxPrice })
+  if (syncedUrl.min !== urlMinPrice || syncedUrl.max !== urlMaxPrice) {
+    setSyncedUrl({ min: urlMinPrice, max: urlMaxPrice })
+    setPriceDraft({ min: urlMinPrice, max: urlMaxPrice })
   }
 
-  function handleMaxPriceChange(value: string) {
-    const nextMax = value ? Number(value) : undefined
-    if (
-      nextMax !== undefined &&
-      currentFilters.minPrice !== undefined &&
-      nextMax < currentFilters.minPrice
-    ) {
-      patchSearchParams({ minPrice: nextMax, maxPrice: nextMax })
-      return
-    }
+  const [applyPrice, priceControls] = useDebouncedCallback(
+    (min: string, max: string) => {
+      const nextMin = min ? Number(min) : undefined
+      const nextMax = max ? Number(max) : undefined
+      const updates: Record<string, string | number | null | undefined> = {
+        minPrice: nextMin,
+        maxPrice: nextMax,
+      }
+      // Keep min <= max (unchanged behaviour, just applied once on commit).
+      if (nextMin !== undefined && nextMax !== undefined && nextMin > nextMax) {
+        updates.maxPrice = nextMin
+      }
+      patchSearchParams(updates)
+    },
+    PRICE_DEBOUNCE_MS,
+  )
 
-    patchSearchParams({ maxPrice: nextMax })
+  function handlePriceDraftChange(field: 'min' | 'max', value: string) {
+    const next = { ...priceDraft, [field]: value }
+    setPriceDraft(next)
+    applyPrice(next.min, next.max)
   }
 
   function handleRatingChange(rating: number) {
@@ -207,8 +221,9 @@ export function FilterSidebar({
               label="Min price"
               type="number"
               name="minPrice"
-              value={currentFilters.minPrice ?? ''}
-              onChange={(event) => handleMinPriceChange(event.target.value)}
+              value={priceDraft.min}
+              onChange={(event) => handlePriceDraftChange('min', event.target.value)}
+              onBlur={() => priceControls.flush()}
               placeholder="0"
               min="0"
               step="1"
@@ -218,8 +233,9 @@ export function FilterSidebar({
               label="Max price"
               type="number"
               name="maxPrice"
-              value={currentFilters.maxPrice ?? ''}
-              onChange={(event) => handleMaxPriceChange(event.target.value)}
+              value={priceDraft.max}
+              onChange={(event) => handlePriceDraftChange('max', event.target.value)}
+              onBlur={() => priceControls.flush()}
               placeholder="Any"
               min="0"
               step="1"
@@ -247,10 +263,7 @@ export function FilterSidebar({
                   onChange={() => handleRatingChange(rating)}
                   className={styles.ratingInput}
                 />
-                <span className={styles.ratingStars} aria-hidden="true">
-                  {'★'.repeat(rating)}
-                  {'☆'.repeat(5 - rating)}
-                </span>
+                <Stars value={rating} className={styles.ratingStars} />
                 <span className={styles.ratingText}>{rating}+ stars</span>
               </label>
             ))}

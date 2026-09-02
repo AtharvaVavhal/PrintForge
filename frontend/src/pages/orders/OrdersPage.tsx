@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useOrders } from '@/hooks/useOrders'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
+import { Pagination } from '@/components/ui/Pagination'
 import { EmptyOrders } from '@/features/orders/EmptyOrders'
 import { OrderListRow } from '@/features/orders/OrderListRow'
 import { OrderListSkeleton } from '@/features/orders/OrderListSkeleton'
@@ -54,23 +54,12 @@ export function OrdersPage() {
             ))}
           </div>
 
-          {ordersQuery.data.meta.totalPages > 1 && (
-            <div className={styles.pagination}>
-              <Button variant="secondary" disabled={page <= 1} onClick={() => goToPage(page - 1)}>
-                Previous
-              </Button>
-              <span className={styles.pageIndicator}>
-                Page {ordersQuery.data.meta.page} of {ordersQuery.data.meta.totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                disabled={page >= ordersQuery.data.meta.totalPages}
-                onClick={() => goToPage(page + 1)}
-              >
-                Next
-              </Button>
-            </div>
-          )}
+          <Pagination
+            page={ordersQuery.data.meta.page}
+            totalPages={ordersQuery.data.meta.totalPages}
+            onPageChange={goToPage}
+            label="Orders pagination"
+          />
         </>
       )}
     </section>

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes } from 'react'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import styles from './Button.module.css'
 
@@ -7,6 +8,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean
 }
 
+/**
+ * `isLoading` keeps the button's own label visible and adds a spinner
+ * beside it (UX-38) — the label stays meaningful ("Add to cart" still
+ * reads as "Add to cart"), the width doesn't jump, and `aria-busy` +
+ * `disabled` still block a second submission.
+ */
 export function Button({
   variant = 'primary',
   isLoading = false,
@@ -18,12 +25,13 @@ export function Button({
   return (
     <button
       type="button"
-      className={cn(styles.button, styles[variant], className)}
+      className={cn(styles.button, styles[variant], isLoading && styles.loading, className)}
       disabled={disabled || isLoading}
-      aria-busy={isLoading}
+      aria-busy={isLoading || undefined}
       {...rest}
     >
-      {isLoading ? 'Please wait…' : children}
+      {isLoading && <Loader2 size={16} aria-hidden="true" className={styles.spinner} />}
+      <span className={styles.label}>{children}</span>
     </button>
   )
 }

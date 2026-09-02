@@ -169,4 +169,32 @@ describe('ProductListPage', () => {
       expect(mock.history.get.at(-1)?.params).toMatchObject({ categoryId: 'cat-2' })
     })
   })
+
+  it('debounces the price filter — a keystroke does not refetch, blur commits it (UX-10)', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/categories/tree').reply(200, CATEGORY_TREE_RESPONSE)
+    mock.onGet('/products').reply(200, productsResponse([SAMPLE_PRODUCT]))
+
+    renderWithProviders(<ProductListPage />)
+    await screen.findByText('Ceramic Mug')
+
+    const priceRequests = () =>
+      mock.history.get.filter(
+        (r) => r.url === '/products' && (r.params as Record<string, unknown>)?.minPrice !== undefined,
+      )
+
+    const minPrice = screen.getByLabelText('Min price')
+    await user.type(minPrice, '150')
+
+    // Typing alone must not have fired a refetch with the new bound.
+    expect(priceRequests()).toHaveLength(0)
+
+    // Blurring the field flushes the pending value immediately.
+    await user.tab()
+    await waitFor(() => {
+      expect(mock.history.get.at(-1)?.params).toMatchObject({ minPrice: 150 })
+    })
+    // Still just one request for the whole "150" entry, not one per keystroke.
+    expect(priceRequests()).toHaveLength(1)
+  })
 })

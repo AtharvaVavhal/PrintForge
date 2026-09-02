@@ -7,6 +7,20 @@
   width: fit-content;
 }
 
+/* The ring lives on the (clipping) wrapper so `overflow: hidden` can't
+ * eat it; :has(:focus-visible) keeps it keyboard-only. The inner controls
+ * drop their own default outline so the wrapper ring is the single
+ * keyboard indicator (no doubled outline + ring). */
+.wrap:has(:focus-visible) {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.step:focus-visible,
+.input:focus-visible {
+  outline: none;
+}
+
 .step {
   width: 2.25rem;
   border: none;

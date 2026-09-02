@@ -13,13 +13,42 @@ interface ColorSelectFieldProps {
   error?: string
 }
 
+/** Common print/apparel colour names → a swatch fill. A name that isn't
+ * here simply renders as a text-only option (no guessed colour). */
+const SWATCH_COLORS: Record<string, string> = {
+  white: '#ffffff',
+  black: '#1a1a1a',
+  red: '#d8452c',
+  blue: '#2563eb',
+  navy: '#1e3a5f',
+  green: '#16a34a',
+  yellow: '#facc15',
+  orange: '#f97316',
+  purple: '#7c3aed',
+  pink: '#ec4899',
+  grey: '#9ca3af',
+  gray: '#9ca3af',
+  brown: '#92400e',
+  beige: '#e8d9c0',
+  cream: '#fdf6e3',
+  maroon: '#7f1d1d',
+  gold: '#d4af37',
+  silver: '#c0c0c0',
+  teal: '#0d9488',
+}
+
+function swatchFor(option: string): string | undefined {
+  return SWATCH_COLORS[option.trim().toLowerCase()]
+}
+
 /**
  * Renders CustomizationField.constraints.options (e.g. ["White", "Black",
- * "Red"] — see prisma/seed-production.ts) as a set of selectable swatches.
- * The submitted value is the option's own label string, exactly what
- * customization-validation.util.ts checks
- * (constraints.options.includes(textValue)) — not an index or a hex
- * code, since neither the schema nor any seeded data defines one.
+ * "Red"] — see prisma/seed-production.ts) as selectable options. When an
+ * option name is a recognised colour it gets a colour swatch next to the
+ * label (UX-39); the label text stays for the accessible name and for
+ * names with no swatch. The submitted value is the option's own label
+ * string, exactly what customization-validation.util.ts checks — not an
+ * index or a hex code.
  */
 export function ColorSelectField({ field, value, onChange, error }: ColorSelectFieldProps) {
   const constraints = (field.constraints ?? {}) as FieldConstraints
@@ -34,18 +63,28 @@ export function ColorSelectField({ field, value, onChange, error }: ColorSelectF
       {field.helpText && <p className={styles.helpText}>{field.helpText}</p>}
 
       <div className={styles.options} role="radiogroup" aria-label={field.label}>
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            role="radio"
-            aria-checked={value === option}
-            className={cn(styles.option, value === option && styles.optionSelected)}
-            onClick={() => onChange(option)}
-          >
-            {option}
-          </button>
-        ))}
+        {options.map((option) => {
+          const swatch = swatchFor(option)
+          return (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={value === option}
+              className={cn(styles.option, value === option && styles.optionSelected)}
+              onClick={() => onChange(option)}
+            >
+              {swatch && (
+                <span
+                  className={styles.swatch}
+                  style={{ background: swatch }}
+                  aria-hidden="true"
+                />
+              )}
+              {option}
+            </button>
+          )
+        })}
       </div>
 
       {error && (

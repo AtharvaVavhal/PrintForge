@@ -13,7 +13,8 @@ import { formatPrice } from '@/utils/formatPrice'
 import { formatDate } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/apiError'
 import type { OrderStatus, PaymentAttemptView } from '@/types/orders'
-import { ORDER_STATUS_LABELS, orderStatusTone } from '@/features/orders/orderStatus'
+import { ORDER_STATUS_LABELS } from '@/features/orders/orderStatus'
+import { OrderStatusBadge } from '@/features/orders/OrderStatusBadge'
 import styles from './OrderDetailPage.module.css'
 
 const RETRYABLE_STATUSES = new Set<OrderStatus>(['PENDING_PAYMENT', 'PAYMENT_FAILED'])
@@ -119,9 +120,7 @@ export function OrderDetailPage() {
           <h1>Order {order.orderNumber}</h1>
           <p className={styles.placedAt}>Placed {formatDate(order.createdAt)}</p>
         </div>
-        <span className={styles.statusBadge} data-tone={orderStatusTone(order.status)}>
-          {ORDER_STATUS_LABELS[order.status]}
-        </span>
+        <OrderStatusBadge status={order.status} />
       </div>
 
       {order.status === 'PENDING_PAYMENT' && (

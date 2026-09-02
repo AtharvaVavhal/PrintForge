@@ -18,7 +18,10 @@ describe('ShippingForm', () => {
     render(<ShippingForm onSubmit={vi.fn()} isSubmitting />)
 
     expect(screen.getByLabelText('Recipient name')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Please wait…' })).toBeDisabled()
+    // The button keeps its own label (UX-38) and is disabled + aria-busy.
+    const submit = screen.getByRole('button', { name: 'Pay now' })
+    expect(submit).toBeDisabled()
+    expect(submit).toHaveAttribute('aria-busy', 'true')
   })
 
   it('prefills from a saved address and stays fully editable (UX-07)', async () => {
