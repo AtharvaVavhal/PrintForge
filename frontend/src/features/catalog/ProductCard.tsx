@@ -12,13 +12,21 @@ import styles from './ProductCard.module.css'
 export function ProductCard({ product, onQuickView }: { product: Product; onQuickView?: (slug: string) => void }) {
   const variantPills = product.variants.slice(0, 4).map((v) => v.label);
   const hasMoreVariants = product.variants.length > 4;
+  // Real availability signal: a product whose every variant is marked
+  // unavailable can't be ordered. Products with no variants have no
+  // per-variant stock concept, so this only applies when variants exist.
+  const isUnavailable =
+    product.variants.length > 0 && product.variants.every((v) => !v.isAvailable);
 
   return (
-    <article className={styles.card}>
+    <article className={cn(styles.card, isUnavailable && styles.unavailable)}>
       <div className={styles.imageWrapper}>
         <Link to={productDetailPath(product.slug)} className={styles.imageLink} aria-label={product.name}>
           <ProductImage key={product.id} images={product.images} label={product.name} />
         </Link>
+        {isUnavailable && (
+          <span className={styles.unavailableBadge}>Currently unavailable</span>
+        )}
         {onQuickView && (
           <IconButton
             className={styles.quickViewBtn}
