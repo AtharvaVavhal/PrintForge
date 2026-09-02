@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '@/hooks/useCart'
 import { useCreateOrder } from '@/hooks/useCreateOrder'
@@ -12,6 +12,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PaymentLoadError } from '@/components/ui/PaymentLoadError'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { Seo } from '@/seo/Seo'
 import { orderDetailPath } from '@/constants/routes'
 import { fetchCurrentUser } from '@/services/api/auth'
 import type { ShippingFormValues } from '@/schemas/checkout.schema'
@@ -125,26 +126,34 @@ export function CheckoutPage() {
     }
   }
 
+  // Private route — never indexable, in every branch.
+  const withSeo = (node: ReactNode): ReactNode => (
+    <>
+      <Seo title="Checkout" noindex />
+      {node}
+    </>
+  )
+
   if (isCartPending) {
-    return (
+    return withSeo(
       <section className={styles.wrap}>
         <h1>Checkout</h1>
         <Skeleton className={styles.skeletonBlock} />
-      </section>
+      </section>,
     )
   }
 
   if (isCartError) {
-    return (
+    return withSeo(
       <section className={styles.wrap}>
         <h1>Checkout</h1>
         <Alert variant="error">{getApiErrorMessage(cartError)}</Alert>
-      </section>
+      </section>,
     )
   }
 
   if (order) {
-    return (
+    return withSeo(
       <section className={styles.wrap}>
         <h1>Checkout</h1>
         <OrderPendingPayment
@@ -154,32 +163,32 @@ export function CheckoutPage() {
           isProcessing={retryPayment.isPending || isOpening || isVerifying}
           isScriptLoading={isLoadingScript}
         />
-      </section>
+      </section>,
     )
   }
 
   if (cart.items.length === 0) {
-    return (
+    return withSeo(
       <section className={styles.wrap}>
         <h1>Checkout</h1>
         <Alert variant="info">Your cart is empty — add something before checking out.</Alert>
-      </section>
+      </section>,
     )
   }
 
   const hasUnavailableItems = cart.items.some((item) => !item.isAvailable)
   if (hasUnavailableItems) {
-    return (
+    return withSeo(
       <section className={styles.wrap}>
         <h1>Checkout</h1>
         <Alert variant="error">
           Remove the unavailable item(s) in your cart before checking out.
         </Alert>
-      </section>
+      </section>,
     )
   }
 
-  return (
+  return withSeo(
     <section className={styles.wrap}>
       <h1>Checkout</h1>
       {scriptLoadError && <PaymentLoadError message={scriptLoadError} onRetry={() => setScriptLoadError(null)} />}
@@ -198,6 +207,6 @@ export function CheckoutPage() {
           <CouponForm appliedPreview={couponPreview} onApplied={setCouponPreview} />
         </aside>
       </div>
-    </section>
+    </section>,
   )
 }

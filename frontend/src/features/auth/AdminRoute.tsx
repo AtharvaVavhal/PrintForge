@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { ROUTES } from '@/constants/routes'
+import { Seo } from '@/seo/Seo'
 
 /**
  * Client-side UX guard only — same disclaimer as ProtectedRoute, every
@@ -30,5 +31,12 @@ export function AdminRoute() {
     return <Navigate to={ROUTES.FORBIDDEN} replace />
   }
 
-  return <Outlet />
+  return (
+    <>
+      {/* Every admin route is private — one noindex covers the whole area
+          (individual admin pages don't render their own <Seo>). */}
+      <Seo title="Admin" noindex />
+      <Outlet />
+    </>
+  )
 }

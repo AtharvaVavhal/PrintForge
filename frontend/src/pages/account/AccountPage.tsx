@@ -8,6 +8,7 @@ import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { Seo } from '@/seo/Seo'
 import { LogoutButton } from '@/features/auth/LogoutButton'
 import { ProfileForm } from '@/features/account/ProfileForm'
 import type { AccountFormValues } from '@/schemas/account.schema'
@@ -70,6 +71,7 @@ export function AccountPage() {
 
   return (
     <section className={styles.wrap}>
+      <Seo title="My account" noindex />
       <h1>My account</h1>
 
       {isLoading && <Skeleton className={styles.skeleton} />}

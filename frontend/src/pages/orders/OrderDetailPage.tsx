@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PriceBreakdown } from '@/features/checkout/PriceBreakdown'
+import { Seo } from '@/seo/Seo'
 import { formatPrice } from '@/utils/formatPrice'
 import { formatDate } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/apiError'
@@ -85,6 +86,7 @@ export function OrderDetailPage() {
   if (isPending) {
     return (
       <section className={styles.wrap}>
+        <Seo title="Order" noindex />
         <h1>Order</h1>
         <Skeleton className={styles.skeletonBlock} />
       </section>
@@ -94,6 +96,7 @@ export function OrderDetailPage() {
   if (isError) {
     return (
       <section className={styles.wrap}>
+        <Seo title="Order" noindex />
         <h1>Order</h1>
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
       </section>
@@ -106,6 +109,7 @@ export function OrderDetailPage() {
 
   return (
     <section className={styles.wrap}>
+      <Seo title={`Order ${order.orderNumber}`} noindex />
       <p className={styles.backLink}>
         <Link to={ROUTES.ORDERS}>← All orders</Link>
       </p>

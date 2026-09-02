@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { formatPrice } from '@/utils/formatPrice'
 import { formatDate } from '@/utils/formatDate'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { Seo } from '@/seo/Seo'
 import { orderDetailPath } from '@/constants/routes'
 import styles from './InvoicePage.module.css'
 
@@ -32,6 +33,7 @@ export function InvoicePage() {
   if (isPending) {
     return (
       <section className={styles.wrap}>
+        <Seo title="Invoice" noindex />
         <Skeleton className={styles.skeletonBlock} />
       </section>
     )
@@ -40,6 +42,7 @@ export function InvoicePage() {
   if (isError) {
     return (
       <section className={styles.wrap}>
+        <Seo title="Invoice" noindex />
         <h1>Invoice</h1>
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
       </section>
@@ -48,6 +51,7 @@ export function InvoicePage() {
 
   return (
     <section className={styles.wrap}>
+      <Seo title={`Invoice ${invoice.invoiceNumber}`} noindex />
       <div className={styles.toolbar}>
         {!isAdmin && (
           <Link to={orderDetailPath(invoice.orderId)} className={styles.backLink}>

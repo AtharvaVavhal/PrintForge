@@ -1,4 +1,6 @@
 import { Alert } from '@/components/ui/Alert'
+import { Seo } from '@/seo/Seo'
+import { ROUTES } from '@/constants/routes'
 import styles from './ContactPage.module.css'
 
 // TODO: client to provide final Contact page copy, verified business contact
@@ -9,6 +11,11 @@ import styles from './ContactPage.module.css'
 export function ContactPage() {
   return (
     <section className={styles.page}>
+      <Seo
+        title="Contact"
+        description="PrintForge customer support channels are still being set up. Verified contact details will be published here before launch."
+        canonicalPath={ROUTES.CONTACT}
+      />
       <h1>Contact Us</h1>
       <p className={styles.intro}>
         Our customer support channels are still being set up. Verified contact

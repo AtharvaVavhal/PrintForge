@@ -8,7 +8,12 @@ import { TrustStrip } from '@/components/home/TrustStrip'
 import { useHomepageSettings } from '@/hooks/useHomepageSettings'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { ROUTES } from '@/constants/routes'
+import { Seo } from '@/seo/Seo'
+import { websiteJsonLd } from '@/seo/jsonLd'
 import styles from './HomePage.module.css'
+
+const HOME_DESCRIPTION =
+  'Browse the PrintForge catalogue and personalise mugs, apparel, frames and more — each item printed for your order.'
 
 /**
  * Storefront landing page. Two data sources, both real:
@@ -31,6 +36,12 @@ export function HomePage() {
 
   return (
     <>
+      <Seo
+        title=""
+        description={HOME_DESCRIPTION}
+        canonicalPath="/"
+        jsonLd={websiteJsonLd()}
+      />
       {isLoading ? (
         <div
           className={styles.heroSkeleton}

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { EmptyOrders } from '@/features/orders/EmptyOrders'
 import { OrderListRow } from '@/features/orders/OrderListRow'
 import { OrderListSkeleton } from '@/features/orders/OrderListSkeleton'
+import { Seo } from '@/seo/Seo'
 import styles from './OrdersPage.module.css'
 
 const DEFAULT_LIMIT = 20
@@ -28,6 +29,7 @@ export function OrdersPage() {
 
   return (
     <section className={styles.wrap}>
+      <Seo title="Your orders" noindex />
       <div className={styles.header}>
         <h1>Your orders</h1>
         {ordersQuery.data && ordersQuery.data.items.length > 0 && (

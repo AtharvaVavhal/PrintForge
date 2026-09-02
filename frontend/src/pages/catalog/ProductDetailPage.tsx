@@ -4,12 +4,14 @@ import { useProduct } from '@/hooks/useProduct'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { formatPrice } from '@/utils/formatPrice'
-import { ROUTES } from '@/constants/routes'
+import { ROUTES, productDetailPath } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Breadcrumbs, type Crumb } from '@/components/ui/Breadcrumbs'
 import { ProductGallery } from '@/features/catalog/ProductGallery'
 import { findCategoryPath } from '@/features/catalog/categoryTree'
+import { Seo } from '@/seo/Seo'
+import { productJsonLd, breadcrumbJsonLd, describeProduct } from '@/seo/jsonLd'
 import { VariantSelector } from '@/features/cart/VariantSelector'
 import { AddToCartControls } from '@/features/cart/AddToCartControls'
 import {
@@ -54,6 +56,7 @@ export function ProductDetailPage() {
   if (isPending) {
     return (
       <section className={styles.wrap}>
+        <Seo title="Loading product" noindex />
         <Skeleton className={styles.imageSkeleton} />
         <div className={styles.infoSkeleton}>
           <Skeleton className={styles.titleSkeleton} />
@@ -66,6 +69,7 @@ export function ProductDetailPage() {
   if (isError) {
     return (
       <section className={styles.wrap}>
+        <Seo title="Product not found" noindex />
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
         <p className={styles.backLink}>
           <Link to={ROUTES.PRODUCTS}>Back to shop</Link>
@@ -88,8 +92,26 @@ export function ProductDetailPage() {
     { label: product.name },
   ]
 
+  const canonicalPath = productDetailPath(product.slug)
+  const primaryImage =
+    product.images.find((img) => img.isPrimary)?.url ?? product.images[0]?.url
+
   return (
     <section className={styles.wrap}>
+      <Seo
+        title={product.name}
+        description={
+          describeProduct(product) ??
+          `Order ${product.name} from PrintForge — custom-printed, made to order.`
+        }
+        canonicalPath={canonicalPath}
+        ogType="product"
+        ogImage={primaryImage}
+        jsonLd={[
+          productJsonLd(product, canonicalPath),
+          ...(breadcrumbJsonLd(breadcrumbs) ? [breadcrumbJsonLd(breadcrumbs)!] : []),
+        ]}
+      />
       <div className={styles.breadcrumbs}>
         <Breadcrumbs items={breadcrumbs} />
       </div>

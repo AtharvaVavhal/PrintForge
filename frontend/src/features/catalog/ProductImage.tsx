@@ -37,6 +37,8 @@ export function ProductImage({ images, label }: ProductImageProps) {
       src={image.url}
       alt={label}
       className={styles.image}
+      loading="lazy"
+      decoding="async"
       onError={() => setFailed(true)}
     />
   )

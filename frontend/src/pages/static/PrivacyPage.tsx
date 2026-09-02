@@ -1,11 +1,18 @@
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'
+import { Seo } from '@/seo/Seo'
 import styles from './PrivacyPage.module.css'
 
 // TODO: client to provide final Privacy Policy legal copy
 export function PrivacyPage() {
   return (
     <section className={styles.page}>
+      <Seo
+        title="Privacy Policy"
+        description="How PrintForge collects, uses, shares, retains and protects your personal data, and the rights you have over it."
+        canonicalPath={ROUTES.PRIVACY}
+        ogType="article"
+      />
       <h1>Privacy Policy</h1>
       <p className={styles.meta}>
         {/* TODO: client to confirm the effective revision date before launch */}

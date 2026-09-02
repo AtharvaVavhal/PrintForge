@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'
+import { Seo } from '@/seo/Seo'
 import styles from './ForbiddenPage.module.css'
 
 /** Where AdminRoute sends a logged-in non-admin — see its doc comment for
@@ -7,6 +8,7 @@ import styles from './ForbiddenPage.module.css'
 export function ForbiddenPage() {
   return (
     <section className={styles.wrap}>
+      <Seo title="Not authorised" noindex />
       <h1>403</h1>
       <p>You don&rsquo;t have access to this page.</p>
       <Link to={ROUTES.HOME}>Back to home</Link>

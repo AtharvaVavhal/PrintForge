@@ -1,9 +1,16 @@
+import { Seo } from '@/seo/Seo'
+import { ROUTES } from '@/constants/routes'
 import styles from './AboutPage.module.css'
 
 // TODO: client to provide final About page copy
 export function AboutPage() {
   return (
     <section className={styles.page}>
+      <Seo
+        title="About"
+        description="PrintForge is a custom-printing platform for designing and ordering printed products entirely online — from product discovery through file upload, checkout, production and delivery."
+        canonicalPath={ROUTES.ABOUT}
+      />
       <h1>About PrintForge</h1>
       <p>
         PrintForge is a custom‑printing platform that lets customers design and order

@@ -11,6 +11,8 @@ import { FilterSidebar } from '@/components/layout/FilterSidebar'
 import { FilterTrigger, MobileFilterDrawer } from '@/components/layout/MobileFilterDrawer'
 import { ActiveFilterChips } from '@/features/catalog/ActiveFilterChips'
 import { findCategoryPath } from '@/features/catalog/categoryTree'
+import { Seo } from '@/seo/Seo'
+import { breadcrumbJsonLd } from '@/seo/jsonLd'
 import { EmptyCatalog } from '@/features/catalog/EmptyCatalog'
 import { ProductCard } from '@/features/catalog/ProductCard'
 import { ProductGridSkeleton } from '@/features/catalog/ProductGridSkeleton'
@@ -80,6 +82,26 @@ export function ProductListPage() {
     ...(search && !activeCategory ? [{ label: `“${search}”` }] : []),
   ]
 
+  // Only the bare listing and single-category views are indexable. Any
+  // search term, price/rating filter, explicit sort, or page > 1 makes
+  // this a filtered variant → noindex, and it canonicalises to the
+  // category (or all-products) route so crawl budget isn't spent on the
+  // combinatorial filter space (§4/§14).
+  const isFilteredVariant = Boolean(
+    search ||
+      minPrice !== undefined ||
+      maxPrice !== undefined ||
+      minRating !== undefined ||
+      sort ||
+      page > 1,
+  )
+  const canonicalPath = categoryId
+    ? `${ROUTES.PRODUCTS}?categoryId=${categoryId}`
+    : ROUTES.PRODUCTS
+  const seoDescription = activeCategory
+    ? `Shop ${activeCategory.name} at PrintForge — custom-printed, made to order.`
+    : 'Browse every product in the PrintForge catalogue. Personalise and order custom prints made to order.'
+
   const productsQuery = useProducts({
     categoryId,
     search,
@@ -115,6 +137,15 @@ export function ProductListPage() {
 
   return (
     <section className={styles.wrap}>
+      <Seo
+        title={pageTitle}
+        description={seoDescription}
+        canonicalPath={canonicalPath}
+        noindex={isFilteredVariant}
+        jsonLd={
+          isFilteredVariant ? undefined : (breadcrumbJsonLd(breadcrumbs) ?? undefined)
+        }
+      />
       <Breadcrumbs items={breadcrumbs} />
 
       <div className={styles.header}>

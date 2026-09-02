@@ -1,11 +1,18 @@
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'
+import { Seo } from '@/seo/Seo'
 import styles from './TermsPage.module.css'
 
 // TODO: client to provide final Terms of Service legal copy
 export function TermsPage() {
   return (
     <section className={styles.page}>
+      <Seo
+        title="Terms of Service"
+        description="The terms governing use of the PrintForge website and services — orders and payment, customisation and intellectual property, production and delivery, cancellations and refunds."
+        canonicalPath={ROUTES.TERMS}
+        ogType="article"
+      />
       <h1>Terms of Service</h1>
       <p className={styles.meta}>
         {/* TODO: client to confirm the effective revision date before launch */}

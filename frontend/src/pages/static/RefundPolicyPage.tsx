@@ -1,11 +1,18 @@
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'
+import { Seo } from '@/seo/Seo'
 import styles from './RefundPolicyPage.module.css'
 
 // TODO: client to provide final Refund Policy legal copy
 export function RefundPolicyPage() {
   return (
     <section className={styles.page}>
+      <Seo
+        title="Refund Policy"
+        description="When PrintForge orders are eligible for a refund, how to request one, refund amounts by order stage, and how defective or incorrect items are handled."
+        canonicalPath={ROUTES.REFUND_POLICY}
+        ogType="article"
+      />
       <h1>Refund Policy</h1>
       <p className={styles.meta}>
         {/* TODO: client to confirm the effective revision date before launch */}
