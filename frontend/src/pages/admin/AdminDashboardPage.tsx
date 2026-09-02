@@ -2,77 +2,115 @@ import { Link } from 'react-router-dom'
 import { useAdminDashboard } from '@/hooks/useAdminDashboard'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { Alert } from '@/components/ui/Alert'
-import { Skeleton } from '@/components/ui/Skeleton'
-import { formatPrice } from '@/utils/formatPrice'
+import { AdminPage } from '@/components/admin/AdminPage'
+import { AdminCard } from '@/components/admin/AdminCard'
+import { AdminTable } from '@/components/admin/AdminTable'
+import { AdminBadge } from '@/components/admin/AdminBadge'
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState'
+import { AdminPageSkeleton } from '@/components/admin/AdminPageSkeleton'
 import { OrderStatusBadge } from '@/features/orders/OrderStatusBadge'
-import { AdminOrderRow } from '@/features/admin/AdminOrderRow'
-import { ROUTES } from '@/constants/routes'
+import { formatPrice } from '@/utils/formatPrice'
+import { formatDate } from '@/utils/formatDate'
+import { adminOrderDetailPath, ROUTES } from '@/constants/routes'
 import styles from './AdminDashboardPage.module.css'
 
-/** Behind AdminRoute (App.tsx). Minimal by design — order count, per-status
- * breakdown, revenue, recent orders — no charts (§19: "minimal — no
- * charts" is the backend's own framing for GET /admin/dashboard, matched
- * here rather than building visuals the data was never shaped for). */
+/**
+ * Behind AdminRoute (App.tsx). Minimal by design — GET /admin/dashboard is
+ * framed by the backend as "minimal — no charts" (§19): all-time order
+ * count, per-status breakdown, paid-or-later revenue, and the ten most
+ * recent orders. This page is a faithful thin view of exactly those four
+ * fields — no client-side calculation, no time-series, no extra fetches.
+ */
 export function AdminDashboardPage() {
   const { data, isPending, isError, error } = useAdminDashboard()
 
+  if (isPending) {
+    return <AdminPageSkeleton rows={4} />
+  }
+
+  const viewAllOrders = (
+    <Link to={ROUTES.ADMIN_ORDERS} className={styles.link}>
+      View all orders
+    </Link>
+  )
+
   return (
-    <section className={styles.wrap}>
-      <h1>Admin dashboard</h1>
-
-      {isPending && (
-        <div className={styles.statGrid} aria-hidden="true">
-          <Skeleton className={styles.statCard} />
-          <Skeleton className={styles.statCard} />
-          <Skeleton className={styles.statCard} />
-        </div>
-      )}
-
-      {isError && <Alert variant="error">{getApiErrorMessage(error)}</Alert>}
-
-      {data && (
+    <AdminPage
+      title="Overview"
+      description="All-time order and revenue totals, plus the ten most recent orders."
+    >
+      {isError ? (
+        <Alert variant="error">{getApiErrorMessage(error)}</Alert>
+      ) : data ? (
         <>
           <div className={styles.statGrid}>
-            <div className={styles.statCard}>
-              <span className={styles.statLabel}>Total orders</span>
-              <span className={styles.statValue}>{data.totalOrders}</span>
-            </div>
-            <div className={styles.statCard}>
-              <span className={styles.statLabel}>Revenue (paid-or-later)</span>
-              <span className={styles.statValue}>{formatPrice(data.totalRevenue)}</span>
-            </div>
+            <AdminCard as="section" title="Total orders">
+              <p className={styles.statValue}>{data.totalOrders}</p>
+            </AdminCard>
+            <AdminCard as="section" title="Revenue (paid or later)">
+              <p className={styles.statValue}>{formatPrice(data.totalRevenue)}</p>
+            </AdminCard>
           </div>
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionHeading}>Orders by status</h2>
-            <ul className={styles.statusList}>
+          <AdminCard as="section" title="Orders by status">
+            <dl className={styles.statusGrid}>
               {data.ordersByStatus.map((row) => (
-                <li key={row.status} className={styles.statusRow}>
-                  <OrderStatusBadge status={row.status} />
-                  <span className={styles.statusCount}>{row.count}</span>
-                </li>
+                <div key={row.status} className={styles.statusItem}>
+                  <dt className={styles.statusTerm}>
+                    <OrderStatusBadge status={row.status} />
+                  </dt>
+                  <dd className={styles.statusCount}>{row.count}</dd>
+                </div>
               ))}
-            </ul>
-          </div>
+            </dl>
+          </AdminCard>
 
-          <div className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionHeading}>Recent orders</h2>
-              <Link to={ROUTES.ADMIN_ORDERS}>View all orders</Link>
-            </div>
-
-            {data.recentOrders.length === 0 ? (
-              <p className={styles.empty}>No orders yet.</p>
-            ) : (
-              <div className={styles.list}>
-                {data.recentOrders.map((order) => (
-                  <AdminOrderRow key={order.id} order={order} />
-                ))}
-              </div>
-            )}
-          </div>
+          {data.recentOrders.length === 0 ? (
+            <AdminCard as="section" title="Recent orders" actions={viewAllOrders}>
+              <AdminEmptyState
+                title="No orders yet"
+                description="Recent orders will appear here as customers place them."
+              />
+            </AdminCard>
+          ) : (
+            <AdminCard as="section" flush title="Recent orders" actions={viewAllOrders}>
+              <AdminTable caption="Recent orders">
+                <AdminTable.Head>
+                  <AdminTable.Row>
+                    <AdminTable.HeaderCell>Order</AdminTable.HeaderCell>
+                    <AdminTable.HeaderCell>Date</AdminTable.HeaderCell>
+                    <AdminTable.HeaderCell align="center">Items</AdminTable.HeaderCell>
+                    <AdminTable.HeaderCell>Status</AdminTable.HeaderCell>
+                    <AdminTable.HeaderCell align="end">Total</AdminTable.HeaderCell>
+                  </AdminTable.Row>
+                </AdminTable.Head>
+                <AdminTable.Body>
+                  {data.recentOrders.map((order) => (
+                    <AdminTable.Row key={order.id}>
+                      <AdminTable.Cell>
+                        <Link to={adminOrderDetailPath(order.id)} className={styles.orderLink}>
+                          {order.orderNumber}
+                        </Link>
+                      </AdminTable.Cell>
+                      <AdminTable.Cell>{formatDate(order.createdAt)}</AdminTable.Cell>
+                      <AdminTable.Cell align="center">{order.itemCount}</AdminTable.Cell>
+                      <AdminTable.Cell>
+                        <span className={styles.statusCell}>
+                          <OrderStatusBadge status={order.status} />
+                          {order.needsManualRefund && (
+                            <AdminBadge variant="warning">Refund pending</AdminBadge>
+                          )}
+                        </span>
+                      </AdminTable.Cell>
+                      <AdminTable.Cell align="end">{formatPrice(order.total)}</AdminTable.Cell>
+                    </AdminTable.Row>
+                  ))}
+                </AdminTable.Body>
+              </AdminTable>
+            </AdminCard>
+          )}
         </>
-      )}
-    </section>
+      ) : null}
+    </AdminPage>
   )
 }
