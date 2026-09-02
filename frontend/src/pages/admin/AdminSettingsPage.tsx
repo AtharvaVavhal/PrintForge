@@ -6,53 +6,74 @@ import { useUpdateAdminSetting } from '@/hooks/useUpdateAdminSetting'
 import { schemaForKind } from '@/schemas/adminSettings.schema'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Skeleton } from '@/components/ui/Skeleton'
 import { TextField } from '@/components/ui/TextField'
+import { AdminPage } from '@/components/admin/AdminPage'
+import { AdminCard } from '@/components/admin/AdminCard'
+import { AdminSelect } from '@/components/admin/AdminSelect'
+import { AdminPageSkeleton } from '@/components/admin/AdminPageSkeleton'
 import { getApiErrorMessage } from '@/utils/apiError'
 import type { AdminSettingView } from '@/services/api/settings'
 import styles from './AdminSettingsPage.module.css'
 
+/** Client-side presentation grouping only — derived from the setting
+ * `key` prefixes the backend already uses (`tax.*`, `invoice.*`). It
+ * adds no configuration and changes no value. */
+const GROUPS: { title: string; belongs: (key: string) => boolean }[] = [
+  { title: 'Storefront', belongs: (k) => !k.startsWith('tax.') && !k.startsWith('invoice.') },
+  { title: 'Tax (GST)', belongs: (k) => k.startsWith('tax.') },
+  { title: 'Invoicing', belongs: (k) => k.startsWith('invoice.') },
+]
+
+function groupSettings(settings: AdminSettingView[]) {
+  return GROUPS.map((group) => ({
+    title: group.title,
+    settings: settings.filter((s) => group.belongs(s.key)),
+  })).filter((group) => group.settings.length > 0)
+}
+
 /**
  * Behind AdminRoute (App.tsx). One small form per configurable setting
- * (GET /admin/settings). Every value is re-validated server-side; a
- * "Saved" confirmation only ever appears after the PATCH actually
- * resolves — there is no optimistic / simulated success here.
+ * (GET /admin/settings), grouped into cards by key prefix. Every value is
+ * re-validated server-side; a "Saved" confirmation only ever appears after
+ * the PATCH actually resolves — no optimistic success.
  *
  * Settings flagged `pendingClientInput` (GST rate, invoice prefix, seller
- * legal name / address / GSTIN / state — Phase 13.4) ship blank and are
- * shown with a "pending client confirmation" notice. Nothing is
- * pre-filled with a guessed value.
+ * legal name / address / GSTIN / state) ship blank and carry a "pending
+ * client confirmation" notice. Tax pricing mode's option list comes
+ * straight from the API — EXCLUSIVE is locked server-side and simply not
+ * offered.
  *
  * Homepage hero / banner / showcase content is settings-backed but not
- * exposed here (it needs a structured multi-item editor) — see the phase
- * report.
+ * exposed here (it needs a structured multi-item editor).
  */
 export function AdminSettingsPage() {
   const settingsQuery = useAdminSettings()
 
+  if (settingsQuery.isPending) {
+    return <AdminPageSkeleton rows={4} />
+  }
+
+  const groups = settingsQuery.data ? groupSettings(settingsQuery.data) : []
+
   return (
-    <section className={styles.wrap}>
-      <h1>Store settings</h1>
-      <p className={styles.intro}>
-        These values take effect immediately across the storefront and
-        checkout. The server validates and is the source of truth for every
-        one.
-      </p>
-
-      {settingsQuery.isPending && <Skeleton className={styles.skeletonBlock} />}
-
+    <AdminPage
+      title="Store settings"
+      description="These values take effect immediately across the storefront and checkout. The server validates and is the source of truth for every one."
+    >
       {settingsQuery.isError && (
         <Alert variant="error">{getApiErrorMessage(settingsQuery.error)}</Alert>
       )}
 
-      {settingsQuery.data && (
-        <div className={styles.list}>
-          {settingsQuery.data.map((setting) => (
-            <SettingRow key={setting.key} setting={setting} />
-          ))}
-        </div>
-      )}
-    </section>
+      {groups.map((group) => (
+        <AdminCard key={group.title} as="section" title={group.title}>
+          <div className={styles.group}>
+            {group.settings.map((setting) => (
+              <SettingRow key={setting.key} setting={setting} />
+            ))}
+          </div>
+        </AdminCard>
+      ))}
+    </AdminPage>
   )
 }
 
@@ -97,47 +118,29 @@ function SettingRow({ setting }: SettingRowProps) {
   const fieldId = `setting-${setting.key}`
   const isChoice = setting.kind === 'boolean' || setting.kind === 'enum'
   const choiceOptions =
-    setting.kind === 'boolean'
-      ? ['false', 'true']
-      : (setting.options ?? [])
+    setting.kind === 'boolean' ? ['false', 'true'] : (setting.options ?? [])
 
   return (
-    <form
-      className={styles.row}
-      onSubmit={(e) => void handleSubmit(onSubmit)(e)}
-      noValidate
-    >
+    <form className={styles.row} onSubmit={(e) => void handleSubmit(onSubmit)(e)} noValidate>
       {isChoice ? (
-        <div className={styles.choiceField}>
-          <label htmlFor={fieldId} className={styles.choiceLabel}>
-            {setting.label}
-          </label>
-          <select
-            id={fieldId}
-            className={styles.choiceSelect}
-            aria-invalid={Boolean(errors.value)}
-            {...register('value')}
-          >
-            {choiceOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-          {errors.value && (
-            <p className={styles.fieldError} role="alert">
-              {errors.value.message}
-            </p>
-          )}
-        </div>
+        <AdminSelect
+          label={setting.label}
+          id={fieldId}
+          error={errors.value?.message}
+          {...register('value')}
+        >
+          {choiceOptions.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </AdminSelect>
       ) : (
         <TextField
           label={setting.label}
           id={fieldId}
           inputMode={
-            setting.kind === 'money' || setting.kind === 'percent'
-              ? 'decimal'
-              : undefined
+            setting.kind === 'money' || setting.kind === 'percent' ? 'decimal' : undefined
           }
           error={errors.value?.message}
           {...register('value')}
@@ -148,8 +151,8 @@ function SettingRow({ setting }: SettingRowProps) {
 
       {setting.pendingClientInput && (
         <Alert variant="info">
-          Pending client confirmation — leave blank until the client/accountant
-          supplies this value. It is never guessed.
+          Pending client confirmation — leave blank until the client/accountant supplies this
+          value. It is never guessed.
         </Alert>
       )}
 

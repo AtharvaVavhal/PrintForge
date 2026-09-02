@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { apiClient } from '@/services/api/client'
@@ -22,8 +22,52 @@ const SETTINGS_RESPONSE = {
       label: 'Announcement bar text',
       description: 'Leave blank to hide the bar.',
       kind: 'text',
+      value: 'Free shipping this week',
+      default: '',
+    },
+    {
+      key: 'tax.enabled',
+      label: 'GST / tax enabled',
+      description: 'When off, every order records tax = ₹0.00.',
+      kind: 'boolean',
+      value: 'false',
+      default: 'false',
+    },
+    {
+      key: 'tax.pricingMode',
+      label: 'Tax pricing mode',
+      description: 'INCLUSIVE per the blueprint. EXCLUSIVE is locked pending client confirmation.',
+      kind: 'enum',
+      value: 'INCLUSIVE',
+      default: 'INCLUSIVE',
+      options: ['INCLUSIVE'],
+    },
+    {
+      key: 'tax.ratePercent',
+      label: 'Combined GST rate (%)',
+      description: 'PENDING CLIENT CONFIRMATION — do not set a guessed value.',
+      kind: 'percent',
+      value: '',
+      default: '0.00',
+      pendingClientInput: true,
+    },
+    {
+      key: 'invoice.numberPrefix',
+      label: 'Invoice number prefix',
+      description: 'Prepended to the invoice sequence.',
+      kind: 'text',
+      value: 'INV-',
+      default: 'INV-',
+      pendingClientInput: true,
+    },
+    {
+      key: 'invoice.sellerGstin',
+      label: 'Seller GSTIN (on invoice)',
+      description: 'The business GST identification number.',
+      kind: 'text',
       value: '',
       default: '',
+      pendingClientInput: true,
     },
   ],
 }
@@ -40,19 +84,21 @@ describe('AdminSettingsPage', () => {
     mock.restore()
   })
 
+  // ─── Preserved behaviour ───────────────────────────────────────────────
+
   it('renders a form per configurable setting', async () => {
     renderWithProviders(<AdminSettingsPage />)
 
     expect(await screen.findByLabelText('Flat shipping fee (₹)')).toBeInTheDocument()
     expect(screen.getByLabelText('Announcement bar text')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Save' })).toHaveLength(SETTINGS_RESPONSE.data.length)
   })
 
   it('disables Save until the value is changed', async () => {
     renderWithProviders(<AdminSettingsPage />)
 
     await screen.findByLabelText('Flat shipping fee (₹)')
-    const saveButtons = screen.getAllByRole('button', { name: 'Save' })
-    saveButtons.forEach((b) => expect(b).toBeDisabled())
+    screen.getAllByRole('button', { name: 'Save' }).forEach((b) => expect(b).toBeDisabled())
   })
 
   it('shows an inline validation error and does not call the API for a negative fee', async () => {
@@ -62,11 +108,9 @@ describe('AdminSettingsPage', () => {
     const field = await screen.findByLabelText('Flat shipping fee (₹)')
     await user.clear(field)
     await user.type(field, '-5')
-    await user.click(screen.getAllByRole('button', { name: 'Save' })[0])
+    await user.click(within(field.closest('form') as HTMLElement).getByRole('button', { name: 'Save' }))
 
-    expect(
-      await screen.findByText(/non-negative amount/i),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/non-negative amount/i)).toBeInTheDocument()
     expect(mock.history.patch).toHaveLength(0)
   })
 
@@ -80,18 +124,17 @@ describe('AdminSettingsPage', () => {
     renderWithProviders(<AdminSettingsPage />)
 
     const field = await screen.findByLabelText('Flat shipping fee (₹)')
+    const form = field.closest('form') as HTMLElement
     await user.clear(field)
     await user.type(field, '49')
 
-    // No premature success text.
     expect(screen.queryByText(/saved/i)).not.toBeInTheDocument()
 
-    await user.click(screen.getAllByRole('button', { name: 'Save' })[0])
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mock.history.patch).toHaveLength(1))
-    const body = JSON.parse(mock.history.patch[0].data as string) as { value: string }
-    expect(body).toEqual({ value: '49' })
-    expect(await screen.findByText(/the value is now .49\.00./i)).toBeInTheDocument()
+    expect(JSON.parse(mock.history.patch[0].data as string)).toEqual({ value: '49' })
+    expect(await within(form).findByText(/the value is now .49\.00./i)).toBeInTheDocument()
   })
 
   it('surfaces a server validation error without claiming success', async () => {
@@ -104,11 +147,131 @@ describe('AdminSettingsPage', () => {
     renderWithProviders(<AdminSettingsPage />)
 
     const field = await screen.findByLabelText('Flat shipping fee (₹)')
+    const form = field.closest('form') as HTMLElement
     await user.clear(field)
     await user.type(field, '5')
-    await user.click(screen.getAllByRole('button', { name: 'Save' })[0])
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('Shipping fee cannot be negative')).toBeInTheDocument()
-    expect(screen.queryByText(/^Saved\./i)).not.toBeInTheDocument()
+    expect(await within(form).findByText('Shipping fee cannot be negative')).toBeInTheDocument()
+    expect(within(form).queryByText(/^Saved\./i)).not.toBeInTheDocument()
+  })
+
+  // ─── Redesign structure ────────────────────────────────────────────────
+
+  it('renders exactly one h1 with a title and description', async () => {
+    renderWithProviders(<AdminSettingsPage />)
+
+    await screen.findByLabelText('Flat shipping fee (₹)')
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Store settings')
+    expect(screen.getByText(/take effect immediately across the storefront and checkout/i)).toBeInTheDocument()
+  })
+
+  it('groups settings into Storefront / Tax (GST) / Invoicing cards', async () => {
+    renderWithProviders(<AdminSettingsPage />)
+
+    await screen.findByLabelText('Flat shipping fee (₹)')
+    const storefront = screen.getByRole('region', { name: 'Storefront' })
+    expect(within(storefront).getByLabelText('Flat shipping fee (₹)')).toBeInTheDocument()
+    expect(within(storefront).getByLabelText('Announcement bar text')).toBeInTheDocument()
+
+    const tax = screen.getByRole('region', { name: 'Tax (GST)' })
+    expect(within(tax).getByLabelText('GST / tax enabled')).toBeInTheDocument()
+    expect(within(tax).getByLabelText('Tax pricing mode')).toBeInTheDocument()
+
+    const invoicing = screen.getByRole('region', { name: 'Invoicing' })
+    expect(within(invoicing).getByLabelText('Invoice number prefix')).toBeInTheDocument()
+  })
+
+  it('populates each field with the current backend value', async () => {
+    renderWithProviders(<AdminSettingsPage />)
+
+    expect(await screen.findByLabelText('Announcement bar text')).toHaveValue('Free shipping this week')
+    expect(screen.getByLabelText('Invoice number prefix')).toHaveValue('INV-')
+    expect(screen.getByLabelText('Tax pricing mode')).toHaveValue('INCLUSIVE')
+  })
+
+  it('renders the boolean setting as a select with true / false options', async () => {
+    renderWithProviders(<AdminSettingsPage />)
+
+    const select = await screen.findByLabelText('GST / tax enabled')
+    expect(select.tagName).toBe('SELECT')
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['false', 'true'])
+  })
+
+  it('offers only the API-provided option for tax pricing mode (EXCLUSIVE stays locked)', async () => {
+    renderWithProviders(<AdminSettingsPage />)
+
+    const select = await screen.findByLabelText('Tax pricing mode')
+    expect(within(select).getAllByRole('option')).toHaveLength(1)
+    expect(within(select).getByRole('option', { name: 'INCLUSIVE' })).toBeInTheDocument()
+    expect(within(select).queryByRole('option', { name: 'EXCLUSIVE' })).not.toBeInTheDocument()
+  })
+
+  it('flags a pending-client-input setting with an informational notice', async () => {
+    renderWithProviders(<AdminSettingsPage />)
+
+    const field = await screen.findByLabelText('Combined GST rate (%)')
+    const form = field.closest('form') as HTMLElement
+    expect(within(form).getByText(/leave blank until the client\/accountant/i)).toBeInTheDocument()
+    expect(field).toHaveValue('')
+  })
+
+  it('saves a choice setting, sending the exact { value } payload', async () => {
+    const user = userEvent.setup()
+    mock.onPatch('/admin/settings/tax.enabled').reply(200, {
+      success: true,
+      data: { ...SETTINGS_RESPONSE.data[2], value: 'true' },
+    })
+
+    renderWithProviders(<AdminSettingsPage />)
+
+    const select = await screen.findByLabelText('GST / tax enabled')
+    const form = select.closest('form') as HTMLElement
+    await user.selectOptions(select, 'true')
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mock.history.patch).toHaveLength(1))
+    expect(mock.history.patch[0].url).toBe('/admin/settings/tax.enabled')
+    expect(JSON.parse(mock.history.patch[0].data as string)).toEqual({ value: 'true' })
+    expect(await within(form).findByText(/the value is now .true./i)).toBeInTheDocument()
+  })
+
+  // ─── States ────────────────────────────────────────────────────────────
+
+  it('shows a page-level skeleton with aria-busy while loading', () => {
+    mock.onGet('/admin/settings').reply(() => new Promise(() => {}))
+    renderWithProviders(<AdminSettingsPage />)
+
+    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByLabelText('Flat shipping fee (₹)')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a settings fetch error through the shared Alert', async () => {
+    mock.onGet('/admin/settings').reply(500, {
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Settings unavailable', details: [] },
+    })
+    renderWithProviders(<AdminSettingsPage />)
+
+    expect(await screen.findByText('Settings unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Store settings')
+  })
+
+  // ─── Negative assertions ───────────────────────────────────────────────
+
+  it('renders only the settings the API returns — no add/remove, no unsupported fields, no analytics', async () => {
+    renderWithProviders(<AdminSettingsPage />)
+
+    await screen.findByLabelText('Flat shipping fee (₹)')
+    // No way to add or delete a setting.
+    expect(screen.queryByRole('button', { name: /add setting|new setting|delete/i })).not.toBeInTheDocument()
+    // No invented tax/legal fields beyond what the API returned.
+    expect(screen.queryByLabelText('Seller PAN')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('CGST rate')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^\{/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('figure')).not.toBeInTheDocument()
+    expect(document.querySelector('canvas')).toBeNull()
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
   })
 })
