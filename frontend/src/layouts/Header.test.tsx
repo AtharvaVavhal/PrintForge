@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -85,6 +85,52 @@ describe('Header', () => {
     expect(
       within(drawer).getByPlaceholderText('Search products…'),
     ).toBeInTheDocument()
+  })
+
+  it('exposes account + orders + log out inside the nav drawer for an authenticated user (UX-16)', () => {
+    renderWithProviders(<Header />, {
+      authValue: createMockAuthContext({ status: 'authenticated', user: CUSTOMER }),
+    })
+    const drawer = document.getElementById('mobile-nav') as HTMLElement
+    // The drawer is always in the DOM; CSS toggles it open per breakpoint.
+    expect(within(drawer).getByRole('link', { name: 'My account', hidden: true })).toBeInTheDocument()
+    expect(within(drawer).getByRole('link', { name: 'My orders', hidden: true })).toBeInTheDocument()
+    // The auth cluster now collapses into the drawer below 560px, so logout
+    // must be reachable there and not only in the top row.
+    expect(
+      within(drawer).getByRole('button', { name: 'Log out', hidden: true }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps Log in / Create an account inside the nav drawer for a signed-out visitor (UX-16)', () => {
+    renderWithProviders(<Header />, { authValue: createMockAuthContext({ status: 'unauthenticated' }) })
+    const drawer = document.getElementById('mobile-nav') as HTMLElement
+    expect(
+      within(drawer).getByRole('link', { name: 'Log in', hidden: true }),
+    ).toHaveAttribute('href', '/login')
+    expect(
+      within(drawer).getByRole('link', { name: 'Create an account', hidden: true }),
+    ).toHaveAttribute('href', '/register')
+  })
+
+  it('logs out from the drawer and collapses it afterwards (UX-16)', async () => {
+    const logout = vi.fn().mockResolvedValue(undefined)
+    renderWithProviders(<Header />, {
+      authValue: createMockAuthContext({ status: 'authenticated', user: CUSTOMER, logout }),
+    })
+
+    // Open the drawer (its trigger is display:none in jsdom — media queries
+    // aren't evaluated — so drive it with fireEvent).
+    const menuButton = screen.getByLabelText('Open menu')
+    fireEvent.click(menuButton)
+    expect(menuButton).toHaveAttribute('aria-expanded', 'true')
+
+    const drawer = document.getElementById('mobile-nav') as HTMLElement
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Log out', hidden: true }))
+
+    expect(logout).toHaveBeenCalledTimes(1)
+    // onAfterLogout runs once logout resolves and collapses the drawer.
+    await vi.waitFor(() => expect(menuButton).toHaveAttribute('aria-expanded', 'false'))
   })
 
   it('carries the current storefront location as state.from on the "Sign up" link (UX-04)', async () => {

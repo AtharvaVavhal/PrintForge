@@ -34,44 +34,39 @@ export function Header() {
   const cartCount = cart?.itemCount ?? 0
 
   return (
-    <>
-      {/* Mobile drawer overlay */}
-      {mobileOpen && (
-        <div
-          className={cn(styles.drawerOverlay, mobileOpen && styles.visible)}
-          onClick={() => setMobileOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+    <header className={styles.header}>
+      {/* Top row */}
+      <div className={styles.topRow}>
+        <button
+          className={styles.mobileMenuButton}
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-nav"
+        >
+          {mobileOpen ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
+        </button>
 
-      <header className={styles.header}>
-        {/* Top row */}
-        <div className={styles.topRow}>
-          <button
-            className={styles.mobileMenuButton}
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open menu"
-            aria-expanded={mobileOpen}
-            aria-controls="mobile-nav"
-          >
-            {mobileOpen ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
-          </button>
+        <NavLink to={ROUTES.HOME} className={styles.brand} aria-label="PrintForge home">
+          PrintForge
+        </NavLink>
 
-          <NavLink to={ROUTES.HOME} className={styles.brand} aria-label="PrintForge home">
-            PrintForge
+        <HeaderSearch variant="bar" />
+
+        {/* Right side actions */}
+        <div className={styles.actions}>
+          <CurrencySelector />
+
+          <NavLink to={ROUTES.CART} className={styles.cartLink} aria-label={`Cart${cartCount > 0 ? `, ${cartCount} item${cartCount === 1 ? '' : 's'}` : ''}`}>
+            <ShoppingCart size={20} aria-hidden="true" />
+            {cartCount > 0 && <span className={styles.cartBadge}>{cartCount}</span>}
           </NavLink>
 
-          <HeaderSearch variant="bar" />
-
-          {/* Right side actions */}
-          <div className={styles.actions}>
-            <CurrencySelector />
-
-            <NavLink to={ROUTES.CART} className={styles.cartLink} aria-label={`Cart${cartCount > 0 ? `, ${cartCount} item${cartCount === 1 ? '' : 's'}` : ''}`}>
-              <ShoppingCart size={20} aria-hidden="true" />
-              {cartCount > 0 && <span className={styles.cartBadge}>{cartCount}</span>}
-            </NavLink>
-
+          {/* Auth cluster. Below the 560px breakpoint it collapses into the
+              nav drawer (which carries the same actions) so the top row
+              never has to squeeze brand + cart + login + sign-up onto one
+              line (UX-16). */}
+          <div className={styles.authActions}>
             {isAuthenticated ? (
               <>
                 {user?.role === 'ADMIN' && (
@@ -101,102 +96,123 @@ export function Header() {
             ) : null}
           </div>
         </div>
+      </div>
 
-        {/* Bottom navigation row - Desktop category menu */}
-        <nav className={styles.navRowDesktop} aria-label="Product categories">
-          <div className={styles.navInnerDesktop}>
-            {treeLoading ? (
-              <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
-            ) : (
-              <MegaMenuBar categories={categories} />
-            )}
-          </div>
-        </nav>
+      {/* Bottom navigation row - Desktop category menu */}
+      <nav className={styles.navRowDesktop} aria-label="Product categories">
+        <div className={styles.navInnerDesktop}>
+          {treeLoading ? (
+            <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
+          ) : (
+            <MegaMenuBar categories={categories} />
+          )}
+        </div>
+      </nav>
 
-        {/* Mobile drawer navigation */}
-        <nav
-          id="mobile-nav"
-          className={cn(styles.navRowMobile, mobileOpen && styles.open)}
-          aria-label="Categories"
-          role="navigation"
-        >
-          <div className={styles.navInnerMobile}>
-            <div className={styles.mobileDrawerHead}>
-              <span className={styles.mobileDrawerTitle}>Menu</span>
-              <button
-                className={styles.mobileNavClose}
-                onClick={() => setMobileOpen(false)}
-                aria-label="Close menu"
-              >
-                <X size={24} aria-hidden="true" />
-              </button>
-            </div>
-
-            <HeaderSearch variant="drawer" onSubmitted={() => setMobileOpen(false)} />
-
-            <NavLink
-              to={ROUTES.PRODUCTS}
-              className={styles.mobileAllProducts}
+      {/* Mobile drawer: overlay + panel. Both live inside <header> so they
+          share its stacking context — the panel (z-index: dropdown) then
+          reliably sits above the overlay (dropdown - 1) and stays
+          interactive. */}
+      {mobileOpen && (
+        <div
+          className={cn(styles.drawerOverlay, styles.visible)}
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <nav
+        id="mobile-nav"
+        className={cn(styles.navRowMobile, mobileOpen && styles.open)}
+        aria-label="Categories"
+        role="navigation"
+        // Any link tap (category, "All products", account) closes the drawer
+        // so the customer lands on the new page unobstructed. Covers the
+        // recursive CategoryAccordion links too, which have no per-link
+        // handler of their own.
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest('a')) setMobileOpen(false)
+        }}
+      >
+        <div className={styles.navInnerMobile}>
+          <div className={styles.mobileDrawerHead}>
+            <span className={styles.mobileDrawerTitle}>Menu</span>
+            <button
+              className={styles.mobileNavClose}
               onClick={() => setMobileOpen(false)}
+              aria-label="Close menu"
             >
-              All products
-            </NavLink>
-            {treeLoading ? (
-              <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
-            ) : (
-              <CategoryAccordion categories={categories} />
-            )}
-
-            <div className={styles.mobileDrawerAccount}>
-              {isAuthenticated ? (
-                <>
-                  <NavLink
-                    to={ROUTES.ACCOUNT}
-                    className={styles.mobileAccountLink}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    My account
-                  </NavLink>
-                  <NavLink
-                    to={ROUTES.ORDERS}
-                    className={styles.mobileAccountLink}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    My orders
-                  </NavLink>
-                  {user?.role === 'ADMIN' && (
-                    <NavLink
-                      to={ROUTES.ADMIN_DASHBOARD}
-                      className={styles.mobileAccountLink}
-                      onClick={() => setMobileOpen(false)}
-                    >
-                      Admin
-                    </NavLink>
-                  )}
-                </>
-              ) : (
-                <>
-                  <NavLink
-                    to={ROUTES.LOGIN}
-                    className={styles.mobileAccountLink}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    Log in
-                  </NavLink>
-                  <NavLink
-                    to={ROUTES.REGISTER}
-                    state={registerState}
-                    className={styles.mobileAccountLink}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    Create an account
-                  </NavLink>
-                </>
-              )}
-            </div>
+              <X size={24} aria-hidden="true" />
+            </button>
           </div>
-        </nav>
-      </header>
-    </>
+
+          <HeaderSearch variant="drawer" onSubmitted={() => setMobileOpen(false)} />
+
+          <NavLink
+            to={ROUTES.PRODUCTS}
+            className={styles.mobileAllProducts}
+            onClick={() => setMobileOpen(false)}
+          >
+            All products
+          </NavLink>
+          {treeLoading ? (
+            <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
+          ) : (
+            <CategoryAccordion categories={categories} />
+          )}
+
+          <div className={styles.mobileDrawerAccount}>
+            {isAuthenticated ? (
+              <>
+                <NavLink
+                  to={ROUTES.ACCOUNT}
+                  className={styles.mobileAccountLink}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  My account
+                </NavLink>
+                <NavLink
+                  to={ROUTES.ORDERS}
+                  className={styles.mobileAccountLink}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  My orders
+                </NavLink>
+                {user?.role === 'ADMIN' && (
+                  <NavLink
+                    to={ROUTES.ADMIN_DASHBOARD}
+                    className={styles.mobileAccountLink}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Admin
+                  </NavLink>
+                )}
+                <LogoutButton
+                  className={styles.mobileLogout}
+                  onAfterLogout={() => setMobileOpen(false)}
+                />
+              </>
+            ) : (
+              <>
+                <NavLink
+                  to={ROUTES.LOGIN}
+                  className={styles.mobileAccountLink}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Log in
+                </NavLink>
+                <NavLink
+                  to={ROUTES.REGISTER}
+                  state={registerState}
+                  className={styles.mobileAccountLink}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Create an account
+                </NavLink>
+              </>
+            )}
+          </div>
+        </div>
+      </nav>
+    </header>
   )
 }

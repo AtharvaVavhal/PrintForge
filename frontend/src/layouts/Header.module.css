@@ -23,6 +23,12 @@
   text-decoration: none;
   letter-spacing: -0.02em;
   flex-shrink: 0;
+  border-radius: var(--radius-sm);
+}
+
+.brand:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .searchForm {
@@ -121,6 +127,12 @@
   flex-shrink: 0;
 }
 
+.authActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .currencySelector {
   /* styles from CurrencySelector component */
 }
@@ -163,6 +175,13 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+  }
+
+  /* Below 560px the top row is just hamburger + brand + cart. Log in /
+   * Sign up / Account / Log out all live in the nav drawer instead, so the
+   * row can never overflow the viewport (UX-16). */
+  .authActions {
+    display: none;
   }
 }
 
@@ -337,6 +356,11 @@
   background: var(--color-surface);
 }
 
+.mobileNavClose:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .mobileAllProducts {
   display: block;
   padding: var(--space-3) var(--space-4);
@@ -377,6 +401,22 @@
   outline: none;
 }
 
+/* The shared LogoutButton (a ghost <Button>) restyled to sit in the drawer
+ * account list like the NavLinks around it. Scoped through the parent so it
+ * reliably wins over the base .button rule regardless of stylesheet order. */
+.mobileDrawerAccount .mobileLogout {
+  width: 100%;
+  justify-content: flex-start;
+  padding: var(--space-3) var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-strong);
+}
+
+.mobileDrawerAccount .mobileLogout:hover {
+  background: var(--color-surface);
+}
+
 /* Mobile menu button */
 .mobileMenuButton {
   display: none;
@@ -395,27 +435,45 @@
   background: var(--color-surface);
 }
 
+.mobileMenuButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* The drawer overlay is only mounted while the drawer is open (any
+ * viewport where the hamburger is reachable), so its positioning is
+ * unconditional — it must never fall back to `position: static`. It sits
+ * one layer below the drawer panel; both are inside <header> so they share
+ * its stacking context and the panel stays on top and interactive. */
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-base);
+  z-index: calc(var(--z-index-dropdown) - 1);
+}
+
+.drawerOverlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 @media (max-width: 1024px) {
   .searchForm {
     display: none; /* hidden on tablet, accessible via mobile drawer */
   }
 
+  /* The horizontal MegaMenu category bar is a desktop affordance; on
+   * tablet/mobile categories are reached through the drawer's accordion
+   * (same breakpoint as the search + hamburger switch). Leaving it visible
+   * rendered a cramped, redundant strip under the top row (UX-16). */
+  .navRowDesktop {
+    display: none;
+  }
+
   .mobileMenuButton {
     display: inline-flex;
-  }
-
-  .drawerOverlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.4);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--transition-base);
-    z-index: calc(var(--z-index-dropdown) - 1);
-  }
-
-  .drawerOverlay.visible {
-    opacity: 1;
-    pointer-events: auto;
   }
 }
