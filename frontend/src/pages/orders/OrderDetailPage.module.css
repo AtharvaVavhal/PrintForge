@@ -54,6 +54,7 @@
   align-items: start;
 }
 
+/* aside (720) — shared content-plus-sidebar collapse; see tokens.css. */
 @media (max-width: 720px) {
   .layout {
     grid-template-columns: 1fr;

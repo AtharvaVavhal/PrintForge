@@ -80,6 +80,9 @@
   min-height: 0;
 }
 
+/* Component-specific 560px (see tokens.css) — the qty/remove controls wrap
+   under the item details here, the same width the header collapses its auth
+   actions (Header.module.css). Between `sm` (480) and `md` (640). */
 @media (max-width: 560px) {
   .line {
     grid-template-columns: 56px minmax(0, 1fr);

@@ -253,6 +253,8 @@
   font-size: var(--text-sm);
 }
 
+/* xl pair (tokens.css): desktop sidebar below 1024px becomes the inline
+   panel rendered inside MobileFilterDrawer (which shows at min-width: 1024px). */
 @media (max-width: 1023px) {
   .sidebar {
     position: static;

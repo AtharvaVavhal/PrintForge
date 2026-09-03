@@ -27,7 +27,9 @@
   min-width: 0;
 }
 
-@media (max-width: 1024px) {
+/* Rail card sizing steps down at the canonical xl (1023 = below desktop)
+   and md (640) breakpoints — see tokens.css. */
+@media (max-width: 1023px) {
   .rail {
     grid-auto-columns: minmax(200px, 70%);
   }

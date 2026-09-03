@@ -94,7 +94,10 @@
   }
 }
 
-@media (max-width: 400px) {
+/* sm (480) — the canonical smallest-phone breakpoint (tokens.css). Was a
+   one-off 400px; normalized so the showcase collapses to one column at the
+   same width every other single-column-on-small-phone grid does. */
+@media (max-width: 480px) {
   .grid {
     grid-template-columns: 1fr;
   }

@@ -140,6 +140,8 @@
   font-size: 10px;
 }
 
+/* xl pair (tokens.css): the "Filters" trigger + drawer belong to the
+   mobile layout; at >= 1024px the desktop FilterSidebar takes over. */
 @media (min-width: 1024px) {
   .trigger {
     display: none;

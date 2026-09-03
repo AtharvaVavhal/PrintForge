@@ -140,8 +140,71 @@
   --z-index-toast: 300;
 }
 
+/* ============================================================
+ * CANONICAL RESPONSIVE BREAKPOINTS (UX-16)
+ * ------------------------------------------------------------
+ * CSS custom properties cannot be used inside @media conditions,
+ * and this project has no PostCSS custom-media step, so these
+ * values live here as the single documented source of truth and
+ * are written as literals in each *.module.css @media query.
+ *
+ * The storefront layout changes at exactly these widths:
+ *
+ *   sm    = 480px   Smallest phones. Multi-column forms and grids
+ *                   (ShippingForm, ProfileForm, ProductGrid,
+ *                   HomeHero/HeroCarousel type scale) go to one
+ *                   column / the tightest step below this.
+ *
+ *   md    = 640px   Phones. --container-padding tightens (below),
+ *                   and the home sections / footer / toolbars
+ *                   collapse to a single column below this. This
+ *                   is the most-used breakpoint in the storefront.
+ *
+ *   aside = 720px   The content-plus-sidebar page layouts only —
+ *                   CheckoutPage, CartPage, ProductDetailPage,
+ *                   OrderDetailPage, AccountPage. Below this the
+ *                   ~300-340px aside drops below the main column;
+ *                   the sticky-aside rule is the paired
+ *                   `min-width: 721px`. Kept distinct from `lg`
+ *                   because it is tuned to the aside width, not to
+ *                   typography or grid density.
+ *
+ *   lg    = 768px   Tablet (portrait). ProductGrid 3->2 columns,
+ *                   hero type scale shrinks below this.
+ *
+ *   xl    = 1024px  Desktop. The desktop header (search + MegaMenu
+ *                   bar) and the product-list desktop sidebar are
+ *                   shown at >= 1024px; below that the mobile
+ *                   header + filter drawer take over. Because this
+ *                   is a hard either/or swap, it is ALWAYS written
+ *                   as the pair `max-width: 1023px` /
+ *                   `min-width: 1024px` so exactly one side is
+ *                   active at 1024px.
+ *
+ * Convention:
+ *   - "below X" rules: `@media (max-width: <bp>px)` (sm/md/lg),
+ *     or `@media (max-width: <bp - 1>px)` for a bp that also has a
+ *     `min-width` counterpart (aside 720/721, xl 1023/1024).
+ *   - Do not invent new near-duplicate values. Reuse the closest
+ *     canonical breakpoint unless a component genuinely needs its
+ *     own transition (see below).
+ *
+ * Deliberately component-specific breakpoints (NOT canonical —
+ * each is a single content-driven transition, documented in place):
+ *   - 560px  Header auth-actions collapse (UX-16) + CartLineItem
+ *            row reflow — a row of small controls stacking.
+ *   - 860px  TrustStrip 3->1 columns (three wide text blocks).
+ *   - 1280px ProductGrid 5->4 columns (the widest grid step).
+ *
+ * There is no JS/TS responsive logic in the storefront (no
+ * matchMedia, innerWidth, or resize listeners) — every breakpoint
+ * lives in CSS. Keep it that way; if JS ever needs a breakpoint,
+ * add it here as a shared constant and reference this block.
+ * ============================================================ */
+
 @media (max-width: 640px) {
   :root {
+    /* md — see the canonical breakpoint scale above */
     --container-padding: 1rem;
   }
 }

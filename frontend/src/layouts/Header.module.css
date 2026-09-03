@@ -170,6 +170,8 @@
   white-space: nowrap;
 }
 
+/* Component-specific 560px (see tokens.css) — between `sm` and `md`,
+   shared only with CartLineItem's control reflow. */
 @media (max-width: 560px) {
   .accountLabel {
     position: absolute;
@@ -467,7 +469,11 @@
   pointer-events: auto;
 }
 
-@media (max-width: 1024px) {
+/* xl — desktop chrome is shown at >= 1024px, mobile header below it.
+   Written as `max-width: 1023px` (not 1024) so it lines up exactly
+   with the product-list sidebar/drawer swap (FilterSidebar 1023 /
+   MobileFilterDrawer 1024) — see the canonical scale in tokens.css. */
+@media (max-width: 1023px) {
   .searchForm {
     display: none; /* hidden on tablet, accessible via mobile drawer */
   }

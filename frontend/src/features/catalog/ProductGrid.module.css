@@ -25,13 +25,16 @@
   width: 40%;
 }
 
+/* Progressive column count. Breakpoints follow the canonical scale in
+   tokens.css: xl (1023 = below desktop), lg (768), sm (480). 1280 is a
+   grid-only "widest step" and is intentionally not a shared breakpoint. */
 @media (max-width: 1280px) {
   .grid {
     grid-template-columns: repeat(4, 1fr);
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1023px) {
   .grid {
     grid-template-columns: repeat(3, 1fr);
   }

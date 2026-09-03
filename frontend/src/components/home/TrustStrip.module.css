@@ -52,6 +52,9 @@
   line-height: 1.5;
 }
 
+/* Deliberately component-specific (not a canonical breakpoint — see
+   tokens.css): three wide value-prop blocks stop fitting side by side
+   around here, earlier than the shared `lg` (768) grid breakpoint. */
 @media (max-width: 860px) {
   .grid {
     grid-template-columns: 1fr;

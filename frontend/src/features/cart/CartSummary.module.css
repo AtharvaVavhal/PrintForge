@@ -44,6 +44,8 @@
   margin-top: var(--space-2);
 }
 
+/* aside pair (tokens.css): sticky only once the summary sits beside the
+   cart (>= 721px); below that it stacks and must scroll with the page. */
 @media (min-width: 721px) {
   .summary {
     position: sticky;

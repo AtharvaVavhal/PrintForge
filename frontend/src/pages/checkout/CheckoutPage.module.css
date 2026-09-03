@@ -14,6 +14,9 @@
   align-items: start;
 }
 
+/* aside pair (tokens.css): the order-summary column drops below the form
+   below 720px; its sticky rule is the paired `min-width: 721px` further down.
+   Shared with CartPage / ProductDetailPage / OrderDetailPage / AccountPage. */
 @media (max-width: 720px) {
   .layout {
     grid-template-columns: 1fr;
