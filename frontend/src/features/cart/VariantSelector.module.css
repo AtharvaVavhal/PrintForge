@@ -39,11 +39,19 @@
     background 0.15s ease;
 }
 
-.option:hover:not(:disabled) {
+.optionInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.option:not(.optionDisabled):hover {
   border-color: var(--color-accent);
 }
 
-.option:focus-visible {
+.option:has(.optionInput:focus-visible) {
   outline: none;
   box-shadow: var(--focus-ring);
 }

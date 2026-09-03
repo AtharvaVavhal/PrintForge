@@ -148,6 +148,36 @@ describe('ReviewList', () => {
     expect(await screen.findByText('(You)')).toBeInTheDocument()
   })
 
+  it('exposes the rating input as one native radio group with arrow-key selection (UX-15)', async () => {
+    const user = userEvent.setup()
+    mock.onGet(`/products/${PRODUCT_ID}/reviews`).reply(200, listResponse([]))
+
+    renderReviewList(AUTHENTICATED)
+    await screen.findByText('No reviews yet.')
+    await user.click(screen.getByRole('button', { name: 'Write a review' }))
+
+    const stars = screen
+      .getByRole('radiogroup', { name: /your rating/i })
+      .querySelectorAll('input[type="radio"]')
+    expect(stars).toHaveLength(5)
+    stars.forEach((s) => expect(s).toHaveAttribute('name', 'rating'))
+    expect(screen.getByRole('radio', { name: '1 star' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '5 stars' })).toBeInTheDocument()
+
+    // Keyboard: focus the group, ArrowRight moves focus AND selects (native).
+    screen.getByRole('radio', { name: '1 star' }).focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('radio', { name: '2 stars' })).toHaveFocus()
+    expect(screen.getByRole('radio', { name: '2 stars' })).toBeChecked()
+
+    await user.keyboard('{ArrowRight}{ArrowRight}')
+    expect(screen.getByRole('radio', { name: '4 stars' })).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Submit review' }))
+    await waitFor(() => expect(mock.history.post).toHaveLength(1))
+    expect(JSON.parse(mock.history.post[0].data as string)).toMatchObject({ rating: 4 })
+  })
+
   it('surfaces the 409 verified-purchase rejection as a clear message, and leaves the form open', async () => {
     const user = userEvent.setup()
     mock.onGet(`/products/${PRODUCT_ID}/reviews`).reply(200, listResponse([]))

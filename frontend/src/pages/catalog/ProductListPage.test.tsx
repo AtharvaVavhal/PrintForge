@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { apiClient } from '@/services/api/client'
 import { renderWithProviders } from '@/test/test-utils'
+import { RATING_OPTIONS } from '@/types/catalog'
 import { ProductListPage } from './ProductListPage'
 
 const CATEGORY_TREE_RESPONSE = {
@@ -187,6 +188,33 @@ describe('ProductListPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Tumblers' }))
     await waitFor(() => {
       expect(mock.history.get.at(-1)?.params).toMatchObject({ categoryId: 'cat-2' })
+    })
+  })
+
+  it('exposes the minimum-rating filter as one native radio group and selects via keyboard (UX-15)', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/categories/tree').reply(200, CATEGORY_TREE_RESPONSE)
+    mock.onGet('/products').reply(200, productsResponse([SAMPLE_PRODUCT]))
+
+    renderWithProviders(<ProductListPage />)
+    await screen.findByText('Ceramic Mug')
+
+    const ratingRadios = screen
+      .getByRole('radiogroup', { name: /minimum rating/i })
+      .querySelectorAll('input[type="radio"]')
+    expect(ratingRadios).toHaveLength(RATING_OPTIONS.length)
+    ratingRadios.forEach((r) => expect(r).toHaveAttribute('name', 'minRating'))
+
+    // Tab from the "Max price" field lands on the group's first radio, then
+    // ArrowDown moves to and selects the next option (native behavior).
+    screen.getByLabelText('Max price').focus()
+    await user.tab()
+    expect(screen.getByRole('radio', { name: /1\+ stars/ })).toHaveFocus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('radio', { name: /2\+ stars/ })).toBeChecked()
+
+    await waitFor(() => {
+      expect(mock.history.get.at(-1)?.params).toMatchObject({ minRating: 2 })
     })
   })
 

@@ -48,7 +48,15 @@
   border-color: var(--color-accent);
 }
 
-.option:focus-visible {
+.optionInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.option:has(.optionInput:focus-visible) {
   outline: none;
   box-shadow: var(--focus-ring);
 }

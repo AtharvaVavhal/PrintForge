@@ -72,14 +72,23 @@ export function ColorSelectField({ field, value, onChange, error }: ColorSelectF
         {options.map((option) => {
           const swatch = swatchFor(option)
           return (
-            <button
+            <label
               key={option}
-              type="button"
-              role="radio"
-              aria-checked={value === option}
               className={cn(styles.option, value === option && styles.optionSelected)}
-              onClick={() => onChange(option)}
             >
+              {/* Native <input type="radio"> (UX-15): the browser gives the
+                  group its roving tab stop and Arrow/Home/End selection for
+                  free. Visually hidden but focusable; the styled <label> is
+                  the visible control, exactly as before. React state stays
+                  the single source of truth via `checked` + `onChange`. */}
+              <input
+                type="radio"
+                name={field.id}
+                value={option}
+                checked={value === option}
+                onChange={() => onChange(option)}
+                className={styles.optionInput}
+              />
               {swatch && (
                 <span
                   className={styles.swatch}
@@ -88,7 +97,7 @@ export function ColorSelectField({ field, value, onChange, error }: ColorSelectF
                 />
               )}
               {option}
-            </button>
+            </label>
           )
         })}
       </div>

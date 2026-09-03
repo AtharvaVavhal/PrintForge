@@ -10,10 +10,12 @@ interface VariantSelectorProps {
   error?: string
 }
 
-/** Same selectable-button radiogroup pattern as
+/** Native <input type="radio"> group (UX-15), same pattern as
  * features/customization/fields/ColorSelectField.tsx — required before Add
  * to Cart whenever the product has any variants; unavailable variants are
- * shown, labeled, and disabled, never hidden. */
+ * shown, labeled, and disabled, never hidden. The browser provides the
+ * roving tab stop and Arrow/Home/End selection; the styled <label> stays
+ * the visible control and React state stays authoritative. */
 export function VariantSelector({
   variants,
   selectedVariantId,
@@ -28,25 +30,29 @@ export function VariantSelector({
         {variants.map((variant) => {
           const disabled = !variant.isAvailable
           return (
-            <button
+            <label
               key={variant.id}
-              type="button"
-              role="radio"
-              aria-checked={selectedVariantId === variant.id}
-              disabled={disabled}
               className={cn(
                 styles.option,
                 selectedVariantId === variant.id && styles.optionSelected,
                 disabled && styles.optionDisabled,
               )}
-              onClick={() => onChange(variant.id)}
             >
+              <input
+                type="radio"
+                name="product-variant"
+                value={variant.id}
+                checked={selectedVariantId === variant.id}
+                disabled={disabled}
+                onChange={() => onChange(variant.id)}
+                className={styles.optionInput}
+              />
               <span>{variant.label}</span>
               <span className={styles.optionMeta}>
                 {Number(variant.priceDelta) !== 0 && `+${formatPrice(variant.priceDelta)}`}
                 {disabled && <span className={styles.unavailable}> · Unavailable</span>}
               </span>
-            </button>
+            </label>
           )
         })}
       </div>
