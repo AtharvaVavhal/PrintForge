@@ -6,6 +6,7 @@ import { Pagination } from '@/components/ui/Pagination'
 import { EmptyOrders } from '@/features/orders/EmptyOrders'
 import { OrderListRow } from '@/features/orders/OrderListRow'
 import { OrderListSkeleton } from '@/features/orders/OrderListSkeleton'
+import { Page } from '@/components/ui/Page'
 import { Seo } from '@/seo/Seo'
 import styles from './OrdersPage.module.css'
 
@@ -28,7 +29,7 @@ export function OrdersPage() {
   }
 
   return (
-    <section className={styles.wrap}>
+    <Page>
       <Seo title="Your orders" noindex />
       <div className={styles.header}>
         <h1>Your orders</h1>
@@ -62,6 +63,6 @@ export function OrdersPage() {
           />
         </>
       )}
-    </section>
+    </Page>
   )
 }

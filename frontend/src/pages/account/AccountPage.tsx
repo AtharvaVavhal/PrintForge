@@ -8,6 +8,7 @@ import { getApiErrorMessage } from '@/utils/apiError'
 import { ROUTES } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Seo } from '@/seo/Seo'
 import { LogoutButton } from '@/features/auth/LogoutButton'
@@ -70,7 +71,7 @@ export function AccountPage() {
     : 'No address on file yet.'
 
   return (
-    <section className={styles.wrap}>
+    <Page>
       <Seo title="My account" noindex />
       <h1>My account</h1>
 
@@ -131,6 +132,6 @@ export function AccountPage() {
           </div>
         </div>
       )}
-    </section>
+    </Page>
   )
 }

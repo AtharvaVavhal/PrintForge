@@ -12,6 +12,7 @@ import { CouponForm } from '@/features/checkout/CouponForm'
 import { PriceBreakdown } from '@/features/checkout/PriceBreakdown'
 import { OrderPendingPayment } from '@/features/checkout/OrderPendingPayment'
 import { Alert } from '@/components/ui/Alert'
+import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PaymentLoadError } from '@/components/ui/PaymentLoadError'
 import { getApiErrorMessage } from '@/utils/apiError'
@@ -165,25 +166,25 @@ export function CheckoutPage() {
 
   if (isCartPending || profileQuery.isLoading) {
     return withSeo(
-      <section className={styles.wrap}>
+      <Page>
         <h1>Checkout</h1>
         <Skeleton className={styles.skeletonBlock} />
-      </section>,
+      </Page>,
     )
   }
 
   if (isCartError) {
     return withSeo(
-      <section className={styles.wrap}>
+      <Page>
         <h1>Checkout</h1>
         <Alert variant="error">{getApiErrorMessage(cartError)}</Alert>
-      </section>,
+      </Page>,
     )
   }
 
   if (order) {
     return withSeo(
-      <section className={styles.wrap}>
+      <Page>
         <h1>Checkout</h1>
         <OrderPendingPayment
           order={order}
@@ -192,28 +193,28 @@ export function CheckoutPage() {
           isProcessing={retryPayment.isPending || isOpening || isVerifying}
           isScriptLoading={isLoadingScript}
         />
-      </section>,
+      </Page>,
     )
   }
 
   if (cart.items.length === 0) {
     return withSeo(
-      <section className={styles.wrap}>
+      <Page>
         <h1>Checkout</h1>
         <Alert variant="info">Your cart is empty — add something before checking out.</Alert>
-      </section>,
+      </Page>,
     )
   }
 
   const hasUnavailableItems = cart.items.some((item) => !item.isAvailable)
   if (hasUnavailableItems) {
     return withSeo(
-      <section className={styles.wrap}>
+      <Page>
         <h1>Checkout</h1>
         <Alert variant="error">
           Remove the unavailable item(s) in your cart before checking out.
         </Alert>
-      </section>,
+      </Page>,
     )
   }
 
@@ -224,7 +225,7 @@ export function CheckoutPage() {
   const savedAddress = savedAddressDefaults(profileQuery.data)
 
   return withSeo(
-    <section className={styles.wrap}>
+    <Page>
       <h1>Checkout</h1>
       {scriptLoadError && <PaymentLoadError message={scriptLoadError} onRetry={() => setScriptLoadError(null)} />}
       <div className={styles.layout}>
@@ -261,6 +262,6 @@ export function CheckoutPage() {
           )}
         </aside>
       </div>
-    </section>,
+    </Page>,
   )
 }

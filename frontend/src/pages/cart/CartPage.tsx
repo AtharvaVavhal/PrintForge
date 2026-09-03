@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useCart } from '@/hooks/useCart'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { Alert } from '@/components/ui/Alert'
+import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { CartLineItem } from '@/features/cart/CartLineItem'
 import { CartSummary } from '@/features/cart/CartSummary'
@@ -20,7 +21,7 @@ export function CartPage() {
 
   if (isPending) {
     body = (
-      <section className={styles.wrap}>
+      <Page>
         <h1>Your cart</h1>
         <div className={styles.layout}>
           <div className={styles.skeletonList} aria-busy="true" aria-label="Loading your cart">
@@ -36,24 +37,24 @@ export function CartPage() {
           </div>
           <Skeleton className={styles.skeletonSummary} />
         </div>
-      </section>
+      </Page>
     )
   } else if (isError) {
     body = (
-      <section className={styles.wrap}>
+      <Page>
         <h1>Your cart</h1>
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
-      </section>
+      </Page>
     )
   } else if (cart.items.length === 0) {
     body = (
-      <section className={styles.wrap}>
+      <Page>
         <EmptyCart />
-      </section>
+      </Page>
     )
   } else {
     body = (
-      <section className={styles.wrap}>
+      <Page>
         <h1>
           Your cart{' '}
           <span className={styles.count}>
@@ -72,7 +73,7 @@ export function CartPage() {
             hasUnavailableItems={cart.items.some((item) => !item.isAvailable)}
           />
         </div>
-      </section>
+      </Page>
     )
   }
 

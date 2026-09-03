@@ -1,0 +1,12 @@
+/* Shared storefront page shell (UX-40). Values are verbatim what the
+   Account / Cart / Checkout / Orders / Order-detail pages already used —
+   the gap is `--space-5` (24px), which several pages previously wrote as
+   the identical literal `1.5rem`. */
+.page {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 2.5rem var(--container-padding) 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}

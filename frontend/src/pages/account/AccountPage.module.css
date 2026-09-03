@@ -1,12 +1,3 @@
-.wrap {
-  max-width: var(--container-max);
-  margin: 0 auto;
-  padding: 2.5rem var(--container-padding) 4rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
 .skeleton {
   height: 12rem;
   width: 100%;

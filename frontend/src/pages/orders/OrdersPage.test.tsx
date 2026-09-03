@@ -54,6 +54,20 @@ describe('OrdersPage', () => {
     expect(screen.getByText('PF-000001')).toBeInTheDocument()
   })
 
+  it('renders its content inside the shared storefront Page shell (UX-40)', async () => {
+    mock.onGet('/orders').reply(200, ordersResponse([buildOrder()]))
+
+    renderWithProviders(<OrdersPage />)
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Your orders' })
+    // Single wrapping <section> from the Page primitive — no double wrapper,
+    // and the page's own <h1>/header stay page-owned inside it.
+    const section = heading.closest('section')
+    expect(section).not.toBeNull()
+    expect(section?.className).toMatch(/page/i)
+    expect(section?.querySelector('section')).toBeNull()
+  })
+
   it('renders orders returned by the API: order number, date, status badge, item count, and total', async () => {
     mock.onGet('/orders').reply(200, ordersResponse([buildOrder({ status: 'PAID', itemCount: 3, total: '450.00' })]))
 

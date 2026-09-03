@@ -6,6 +6,7 @@ import { useRetryPayment } from '@/hooks/useRetryPayment'
 import { useRazorpayCheckout } from '@/features/checkout/useRazorpayCheckout'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PriceBreakdown } from '@/features/checkout/PriceBreakdown'
 import { Seo } from '@/seo/Seo'
@@ -86,21 +87,21 @@ export function OrderDetailPage() {
 
   if (isPending) {
     return (
-      <section className={styles.wrap}>
+      <Page>
         <Seo title="Order" noindex />
         <h1>Order</h1>
         <Skeleton className={styles.skeletonBlock} />
-      </section>
+      </Page>
     )
   }
 
   if (isError) {
     return (
-      <section className={styles.wrap}>
+      <Page>
         <Seo title="Order" noindex />
         <h1>Order</h1>
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
-      </section>
+      </Page>
     )
   }
 
@@ -109,7 +110,7 @@ export function OrderDetailPage() {
   const timeline = [...order.statusHistory].reverse()
 
   return (
-    <section className={styles.wrap}>
+    <Page>
       <Seo title={`Order ${order.orderNumber}`} noindex />
       <p className={styles.backLink}>
         <Link to={ROUTES.ORDERS}>← All orders</Link>
@@ -235,6 +236,6 @@ export function OrderDetailPage() {
           </div>
         </div>
       </div>
-    </section>
+    </Page>
   )
 }
