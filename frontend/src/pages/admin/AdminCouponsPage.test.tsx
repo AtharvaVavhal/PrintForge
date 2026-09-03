@@ -526,12 +526,12 @@ describe('AdminCouponsPage', () => {
   })
 
   // U
-  it('shows a page-level skeleton with aria-busy while the first fetch is in flight', () => {
+  it('shows a page-level skeleton (polite loading status) while the first fetch is in flight', () => {
     mock.onGet('/admin/coupons').reply(() => new Promise(() => {}))
 
     renderWithProviders(<AdminCouponsPage />)
 
-    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading').closest('[role="status"]')).toBeInTheDocument()
   })
 
   // V

@@ -262,11 +262,11 @@ describe('AdminSettingsPage', () => {
 
   // ─── States ────────────────────────────────────────────────────────────
 
-  it('shows a page-level skeleton with aria-busy while loading', () => {
+  it('shows a page-level skeleton (polite loading status) while loading', () => {
     mock.onGet('/admin/settings').reply(() => new Promise(() => {}))
     renderWithProviders(<AdminSettingsPage />)
 
-    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading').closest('[role="status"]')).toBeInTheDocument()
     expect(screen.queryByLabelText('Flat shipping fee (₹)')).not.toBeInTheDocument()
   })
 

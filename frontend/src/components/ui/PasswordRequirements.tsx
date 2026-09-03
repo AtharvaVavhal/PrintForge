@@ -34,7 +34,7 @@ export function PasswordRequirements({ value, id }: PasswordRequirementsProps) {
               <Circle size={15} className={styles.icon} aria-hidden="true" />
             )}
             <span>{requirement.label}</span>
-            <span className={styles.srOnly}>{met ? ' — met' : ' — not met'}</span>
+            <span className="srOnly">{met ? ' — met' : ' — not met'}</span>
           </li>
         )
       })}

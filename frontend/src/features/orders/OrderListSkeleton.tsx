@@ -16,7 +16,7 @@ export function OrderListSkeleton({ label }: { label?: string }) {
 
   return (
     <div role="status">
-      <span className={styles.srOnly}>{label}</span>
+      <span className="srOnly">{label}</span>
       {rows}
     </div>
   )

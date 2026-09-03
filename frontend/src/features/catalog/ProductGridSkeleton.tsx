@@ -1,6 +1,5 @@
 import { ProductCardSkeleton } from './ProductCardSkeleton'
 import gridStyles from './ProductGrid.module.css'
-import styles from './ProductGridSkeleton.module.css'
 
 const SKELETON_CARD_COUNT = 8
 
@@ -17,7 +16,7 @@ export function ProductGridSkeleton({ label }: { label?: string }) {
 
   return (
     <div role="status">
-      <span className={styles.srOnly}>{label}</span>
+      <span className="srOnly">{label}</span>
       {grid}
     </div>
   )

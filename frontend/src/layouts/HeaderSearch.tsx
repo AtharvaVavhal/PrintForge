@@ -50,7 +50,7 @@ export function HeaderSearch({
       onSubmit={(e) => void handleSubmit(onValid)(e)}
       noValidate
     >
-      <label htmlFor={inputId} className={styles.searchLabel}>
+      <label htmlFor={inputId} className="srOnly">
         Search products
       </label>
       <Search size={18} className={styles.searchIcon} aria-hidden="true" />

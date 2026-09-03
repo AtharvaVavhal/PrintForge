@@ -197,11 +197,11 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByRole('link', { name: 'View all orders' })).toBeInTheDocument()
   })
 
-  it('shows a page-level skeleton with aria-busy while the dashboard is loading', () => {
+  it('shows a page-level skeleton (polite loading status) while the dashboard is loading', () => {
     mock.onGet('/admin/dashboard').reply(() => new Promise(() => {}))
     renderWithProviders(<AdminDashboardPage />)
 
-    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading').closest('[role="status"]')).toBeInTheDocument()
     expect(screen.queryByText('Total orders')).not.toBeInTheDocument()
   })
 

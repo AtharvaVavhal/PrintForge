@@ -31,7 +31,7 @@ export function TrustStrip() {
 
   return (
     <section className={styles.section} aria-labelledby="home-trust-heading">
-      <h2 id="home-trust-heading" className={styles.srOnly}>
+      <h2 id="home-trust-heading" className="srOnly">
         Why shop with {storeName}
       </h2>
       <ul className={styles.grid}>

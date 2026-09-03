@@ -81,12 +81,12 @@ describe('AdminOrdersPage', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Orders' })).toBeInTheDocument()
   })
 
-  it('shows a page-level skeleton with aria-busy while the first fetch is in flight', () => {
+  it('shows a page-level skeleton (polite loading status) while the first fetch is in flight', () => {
     mock.onGet('/admin/orders').reply(() => new Promise(() => {}))
 
     renderWithProviders(<AdminOrdersPage />)
 
-    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading').closest('[role="status"]')).toBeInTheDocument()
   })
 
   it('surfaces a fetch error through the shared Alert (getApiErrorMessage)', async () => {

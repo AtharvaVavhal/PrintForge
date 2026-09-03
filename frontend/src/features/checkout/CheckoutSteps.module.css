@@ -37,18 +37,6 @@
   font-weight: var(--font-weight-medium);
 }
 
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* current + done share the accent treatment; the checkmark / number and
    the sr-only prefix — not colour — are what distinguish the three states. */
 .current {

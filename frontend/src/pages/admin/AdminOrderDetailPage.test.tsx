@@ -450,11 +450,11 @@ describe('AdminOrderDetailPage', () => {
 
   // ─── States ────────────────────────────────────────────────────────────
 
-  it('shows a page-level skeleton with aria-busy while loading', () => {
+  it('shows a page-level skeleton (polite loading status) while loading', () => {
     mock.onGet('/admin/orders/order-1').reply(() => new Promise(() => {}))
     renderPage()
 
-    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading').closest('[role="status"]')).toBeInTheDocument()
     expect(screen.queryByText('Ceramic Mug')).not.toBeInTheDocument()
   })
 

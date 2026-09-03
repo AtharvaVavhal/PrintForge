@@ -14,7 +14,8 @@ interface AdminPageSkeletonProps {
  */
 export function AdminPageSkeleton({ rows = 3 }: AdminPageSkeletonProps) {
   return (
-    <div className={styles.page} aria-busy="true" aria-label="Loading">
+    <div className={styles.page} role="status">
+      <span className="srOnly">Loading</span>
       <div className={styles.header}>
         <Skeleton className={styles.title} />
         <Skeleton className={styles.action} />

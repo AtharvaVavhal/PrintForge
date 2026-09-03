@@ -22,7 +22,7 @@ export function Skeleton({ className, label }: SkeletonProps) {
 
   return (
     <div className={styles.status} role="status">
-      <span className={styles.srOnly}>{label}</span>
+      <span className="srOnly">{label}</span>
       {block}
     </div>
   )

@@ -44,7 +44,7 @@ export function CheckoutSteps({ current }: { current: CheckoutStep }) {
               {state === 'done' ? <Check size={14} strokeWidth={3} /> : index + 1}
             </span>
             <span className={styles.label}>
-              <span className={styles.srOnly}>{prefix}</span>
+              <span className="srOnly">{prefix}</span>
               {step.label}
             </span>
           </li>

@@ -179,11 +179,11 @@ describe('AdminProductDetailPage', () => {
 
   // ─── Loading / not found ───────────────────────────────────────────────
 
-  it('shows a page-level skeleton with aria-busy while fetching by id', () => {
+  it('shows a page-level skeleton (polite loading status) while fetching by id', () => {
     mock.onGet('/products/admin/prod-1').reply(() => new Promise(() => {}))
     renderAt('/admin/products/prod-1')
 
-    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading').closest('[role="status"]')).toBeInTheDocument()
     expect(screen.queryByText('Ceramic Mug')).not.toBeInTheDocument()
   })
 

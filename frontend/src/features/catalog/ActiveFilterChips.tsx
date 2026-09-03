@@ -79,7 +79,7 @@ export function ActiveFilterChips({ onChange }: { onChange?: () => void }) {
             >
               <span className={styles.chipText}>{chip.label}</span>
               <X size={14} aria-hidden="true" />
-              <span className={styles.srOnly}>Remove filter {chip.label}</span>
+              <span className="srOnly">Remove filter {chip.label}</span>
             </button>
           </li>
         ))}

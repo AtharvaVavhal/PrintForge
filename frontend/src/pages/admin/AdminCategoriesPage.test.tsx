@@ -359,12 +359,12 @@ describe('AdminCategoriesPage', () => {
   })
 
   // O
-  it('shows a page-level skeleton with aria-busy while the first fetch is in flight', () => {
+  it('shows a page-level skeleton (polite loading status) while the first fetch is in flight', () => {
     mock.onGet('/categories/admin').reply(() => new Promise(() => {}))
 
     renderWithProviders(<AdminCategoriesPage />)
 
-    expect(screen.getByLabelText('Loading')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByText('Loading').closest('[role="status"]')).toBeInTheDocument()
   })
 
   // P

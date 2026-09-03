@@ -5,10 +5,12 @@ import { AdminPageSkeleton } from './AdminPageSkeleton'
 afterEach(cleanup)
 
 describe('AdminPageSkeleton', () => {
-  it('renders a busy, labelled loading region', () => {
+  it('renders a polite, labelled loading region (announced to assistive tech)', () => {
     render(<AdminPageSkeleton />)
-    const region = screen.getByLabelText('Loading')
-    expect(region).toHaveAttribute('aria-busy', 'true')
+    const region = screen.getByRole('status')
+    expect(region).toHaveTextContent('Loading')
+    // the label is visually hidden via the shared utility, not shown on screen
+    expect(screen.getByText('Loading')).toHaveClass('srOnly')
   })
 
   it('renders the requested number of content blocks (plus the header placeholders)', () => {

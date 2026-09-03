@@ -25,7 +25,7 @@ export function CartPage() {
         <h1>Your cart</h1>
         <div className={styles.layout}>
           <div className={styles.skeletonList} role="status">
-            <span className={styles.srOnly}>Loading your cart</span>
+            <span className="srOnly">Loading your cart</span>
             {[0, 1, 2].map((i) => (
               <div key={i} className={styles.skeletonRow} aria-hidden="true">
                 <Skeleton className={styles.skeletonMedia} />
