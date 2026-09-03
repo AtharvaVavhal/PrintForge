@@ -7,6 +7,7 @@ import { useCreateOrder } from '@/hooks/useCreateOrder'
 import { useRetryPayment } from '@/hooks/useRetryPayment'
 import { useRazorpayCheckout } from '@/features/checkout/useRazorpayCheckout'
 import { ShippingForm } from '@/features/checkout/ShippingForm'
+import { CheckoutSteps } from '@/features/checkout/CheckoutSteps'
 import { CheckoutCartSummary } from '@/features/checkout/CheckoutCartSummary'
 import { CouponForm } from '@/features/checkout/CouponForm'
 import { PriceBreakdown } from '@/features/checkout/PriceBreakdown'
@@ -168,7 +169,8 @@ export function CheckoutPage() {
     return withSeo(
       <Page>
         <h1>Checkout</h1>
-        <Skeleton className={styles.skeletonBlock} />
+        <CheckoutSteps current="details" />
+        <Skeleton className={styles.skeletonBlock} label="Loading checkout" />
       </Page>,
     )
   }
@@ -186,6 +188,7 @@ export function CheckoutPage() {
     return withSeo(
       <Page>
         <h1>Checkout</h1>
+        <CheckoutSteps current="payment" />
         <OrderPendingPayment
           order={order}
           error={paymentError}
@@ -227,6 +230,7 @@ export function CheckoutPage() {
   return withSeo(
     <Page>
       <h1>Checkout</h1>
+      <CheckoutSteps current="details" />
       {scriptLoadError && <PaymentLoadError message={scriptLoadError} onRetry={() => setScriptLoadError(null)} />}
       <div className={styles.layout}>
         <div className={styles.formColumn}>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -222,6 +222,28 @@ describe('CheckoutPage', () => {
     expect(getComputedStyle(summaryColumn!).minWidth).toBe('0px')
     // the flexible coupon-input child of the row, not the "Apply" button
     expect(getComputedStyle(inputRow!.firstElementChild as HTMLElement).minWidth).toBe('0px')
+  })
+
+  it('shows the checkout progress indicator and advances it from Delivery details to Payment (UX-41)', async () => {
+    const user = userEvent.setup()
+    mock.onPost('/checkout/orders').reply(201, { success: true, data: ORDER_VIEW })
+    mock.onPost('/checkout/orders/order-1/retry-payment').reply(200, { success: true, data: PAYMENT_VIEW })
+
+    renderCheckout()
+    await screen.findByLabelText('Recipient name')
+
+    const progress = screen.getByRole('list', { name: 'Checkout progress' })
+    let steps = within(progress).getAllByRole('listitem')
+    expect(steps[0]).toHaveAttribute('aria-current', 'step')
+    expect(steps[1]).not.toHaveAttribute('aria-current')
+
+    await fillShippingForm(user)
+    await user.click(screen.getByRole('button', { name: 'Pay now' }))
+
+    await screen.findByText(/awaiting payment/i)
+    steps = within(screen.getByRole('list', { name: 'Checkout progress' })).getAllByRole('listitem')
+    expect(steps[0]).toHaveTextContent('Completed:')
+    expect(steps[1]).toHaveAttribute('aria-current', 'step')
   })
 
   it('reuses the same Idempotency-Key across a failed attempt and its retry within one page mount', async () => {

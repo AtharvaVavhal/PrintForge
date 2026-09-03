@@ -1,3 +1,6 @@
+/* Verbatim the `.empty` block the cart / catalog / orders empty states
+   each duplicated before UX-43 — same centred column, spacing, and muted
+   treatment, so the visual design is unchanged. */
 .empty {
   display: flex;
   flex-direction: column;
@@ -8,12 +11,17 @@
   color: var(--color-text-muted);
 }
 
-.empty h2 {
+.title {
   color: var(--color-text-strong);
   font-size: 1.25rem;
   margin: 0.5rem 0 0;
 }
 
-.empty p {
+.description {
   margin: 0;
+  max-width: 40ch;
+}
+
+.action {
+  margin-top: 0.5rem;
 }

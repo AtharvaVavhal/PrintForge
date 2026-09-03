@@ -73,6 +73,7 @@ export function CouponForm({ appliedPreview, onApplied }: CouponFormProps) {
   if (appliedPreview) {
     return (
       <div className={styles.wrap}>
+        <h2 className={styles.heading}>Coupon</h2>
         <div className={styles.appliedRow}>
           <span className={styles.appliedLabel}>
             Coupon <strong>{appliedPreview.couponCode}</strong> applied
@@ -87,6 +88,7 @@ export function CouponForm({ appliedPreview, onApplied }: CouponFormProps) {
 
   return (
     <form className={styles.form} onSubmit={(e) => void handleSubmit(handleApply)(e)} noValidate>
+      <h2 className={styles.heading}>Coupon</h2>
       <div className={styles.inputRow}>
         <TextField
           label="Coupon code"

@@ -8,8 +8,10 @@
 }
 
 .heading {
-  font-size: 1.125rem;
   margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .lines {

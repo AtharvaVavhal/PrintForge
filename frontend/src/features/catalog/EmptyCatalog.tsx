@@ -1,5 +1,5 @@
 import { PackageSearch } from 'lucide-react'
-import styles from './EmptyCatalog.module.css'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface EmptyCatalogProps {
   hasFilter: boolean
@@ -13,14 +13,14 @@ interface EmptyCatalogProps {
  */
 export function EmptyCatalog({ hasFilter }: EmptyCatalogProps) {
   return (
-    <div className={styles.empty}>
-      <PackageSearch size={40} strokeWidth={1.5} aria-hidden="true" />
-      <h2>{hasFilter ? 'No products match this filter' : 'No products yet'}</h2>
-      <p>
-        {hasFilter
+    <EmptyState
+      icon={PackageSearch}
+      title={hasFilter ? 'No products match this filter' : 'No products yet'}
+      description={
+        hasFilter
           ? 'Try a different search or category, or check back soon.'
-          : "We're setting up the catalog — check back soon."}
-      </p>
-    </div>
+          : "We're setting up the catalog — check back soon."
+      }
+    />
   )
 }

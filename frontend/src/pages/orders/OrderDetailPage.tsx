@@ -90,7 +90,7 @@ export function OrderDetailPage() {
       <Page>
         <Seo title="Order" noindex />
         <h1>Order</h1>
-        <Skeleton className={styles.skeletonBlock} />
+        <Skeleton className={styles.skeletonBlock} label="Loading order" />
       </Page>
     )
   }
@@ -101,6 +101,9 @@ export function OrderDetailPage() {
         <Seo title="Order" noindex />
         <h1>Order</h1>
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
+        <p className={styles.backLink}>
+          <Link to={ROUTES.ORDERS}>← All orders</Link>
+        </p>
       </Page>
     )
   }

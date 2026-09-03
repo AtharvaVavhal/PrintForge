@@ -34,7 +34,7 @@ export function InvoicePage() {
     return (
       <section className={styles.wrap}>
         <Seo title="Invoice" noindex />
-        <Skeleton className={styles.skeletonBlock} />
+        <Skeleton className={styles.skeletonBlock} label="Loading invoice" />
       </section>
     )
   }

@@ -5,6 +5,25 @@
   overflow: hidden;
 }
 
+/* Wrapper used only when Skeleton has a `label` — lays out exactly like
+   the bare placeholder (it has a single flow child), so there is no
+   visual difference and no layout shift. */
+.status {
+  display: block;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .skeleton::after {
   content: '';
   position: absolute;

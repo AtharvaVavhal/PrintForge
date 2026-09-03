@@ -2,17 +2,20 @@ import { Link } from 'react-router-dom'
 import { ShoppingCart } from 'lucide-react'
 import { ROUTES } from '@/constants/routes'
 import { Button } from '@/components/ui/Button'
-import styles from './EmptyCart.module.css'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 export function EmptyCart() {
   return (
-    <div className={styles.empty}>
-      <ShoppingCart size={40} strokeWidth={1.5} aria-hidden="true" />
-      <h1>Your cart is empty</h1>
-      <p>Browse the shop to find something to customize.</p>
-      <Link to={ROUTES.PRODUCTS}>
-        <Button>Browse the shop</Button>
-      </Link>
-    </div>
+    <EmptyState
+      icon={ShoppingCart}
+      title="Your cart is empty"
+      titleAs="h1"
+      description="Browse the shop to find something to customize."
+      action={
+        <Link to={ROUTES.PRODUCTS}>
+          <Button>Browse the shop</Button>
+        </Link>
+      }
+    />
   )
 }

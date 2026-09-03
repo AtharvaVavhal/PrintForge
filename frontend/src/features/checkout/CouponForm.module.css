@@ -10,10 +10,19 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 1rem;
   padding: 1.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+}
+
+/* Matches CheckoutCartSummary's heading so the summary column's three
+   panels — "Order summary" / "Coupon" / "Order total" — read as a set. */
+.heading {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-strong);
 }
 
 .inputRow {

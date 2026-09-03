@@ -75,7 +75,7 @@ export function AccountPage() {
       <Seo title="My account" noindex />
       <h1>My account</h1>
 
-      {isLoading && <Skeleton className={styles.skeleton} />}
+      {isLoading && <Skeleton className={styles.skeleton} label="Loading your account" />}
       {isError && <Alert variant="error">{getApiErrorMessage(error)}</Alert>}
 
       {data && (

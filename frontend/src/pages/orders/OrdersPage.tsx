@@ -41,7 +41,7 @@ export function OrdersPage() {
         )}
       </div>
 
-      {ordersQuery.isPending && <OrderListSkeleton />}
+      {ordersQuery.isPending && <OrderListSkeleton label="Loading your orders" />}
 
       {ordersQuery.isError && <Alert variant="error">{getApiErrorMessage(ordersQuery.error)}</Alert>}
 

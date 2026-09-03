@@ -6,6 +6,7 @@ import { getApiErrorMessage } from '@/utils/apiError'
 import { formatPrice } from '@/utils/formatPrice'
 import { ROUTES, productDetailPath } from '@/constants/routes'
 import { Alert } from '@/components/ui/Alert'
+import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Breadcrumbs, type Crumb } from '@/components/ui/Breadcrumbs'
 import { ProductGallery } from '@/features/catalog/ProductGallery'
@@ -57,7 +58,7 @@ export function ProductDetailPage() {
     return (
       <section className={styles.wrap}>
         <Seo title="Loading product" noindex />
-        <Skeleton className={styles.imageSkeleton} />
+        <Skeleton className={styles.imageSkeleton} label="Loading product" />
         <div className={styles.infoSkeleton}>
           <Skeleton className={styles.titleSkeleton} />
           <Skeleton className={styles.priceSkeleton} />
@@ -68,13 +69,14 @@ export function ProductDetailPage() {
 
   if (isError) {
     return (
-      <section className={styles.wrap}>
+      <Page>
         <Seo title="Product not found" noindex />
+        <h1>Product unavailable</h1>
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
         <p className={styles.backLink}>
-          <Link to={ROUTES.PRODUCTS}>Back to shop</Link>
+          <Link to={ROUTES.PRODUCTS}>← Back to shop</Link>
         </p>
-      </section>
+      </Page>
     )
   }
 

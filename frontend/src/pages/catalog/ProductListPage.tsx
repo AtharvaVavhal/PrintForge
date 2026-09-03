@@ -182,7 +182,7 @@ export function ProductListPage() {
         </div>
 
         <div className={styles.results}>
-          {productsQuery.isPending && <ProductGridSkeleton />}
+          {productsQuery.isPending && <ProductGridSkeleton label="Loading products" />}
 
           {productsQuery.isError && (
             <Alert variant="error">{getApiErrorMessage(productsQuery.error)}</Alert>
