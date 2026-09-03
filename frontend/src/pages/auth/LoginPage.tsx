@@ -70,6 +70,7 @@ export function LoginPage() {
           label="Password"
           type="password"
           autoComplete="current-password"
+          revealable
           error={errors.password?.message}
           {...register('password')}
         />

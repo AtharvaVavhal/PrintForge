@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
@@ -8,9 +8,12 @@ import { ROUTES } from '@/constants/routes'
 import { postAuthDestination } from '@/features/auth/postAuthDestination'
 import { AuthFormShell } from '@/features/auth/AuthFormShell'
 import { TextField } from '@/components/ui/TextField'
+import { PasswordRequirements } from '@/components/ui/PasswordRequirements'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import shellStyles from '@/features/auth/AuthFormShell.module.css'
+
+const PASSWORD_REQUIREMENTS_ID = 'register-password-requirements'
 
 export function RegisterPage() {
   const { register: registerAccount } = useAuth()
@@ -21,8 +24,11 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({ resolver: zodResolver(registerSchema) })
+
+  const passwordValue = useWatch({ control, name: 'password' }) ?? ''
 
   async function onSubmit(values: RegisterFormValues) {
     clearError()
@@ -58,13 +64,17 @@ export function RegisterPage() {
           label="Password"
           type="password"
           autoComplete="new-password"
+          revealable
+          aria-describedby={PASSWORD_REQUIREMENTS_ID}
           error={errors.password?.message}
           {...register('password')}
         />
+        <PasswordRequirements id={PASSWORD_REQUIREMENTS_ID} value={passwordValue} />
         <TextField
           label="Confirm password"
           type="password"
           autoComplete="new-password"
+          revealable
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
         />

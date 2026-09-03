@@ -46,6 +46,49 @@
   box-shadow: 0 0 0 3px var(--color-danger-ring);
 }
 
+/* ── Password reveal toggle (UX-23) ───────────────────────────────── */
+
+.inputWrap {
+  position: relative;
+}
+
+.inputWrap .input {
+  width: 100%;
+}
+
+.inputRevealable {
+  /* room for the toggle so typed text never runs under it */
+  padding-right: 3rem;
+}
+
+.revealButton {
+  position: absolute;
+  right: 0.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast) ease;
+}
+
+.revealButton:hover {
+  color: var(--color-text-strong);
+}
+
+.revealButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .error {
   margin: 0;
   font-size: 0.8125rem;

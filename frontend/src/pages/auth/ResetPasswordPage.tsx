@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -11,9 +11,12 @@ import { useApiError } from '@/hooks/useApiError'
 import { ROUTES } from '@/constants/routes'
 import { AuthFormShell } from '@/features/auth/AuthFormShell'
 import { TextField } from '@/components/ui/TextField'
+import { PasswordRequirements } from '@/components/ui/PasswordRequirements'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import shellStyles from '@/features/auth/AuthFormShell.module.css'
+
+const PASSWORD_REQUIREMENTS_ID = 'reset-password-requirements'
 
 /** Token arrives as a query param on the link the confirmation email sends
  * (`/reset-password?token=...`) — never typed by the user, so it's read
@@ -27,8 +30,11 @@ export function ResetPasswordPage() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ResetPasswordFormValues>({ resolver: zodResolver(resetPasswordSchema) })
+
+  const newPasswordValue = useWatch({ control, name: 'newPassword' }) ?? ''
 
   async function onSubmit(values: ResetPasswordFormValues) {
     if (!token) {
@@ -72,13 +78,17 @@ export function ResetPasswordPage() {
             label="New password"
             type="password"
             autoComplete="new-password"
+            revealable
+            aria-describedby={PASSWORD_REQUIREMENTS_ID}
             error={errors.newPassword?.message}
             {...register('newPassword')}
           />
+          <PasswordRequirements id={PASSWORD_REQUIREMENTS_ID} value={newPasswordValue} />
           <TextField
             label="Confirm new password"
             type="password"
             autoComplete="new-password"
+            revealable
             error={errors.confirmPassword?.message}
             {...register('confirmPassword')}
           />

@@ -24,15 +24,48 @@ const COMMON_PASSWORDS = new Set([
 
 const emailSchema = z.email('Enter a valid email address')
 
+/** The one min-length the backend enforces (RegisterDto @MinLength(8)). */
+export const PASSWORD_MIN_LENGTH = 8
+
+const isPurelyNumeric = (value: string) => /^\d+$/.test(value)
+const isCommonPassword = (value: string) => COMMON_PASSWORDS.has(value.toLowerCase())
+
+/**
+ * The three checks the register / reset-password policy actually performs,
+ * as a checklist the form can show inline (UX-24). Each `isMet` mirrors
+ * exactly what `passwordSchema` below (and the backend
+ * PasswordPolicyConstraint) tests — no new rules are introduced. The
+ * "not …" checks require a non-empty value so an untouched field shows
+ * every item as still-to-do rather than pre-satisfied.
+ */
+export const PASSWORD_REQUIREMENTS = [
+  {
+    id: 'length',
+    label: `At least ${PASSWORD_MIN_LENGTH} characters`,
+    isMet: (value: string) => value.length >= PASSWORD_MIN_LENGTH,
+  },
+  {
+    id: 'notNumeric',
+    label: 'Not only numbers',
+    isMet: (value: string) => value.length > 0 && !isPurelyNumeric(value),
+  },
+  {
+    id: 'notCommon',
+    label: 'Not a commonly used password',
+    isMet: (value: string) => value.length > 0 && !isCommonPassword(value),
+  },
+] as const
+
 /** Matches RegisterDto/PasswordResetConfirmDto: @IsString @MinLength(8)
- * @Validate(PasswordPolicyConstraint). */
+ * @Validate(PasswordPolicyConstraint). Kept in lock-step with
+ * PASSWORD_REQUIREMENTS above via the shared predicates. */
 const passwordSchema = z
   .string()
-  .min(8, 'Password must be at least 8 characters')
-  .refine((value) => !/^\d+$/.test(value), {
+  .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
+  .refine((value) => !isPurelyNumeric(value), {
     message: 'Password must not be purely numeric',
   })
-  .refine((value) => !COMMON_PASSWORDS.has(value.toLowerCase()), {
+  .refine((value) => !isCommonPassword(value), {
     message: 'This password is too common — please choose another',
   })
 

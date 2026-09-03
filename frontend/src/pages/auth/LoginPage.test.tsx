@@ -79,6 +79,27 @@ describe('LoginPage', () => {
     })
   })
 
+  it('reveals/hides the password without submitting or losing the value (UX-23)', async () => {
+    const user = userEvent.setup()
+    const authValue = createMockAuthContext()
+    renderWithProviders(<LoginPage />, { authValue })
+
+    const password = screen.getByLabelText('Password')
+    await user.type(password, 's3cret-pw')
+    expect(password).toHaveAttribute('type', 'password')
+
+    await user.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(password).toHaveAttribute('type', 'text')
+    expect(password).toHaveValue('s3cret-pw')
+    expect(authValue.login).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(password).toHaveAttribute('type', 'password')
+
+    // Login page has no password policy, so it shows no requirements list.
+    expect(screen.queryByRole('list', { name: 'Password requirements' })).not.toBeInTheDocument()
+  })
+
   describe('UX-04 — Sign-up link forwards the redirect state to /register', () => {
     async function completeRegister(user: ReturnType<typeof userEvent.setup>) {
       await user.click(screen.getByRole('link', { name: 'Sign up' }))
