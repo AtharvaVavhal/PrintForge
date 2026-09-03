@@ -7,8 +7,8 @@ export function NotFoundPage() {
   return (
     <section className={styles.wrap}>
       <Seo title="Page not found" noindex />
-      <h1>404</h1>
-      <p>We couldn&apos;t find that page.</p>
+      <h1>Page not found</h1>
+      <p>We couldn&apos;t find that page (error 404).</p>
       <Link to={ROUTES.HOME}>Back to home</Link>
     </section>
   )

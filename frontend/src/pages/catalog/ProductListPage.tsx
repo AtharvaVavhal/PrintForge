@@ -202,7 +202,7 @@ export function ProductListPage() {
             <>
               <div className={gridStyles.grid}>
                 {productsQuery.data.items.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard key={product.id} product={product} headingLevel={2} />
                 ))}
               </div>
 

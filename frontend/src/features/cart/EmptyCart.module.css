@@ -8,7 +8,7 @@
   color: var(--color-text-muted);
 }
 
-.empty h2 {
+.empty h1 {
   color: var(--color-text-strong);
   font-size: 1.25rem;
   margin: 0.5rem 0 0;

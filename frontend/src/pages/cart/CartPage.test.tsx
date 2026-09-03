@@ -80,6 +80,18 @@ describe('CartPage', () => {
     expect(await screen.findByText('Your cart is empty')).toBeInTheDocument()
   })
 
+  it('gives the empty-cart state a single meaningful <h1> (UX-14)', async () => {
+    mock.onGet('/cart').reply(200, { success: true, data: buildCart([]) })
+
+    render(<CartPage />)
+
+    // Wait for the settled empty state, not the transient loading header.
+    await screen.findByText('Your cart is empty')
+    const h1s = screen.getAllByRole('heading', { level: 1 })
+    expect(h1s).toHaveLength(1)
+    expect(h1s[0]).toHaveTextContent('Your cart is empty')
+  })
+
   it('renders an error state when the cart request fails', async () => {
     mock.onGet('/cart').reply(500, {
       success: false,

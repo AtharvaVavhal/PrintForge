@@ -68,6 +68,26 @@ describe('ProductListPage', () => {
     expect(screen.getByText('₹150.00')).toBeInTheDocument()
   })
 
+  it('has one page <h1> and renders product names as <h2> (UX-14 — no h1→h3 skip)', async () => {
+    mock.onGet('/categories/tree').reply(200, CATEGORY_TREE_RESPONSE)
+    mock.onGet('/products').reply(
+      200,
+      productsResponse([
+        SAMPLE_PRODUCT,
+        { ...SAMPLE_PRODUCT, id: 'prod-2', name: 'Enamel Mug', slug: 'enamel-mug' },
+      ]),
+    )
+
+    renderWithProviders(<ProductListPage />)
+
+    await screen.findByText('Ceramic Mug')
+    const h1s = screen.getAllByRole('heading', { level: 1 })
+    expect(h1s).toHaveLength(1)
+    expect(h1s[0]).toHaveTextContent('All products')
+    expect(screen.getByRole('heading', { level: 2, name: 'Ceramic Mug' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Enamel Mug' })).toBeInTheDocument()
+  })
+
   it('renders the empty-catalog state when there are zero products', async () => {
     mock.onGet('/categories/tree').reply(200, CATEGORY_TREE_RESPONSE)
     mock.onGet('/products').reply(200, productsResponse([]))

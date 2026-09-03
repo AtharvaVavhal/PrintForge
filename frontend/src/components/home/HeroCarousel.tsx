@@ -59,7 +59,15 @@ export function HeroCarousel({ slides }: HeroCarouselProps) {
               />
             )}
             <div className={styles.content}>
-              <h1 className={styles.headline}>{slide.headline}</h1>
+              {/* Only the active slide's headline is the page <h1> (UX-14) —
+                  a carousel has no single stable heading, so the h1 travels
+                  with the visible slide. Inactive slides are aria-hidden and
+                  visibility:hidden, so their <p> is never seen or announced. */}
+              {index === currentIndex ? (
+                <h1 className={styles.headline}>{slide.headline}</h1>
+              ) : (
+                <p className={styles.headline}>{slide.headline}</p>
+              )}
               <p className={styles.subtext}>{slide.subtext}</p>
               <Link to={slide.ctaLink} className={styles.ctaWrapper}>
                 <Button>{slide.ctaText}</Button>

@@ -9,7 +9,19 @@ import { IconButton } from '@/components/ui/IconButton'
 import { cn } from '@/utils/cn'
 import styles from './ProductCard.module.css'
 
-export function ProductCard({ product, onQuickView }: { product: Product; onQuickView?: (slug: string) => void }) {
+export function ProductCard({
+  product,
+  onQuickView,
+  headingLevel = 3,
+}: {
+  product: Product
+  onQuickView?: (slug: string) => void
+  /** Heading level for the product name (UX-14). Default 3 — correct under
+   * a rail's <h2> SectionHeading. The listing page passes 2, where product
+   * names sit directly under the page <h1>. */
+  headingLevel?: 2 | 3
+}) {
+  const NameHeading = headingLevel === 2 ? 'h2' : 'h3'
   const variantPills = product.variants.slice(0, 4).map((v) => v.label);
   const hasMoreVariants = product.variants.length > 4;
   // Real availability signal: a product whose every variant is marked
@@ -42,7 +54,7 @@ export function ProductCard({ product, onQuickView }: { product: Product; onQuic
 
       <div className={styles.body}>
         <Link to={productDetailPath(product.slug)} className={styles.nameLink}>
-          <h3 className={styles.name}>{product.name}</h3>
+          <NameHeading className={styles.name}>{product.name}</NameHeading>
         </Link>
         <StarRating avgRating={product.avgRating} reviewCount={product.reviewCount} compact />
         <p className={styles.price}>

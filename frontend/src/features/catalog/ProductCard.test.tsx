@@ -61,6 +61,20 @@ describe('ProductCard', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders the product name as an <h3> by default (UX-14 — under a rail <h2>)', () => {
+    renderWithProviders(<ProductCard product={buildProduct()} />)
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Ceramic Mug' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
+  })
+
+  it('renders the product name at the requested heading level (UX-14 — listing page passes 2)', () => {
+    renderWithProviders(<ProductCard product={buildProduct()} headingLevel={2} />)
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Ceramic Mug' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument()
+  })
+
   it('falls back to the placeholder when the image fails to load', () => {
     const product = buildProduct({
       images: [

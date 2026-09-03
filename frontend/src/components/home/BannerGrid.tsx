@@ -37,7 +37,7 @@ function BannerContent({ banner }: { banner: Banner }) {
         <img src={banner.imageUrl} alt={banner.title || banner.text || ''} className={styles.image} loading="lazy" />
       )}
       <div className={styles.overlay}>
-        {banner.title && <h3 className={styles.title}>{banner.title}</h3>}
+        {banner.title && <h2 className={styles.title}>{banner.title}</h2>}
         {banner.text && <p className={styles.text}>{banner.text}</p>}
       </div>
     </div>

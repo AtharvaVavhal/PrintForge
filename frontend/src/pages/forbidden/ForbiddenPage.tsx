@@ -9,8 +9,8 @@ export function ForbiddenPage() {
   return (
     <section className={styles.wrap}>
       <Seo title="Not authorised" noindex />
-      <h1>403</h1>
-      <p>You don&rsquo;t have access to this page.</p>
+      <h1>Not authorised</h1>
+      <p>You don&rsquo;t have access to this page (error 403).</p>
       <Link to={ROUTES.HOME}>Back to home</Link>
     </section>
   )

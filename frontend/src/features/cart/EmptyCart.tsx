@@ -8,7 +8,7 @@ export function EmptyCart() {
   return (
     <div className={styles.empty}>
       <ShoppingCart size={40} strokeWidth={1.5} aria-hidden="true" />
-      <h2>Your cart is empty</h2>
+      <h1>Your cart is empty</h1>
       <p>Browse the shop to find something to customize.</p>
       <Link to={ROUTES.PRODUCTS}>
         <Button>Browse the shop</Button>

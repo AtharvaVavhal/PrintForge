@@ -38,7 +38,7 @@ describe('AdminRoute', () => {
       }),
     )
 
-    expect(screen.getByText('403')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Not authorised' })).toBeInTheDocument()
     expect(screen.getByText(/don.t have access/i)).toBeInTheDocument()
     // Never the same outcome an unauthenticated visitor sees — that would
     // falsely read as "you've been logged out."
@@ -61,7 +61,7 @@ describe('AdminRoute', () => {
     renderAdminRouteTree(createMockAuthContext({ status: 'loading' }))
 
     expect(screen.queryByText('Login page')).not.toBeInTheDocument()
-    expect(screen.queryByText('403')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Not authorised' })).not.toBeInTheDocument()
     expect(screen.queryByText('Admin dashboard content')).not.toBeInTheDocument()
   })
 })
