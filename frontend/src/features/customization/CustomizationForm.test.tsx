@@ -119,7 +119,10 @@ describe('CustomizationForm', () => {
     const input = screen.getByLabelText('Logo *', { selector: 'input' })
     await user.upload(input, file)
 
+    // UX-22: the selected-file card (filename + local thumbnail) appears
+    // immediately, without changing what gets submitted.
     expect(await screen.findByText('logo.png')).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'Preview of logo.png' })).toBeInTheDocument()
 
     await waitFor(() => {
       const lastCall = onChange.mock.calls.at(-1)?.[0] as CustomizationFormState

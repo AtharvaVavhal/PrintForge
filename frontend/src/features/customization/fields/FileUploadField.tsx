@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { CustomizationField } from '@/types/catalog'
 import { useUploadFile } from '@/hooks/useUploadFile'
@@ -17,6 +17,21 @@ interface FileUploadFieldProps {
   error?: string
 }
 
+/** What the selected-file card needs from the picked File (UX-22). */
+interface SelectedFile {
+  name: string
+  size: number
+  /** Uppercased extension, for the badge + the metadata line. */
+  ext: string
+  /** Whether an inline image thumbnail is appropriate for this file. */
+  isImage: boolean
+  /** data: URL for the <img> thumbnail once FileReader has produced it
+   * (null until then, and for non-image files). A data: URL — not a blob:
+   * object URL — because the app CSP allows `img-src data:` but not
+   * `blob:`, and a data URL needs no revoke lifecycle. */
+  previewUrl: string | null
+}
+
 /**
  * Extension, not MIME type — matches the allowedFormats values used
  * throughout prisma/seed-production.ts ('png', 'jpeg', 'pdf'). This is a
@@ -28,6 +43,12 @@ function getExtension(filename: string): string {
   return filename.split('.').pop()?.toLowerCase() ?? ''
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 /**
  * One customization field of type LOGO_UPLOAD/IMAGE_UPLOAD/
  * DESIGN_FILE_UPLOAD. Uploads eagerly on file selection (POST /uploads —
@@ -35,13 +56,36 @@ function getExtension(filename: string): string {
  * deferring to form submit: this field's form value IS the resulting
  * uploadedFileId (cart/dto/customization-value.dto.ts), so there's
  * nothing else to submit once the upload finishes.
+ *
+ * UX-22: as soon as a valid file is picked we show a selected-file card —
+ * a local image thumbnail (read with FileReader, never a server round
+ * trip) for images, otherwise an extension badge — with the filename,
+ * type + size, upload state, and Change / Remove actions. None of this
+ * changes when or how the server receives the file.
  */
 export function FileUploadField({ field, value, onChange, error }: FileUploadFieldProps) {
   const constraints = (field.constraints ?? {}) as FieldConstraints
   const inputRef = useRef<HTMLInputElement>(null)
-  const [fileName, setFileName] = useState<string | null>(null)
+  const readerRef = useRef<FileReader | null>(null)
+  // Bumped on every selection so a slow FileReader for a replaced file
+  // can't write its result over the current one.
+  const readTokenRef = useRef(0)
+  const [selected, setSelected] = useState<SelectedFile | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
   const upload = useUploadFile()
+
+  useEffect(() => {
+    return () => {
+      readerRef.current?.abort()
+    }
+  }, [])
+
+  function clearSelection() {
+    readTokenRef.current += 1
+    readerRef.current?.abort()
+    readerRef.current = null
+    setSelected(null)
+  }
 
   function validateLocally(file: File): string | null {
     if (constraints.allowedFormats?.length) {
@@ -68,30 +112,57 @@ export function FileUploadField({ field, value, onChange, error }: FileUploadFie
     const validationError = validateLocally(file)
     if (validationError) {
       setLocalError(validationError)
-      setFileName(null)
+      clearSelection()
       onChange('')
       event.target.value = ''
       return
     }
 
     setLocalError(null)
-    setFileName(file.name)
+    readTokenRef.current += 1
+    readerRef.current?.abort()
+    const token = readTokenRef.current
+    const isImage = file.type.startsWith('image/')
+
+    setSelected({
+      name: file.name,
+      size: file.size,
+      ext: getExtension(file.name).toUpperCase(),
+      isImage,
+      previewUrl: null,
+    })
+
+    if (isImage) {
+      const reader = new FileReader()
+      readerRef.current = reader
+      reader.onload = () => {
+        if (readTokenRef.current !== token) return
+        const result = typeof reader.result === 'string' ? reader.result : null
+        setSelected((prev) => (prev ? { ...prev, previewUrl: result } : prev))
+      }
+      reader.readAsDataURL(file)
+    }
+
     upload.mutate(file, {
       onSuccess: (uploaded) => onChange(uploaded.id),
       onError: () => {
         onChange('')
-        setFileName(null)
+        clearSelection()
       },
     })
   }
 
   function handleRemove() {
-    setFileName(null)
     setLocalError(null)
+    clearSelection()
     onChange('')
     if (inputRef.current) {
       inputRef.current.value = ''
     }
+  }
+
+  function handleChange() {
+    inputRef.current?.click()
   }
 
   // localError (client-side format/size pre-check) takes priority over
@@ -100,7 +171,6 @@ export function FileUploadField({ field, value, onChange, error }: FileUploadFie
   // more specific reason the file was rejected in the first place.
   const displayError =
     localError ?? error ?? (upload.isError ? getApiErrorMessage(upload.error) : undefined)
-  const showUploaded = Boolean(value) && Boolean(fileName) && !upload.isPending
 
   return (
     <div className={styles.field}>
@@ -110,26 +180,66 @@ export function FileUploadField({ field, value, onChange, error }: FileUploadFie
       </label>
       {field.helpText && <p className={styles.helpText}>{field.helpText}</p>}
 
-      {showUploaded ? (
-        <div className={styles.uploaded}>
-          <span className={styles.fileName}>{fileName}</span>
-          <button type="button" className={styles.removeButton} onClick={handleRemove}>
-            Remove
-          </button>
+      {/* Kept mounted (hidden while a file is selected) so the label stays
+          associated and the Change button can re-open the picker. */}
+      <input
+        ref={inputRef}
+        id={field.id}
+        type="file"
+        accept={constraints.allowedFormats?.map((format) => `.${format}`).join(',')}
+        onChange={handleFileChange}
+        disabled={upload.isPending}
+        aria-invalid={Boolean(displayError)}
+        className={selected ? styles.inputHidden : undefined}
+      />
+
+      {selected && (
+        <div className={styles.preview}>
+          {selected.previewUrl ? (
+            <img
+              src={selected.previewUrl}
+              alt={`Preview of ${selected.name}`}
+              className={styles.thumb}
+            />
+          ) : (
+            <span className={styles.fileBadge} aria-hidden="true">
+              {selected.ext || 'FILE'}
+            </span>
+          )}
+
+          <div className={styles.meta}>
+            <span className={styles.fileName} title={selected.name}>
+              {selected.name}
+            </span>
+            <span className={styles.fileMeta}>
+              {selected.ext || 'File'} · {formatFileSize(selected.size)}
+            </span>
+            <span className={styles.status} role="status">
+              {upload.isPending || !value ? 'Uploading…' : 'Uploaded'}
+            </span>
+          </div>
+
+          <div className={styles.actions}>
+            {!upload.isPending && (
+              <button
+                type="button"
+                className={styles.actionButton}
+                onClick={handleChange}
+              >
+                Change
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.actionButton}
+              onClick={handleRemove}
+            >
+              Remove
+            </button>
+          </div>
         </div>
-      ) : (
-        <input
-          ref={inputRef}
-          id={field.id}
-          type="file"
-          accept={constraints.allowedFormats?.map((format) => `.${format}`).join(',')}
-          onChange={handleFileChange}
-          disabled={upload.isPending}
-          aria-invalid={Boolean(displayError)}
-        />
       )}
 
-      {upload.isPending && <p className={styles.status}>Uploading…</p>}
       {displayError && (
         <p className={styles.error} role="alert">
           {displayError}
