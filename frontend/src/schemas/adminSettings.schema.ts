@@ -42,6 +42,19 @@ export const textSchema = z.object({
   value: z.string().trim().max(500, 'Too long'),
 })
 
+export const STORE_NAME_MAX_LENGTH = 60
+
+/** `storeName` is the one text setting that is required — an empty value
+ * would blank the storefront header / hero / footer. Mirrors the server
+ * rule in backend/src/app-setting/app-setting.constants.ts. */
+export const storeNameSchema = z.object({
+  value: z
+    .string()
+    .trim()
+    .min(1, 'Store name is required')
+    .max(STORE_NAME_MAX_LENGTH, `Store name cannot exceed ${STORE_NAME_MAX_LENGTH} characters`),
+})
+
 /** Enum values are constrained to the option list at the field level. */
 export const enumSchema = z.object({
   value: z.string().trim().min(1, 'Choose a value'),
@@ -49,7 +62,9 @@ export const enumSchema = z.object({
 
 export type SettingKind = 'money' | 'text' | 'boolean' | 'enum' | 'percent'
 
-export function schemaForKind(kind: SettingKind) {
+export function schemaForKind(kind: SettingKind, key?: string) {
+  // A few settings need a rule stricter than their `kind` implies.
+  if (key === 'storeName') return storeNameSchema
   switch (kind) {
     case 'money':
       return moneySchema

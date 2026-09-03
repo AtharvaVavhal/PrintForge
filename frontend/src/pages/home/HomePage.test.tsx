@@ -74,8 +74,10 @@ function mockHome({
   categories = [category()],
   newArrivals = NEW_ARRIVALS,
   topRated = TOP_RATED,
-}: HomeMockOptions = {}) {
+  storeName = 'PrintForge',
+}: HomeMockOptions & { storeName?: string } = {}) {
   mock.onGet('/settings').reply(200, { success: true, data: settings })
+  mock.onGet('/settings/storeName').reply(200, { success: true, data: { value: storeName } })
   mock.onGet('/categories').reply(...ok(categories))
   mock.onGet('/products').reply((config: AxiosRequestConfig) => {
     const params = (config.params ?? {}) as Record<string, unknown>
@@ -106,6 +108,32 @@ describe('HomePage — storefront layout', () => {
     expect(
       screen.getByRole('link', { name: /browse the catalogue/i }),
     ).toHaveAttribute('href', '/products')
+  })
+
+  it('renders the configured store name as the hero eyebrow', async () => {
+    mockHome({ storeName: 'Atharva Prints' })
+    renderWithProviders(<HomePage />)
+
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: /custom prints, made to order/i,
+    })
+    // The eyebrow sits just above the hero headline.
+    expect(heading.previousElementSibling).toHaveTextContent('Atharva Prints')
+  })
+
+  it('falls back to "PrintForge" for the hero eyebrow when the store-name endpoint fails', async () => {
+    mock.onGet('/settings/storeName').reply(500)
+    mock.onGet('/settings').reply(200, { success: true, data: {} })
+    mock.onGet('/categories').reply(...ok([category()]))
+    mock.onGet('/products').reply(...ok(NEW_ARRIVALS, { page: 1, limit: 12, total: 0, totalPages: 1 }))
+    renderWithProviders(<HomePage />)
+
+    const heading = await screen.findByRole('heading', {
+      level: 1,
+      name: /custom prints, made to order/i,
+    })
+    expect(heading.previousElementSibling).toHaveTextContent('PrintForge')
   })
 
   it('renders "Shop by category" from the live categories API', async () => {

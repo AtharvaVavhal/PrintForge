@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useApiError } from '@/hooks/useApiError'
+import { useStoreName } from '@/hooks/useStoreName'
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { ROUTES } from '@/constants/routes'
 import { postAuthDestination } from '@/features/auth/postAuthDestination'
@@ -16,6 +17,7 @@ export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const storeName = useStoreName()
   const { message: formError, captureError, clearError } = useApiError()
 
   const {
@@ -37,7 +39,7 @@ export function LoginPage() {
   return (
     <AuthFormShell
       title="Log in"
-      subtitle="Welcome back to PrintForge."
+      subtitle={`Welcome back to ${storeName}.`}
       footer={
         <>
           {/* Forward whatever router state this page was reached with — when

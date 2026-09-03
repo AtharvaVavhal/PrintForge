@@ -4,6 +4,7 @@ import { ShoppingCart, Menu, X, User } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useCart } from '@/hooks/useCart'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
+import { useStoreName } from '@/hooks/useStoreName'
 import { ROUTES } from '@/constants/routes'
 import { cn } from '@/utils/cn'
 import { LogoutButton } from '@/features/auth/LogoutButton'
@@ -17,6 +18,7 @@ export function Header() {
   const { user, status } = useAuth()
   const { data: cart } = useCart()
   const { data: categoryTree, isLoading: treeLoading } = useCategoryTree()
+  const storeName = useStoreName()
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
 
@@ -47,8 +49,8 @@ export function Header() {
           {mobileOpen ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
         </button>
 
-        <NavLink to={ROUTES.HOME} className={styles.brand} aria-label="PrintForge home">
-          PrintForge
+        <NavLink to={ROUTES.HOME} className={styles.brand} aria-label={`${storeName} home`}>
+          {storeName}
         </NavLink>
 
         <HeaderSearch variant="bar" />

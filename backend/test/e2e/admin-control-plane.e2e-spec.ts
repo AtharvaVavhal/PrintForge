@@ -143,6 +143,124 @@ describe('Admin control plane (Phase 13.2)', () => {
     });
   });
 
+  // ─── Store identity (Store Name / Store Admin Name) ────────────────────
+
+  describe('store identity settings', () => {
+    it('rejects a non-admin update of storeName / storeAdminName (403, 401)', async () => {
+      const customer = await registerUser(app);
+
+      await http(app)
+        .patch(apiPath('/admin/settings/storeName'))
+        .send({ value: 'Rogue Store' })
+        .expect(401);
+      await http(app)
+        .patch(apiPath('/admin/settings/storeName'))
+        .set(...authHeader(customer))
+        .send({ value: 'Rogue Store' })
+        .expect(403);
+      await http(app)
+        .patch(apiPath('/admin/settings/storeAdminName'))
+        .set(...authHeader(customer))
+        .send({ value: 'Rogue Owner' })
+        .expect(403);
+
+      expect(
+        await prisma.appSetting.findUnique({ where: { key: 'storeName' } }),
+      ).toBeNull();
+    });
+
+    it('lists storeName defaulting to "PrintForge" and admin can update both values (persisted)', async () => {
+      const admin = await registerAdmin(app, prisma);
+
+      const list = await http(app)
+        .get(apiPath('/admin/settings'))
+        .set(...authHeader(admin))
+        .expect(200);
+      const storeName = (
+        list.body.data as Array<{ key: string; value: string }>
+      ).find((s) => s.key === 'storeName');
+      expect(storeName?.value).toBe('PrintForge');
+
+      await http(app)
+        .patch(apiPath('/admin/settings/storeName'))
+        .set(...authHeader(admin))
+        .send({ value: '  Atharva Prints  ' })
+        .expect(200)
+        .expect((r) => expect(r.body.data.value).toBe('Atharva Prints'));
+
+      await http(app)
+        .patch(apiPath('/admin/settings/storeAdminName'))
+        .set(...authHeader(admin))
+        .send({ value: 'Atharva Vavhal' })
+        .expect(200);
+
+      // Survives a fresh read (new request, no in-memory state).
+      const reread = await http(app)
+        .get(apiPath('/admin/settings'))
+        .set(...authHeader(admin))
+        .expect(200);
+      const byKey = Object.fromEntries(
+        (reread.body.data as Array<{ key: string; value: string }>).map((s) => [
+          s.key,
+          s.value,
+        ]),
+      );
+      expect(byKey.storeName).toBe('Atharva Prints');
+      expect(byKey.storeAdminName).toBe('Atharva Vavhal');
+    });
+
+    it('rejects an empty storeName server-side (required)', async () => {
+      const admin = await registerAdmin(app, prisma);
+      await http(app)
+        .patch(apiPath('/admin/settings/storeName'))
+        .set(...authHeader(admin))
+        .send({ value: '   ' })
+        .expect(400);
+    });
+
+    it('public GET /settings/storeName returns "PrintForge" by default, then the saved value', async () => {
+      // Default, before any admin has saved.
+      const before = await http(app)
+        .get(apiPath('/settings/storeName'))
+        .expect(200);
+      expect(before.body.data.value).toBe('PrintForge');
+
+      const admin = await registerAdmin(app, prisma);
+      await http(app)
+        .patch(apiPath('/admin/settings/storeName'))
+        .set(...authHeader(admin))
+        .send({ value: 'Atharva Prints' })
+        .expect(200);
+
+      const after = await http(app)
+        .get(apiPath('/settings/storeName'))
+        .expect(200);
+      expect(after.body.data.value).toBe('Atharva Prints');
+    });
+
+    it('never exposes storeAdminName through the public settings surface', async () => {
+      const admin = await registerAdmin(app, prisma);
+      await http(app)
+        .patch(apiPath('/admin/settings/storeAdminName'))
+        .set(...authHeader(admin))
+        .send({ value: 'Atharva Vavhal' })
+        .expect(200);
+
+      // By exact key → null (not on the public allowlist).
+      const byKey = await http(app)
+        .get(apiPath('/settings/storeAdminName'))
+        .expect(200);
+      expect(byKey.body.data.value).toBeNull();
+
+      // In a bulk query → dropped from the map.
+      const byQuery = await http(app)
+        .get(apiPath('/settings'))
+        .query({ keys: 'storeName,storeAdminName' })
+        .expect(200);
+      expect(byQuery.body.data.data).not.toHaveProperty('storeAdminName');
+    });
+  });
+
   // ─── Public settings surface ───────────────────────────────────────────
 
   describe('GET /settings (public) — allowlist', () => {

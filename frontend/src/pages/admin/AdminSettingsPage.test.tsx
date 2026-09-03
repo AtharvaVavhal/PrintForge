@@ -10,6 +10,22 @@ const SETTINGS_RESPONSE = {
   success: true,
   data: [
     {
+      key: 'storeName',
+      label: 'Store name',
+      description: 'The name customers see for this store. This is the STORE name, not the "PrintForge" platform name. Required.',
+      kind: 'text',
+      value: 'PrintForge',
+      default: 'PrintForge',
+    },
+    {
+      key: 'storeAdminName',
+      label: 'Store admin name',
+      description: 'Display name for the store owner / administrator. Optional.',
+      kind: 'text',
+      value: '',
+      default: '',
+    },
+    {
       key: 'shippingFeeFlat',
       label: 'Flat shipping fee (₹)',
       description: 'Charged once per order at checkout.',
@@ -167,13 +183,20 @@ describe('AdminSettingsPage', () => {
     expect(screen.getByText(/take effect immediately across the storefront and checkout/i)).toBeInTheDocument()
   })
 
-  it('groups settings into Storefront / Tax (GST) / Invoicing cards', async () => {
+  it('groups settings into Store identity / Storefront / Tax (GST) / Invoicing cards', async () => {
     renderWithProviders(<AdminSettingsPage />)
 
     await screen.findByLabelText('Flat shipping fee (₹)')
+
+    const identity = screen.getByRole('region', { name: 'Store identity' })
+    expect(within(identity).getByLabelText('Store name')).toBeInTheDocument()
+    expect(within(identity).getByLabelText('Store admin name')).toBeInTheDocument()
+
     const storefront = screen.getByRole('region', { name: 'Storefront' })
     expect(within(storefront).getByLabelText('Flat shipping fee (₹)')).toBeInTheDocument()
     expect(within(storefront).getByLabelText('Announcement bar text')).toBeInTheDocument()
+    // Store identity fields are NOT duplicated into Storefront.
+    expect(within(storefront).queryByLabelText('Store name')).not.toBeInTheDocument()
 
     const tax = screen.getByRole('region', { name: 'Tax (GST)' })
     expect(within(tax).getByLabelText('GST / tax enabled')).toBeInTheDocument()
@@ -256,6 +279,96 @@ describe('AdminSettingsPage', () => {
 
     expect(await screen.findByText('Settings unavailable')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Store settings')
+  })
+
+  // ─── Store identity (Store Name / Store Admin Name) ────────────────────
+
+  it('loads the current store name and store admin name from the API', async () => {
+    mock.onGet('/admin/settings').reply(200, {
+      success: true,
+      data: SETTINGS_RESPONSE.data.map((s) =>
+        s.key === 'storeName'
+          ? { ...s, value: 'Atharva Prints' }
+          : s.key === 'storeAdminName'
+            ? { ...s, value: 'Atharva Vavhal' }
+            : s,
+      ),
+    })
+    renderWithProviders(<AdminSettingsPage />)
+
+    expect(await screen.findByLabelText('Store name')).toHaveValue('Atharva Prints')
+    expect(screen.getByLabelText('Store admin name')).toHaveValue('Atharva Vavhal')
+  })
+
+  it('edits and saves the store name, showing a real "Saved" confirmation', async () => {
+    const user = userEvent.setup()
+    mock.onPatch('/admin/settings/storeName').reply(200, {
+      success: true,
+      data: { ...SETTINGS_RESPONSE.data[0], value: 'Atharva Prints' },
+    })
+    renderWithProviders(<AdminSettingsPage />)
+
+    const field = await screen.findByLabelText('Store name')
+    const form = field.closest('form') as HTMLElement
+    await user.clear(field)
+    await user.type(field, 'Atharva Prints')
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mock.history.patch).toHaveLength(1))
+    expect(mock.history.patch[0].url).toBe('/admin/settings/storeName')
+    expect(JSON.parse(mock.history.patch[0].data as string)).toEqual({ value: 'Atharva Prints' })
+    expect(await within(form).findByText(/the value is now .Atharva Prints./i)).toBeInTheDocument()
+  })
+
+  it('blocks an empty store name client-side and never calls the API', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<AdminSettingsPage />)
+
+    const field = await screen.findByLabelText('Store name')
+    const form = field.closest('form') as HTMLElement
+    await user.clear(field)
+    await user.type(field, '  ')
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
+
+    expect(await within(form).findByText(/store name is required/i)).toBeInTheDocument()
+    expect(mock.history.patch).toHaveLength(0)
+  })
+
+  it('surfaces a server rejection of the store name without claiming success', async () => {
+    const user = userEvent.setup()
+    mock.onPatch('/admin/settings/storeName').reply(400, {
+      success: false,
+      error: { code: 'BAD_REQUEST', message: 'Store name cannot exceed 60 characters', details: [] },
+    })
+    renderWithProviders(<AdminSettingsPage />)
+
+    const field = await screen.findByLabelText('Store name')
+    const form = field.closest('form') as HTMLElement
+    await user.clear(field)
+    await user.type(field, 'A slightly different name')
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
+
+    expect(
+      await within(form).findByText('Store name cannot exceed 60 characters'),
+    ).toBeInTheDocument()
+    expect(within(form).queryByText(/^Saved\./i)).not.toBeInTheDocument()
+  })
+
+  it('allows an empty store admin name (optional)', async () => {
+    const user = userEvent.setup()
+    mock.onPatch('/admin/settings/storeAdminName').reply(200, {
+      success: true,
+      data: { ...SETTINGS_RESPONSE.data[1], value: 'Atharva Vavhal' },
+    })
+    renderWithProviders(<AdminSettingsPage />)
+
+    const field = await screen.findByLabelText('Store admin name')
+    const form = field.closest('form') as HTMLElement
+    await user.type(field, 'Atharva Vavhal')
+    await user.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mock.history.patch).toHaveLength(1))
+    expect(mock.history.patch[0].url).toBe('/admin/settings/storeAdminName')
   })
 
   // ─── Negative assertions ───────────────────────────────────────────────

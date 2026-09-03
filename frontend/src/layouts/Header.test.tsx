@@ -36,10 +36,34 @@ describe('Header', () => {
       .onGet('/cart')
       .reply(200, { success: true, data: { id: 'cart-1', items: [], itemCount: 0, subtotal: '0.00' } })
     mock.onGet('/categories/tree').reply(200, { success: true, data: [] })
+    // Default: backend serves the "PrintForge" default until an owner
+    // configures a store name.
+    mock.onGet('/settings/storeName').reply(200, { success: true, data: { value: 'PrintForge' } })
   })
 
   afterEach(() => {
     mock.restore()
+  })
+
+  it('renders the configured store name as the brand (UX — Store Identity)', async () => {
+    mock.onGet('/settings/storeName').reply(200, { success: true, data: { value: 'Atharva Prints' } })
+    renderWithProviders(<Header />, { authValue: createMockAuthContext({ status: 'unauthenticated' }) })
+
+    const brand = await screen.findByRole('link', { name: 'Atharva Prints home' })
+    expect(brand).toHaveTextContent('Atharva Prints')
+    expect(brand).toHaveAttribute('href', '/')
+    expect(screen.queryByText('PrintForge')).not.toBeInTheDocument()
+  })
+
+  it('falls back to "PrintForge" as the brand when the store-name endpoint fails', async () => {
+    mock.onGet('/settings/storeName').reply(500)
+    renderWithProviders(<Header />, { authValue: createMockAuthContext({ status: 'unauthenticated' }) })
+
+    // The brand link is always "<name> home" — starts as the fallback and
+    // stays there because the request errored.
+    expect(await screen.findByRole('link', { name: 'PrintForge home' })).toHaveTextContent(
+      'PrintForge',
+    )
   })
 
   it('shows the Admin nav entry for an authenticated ADMIN user', () => {

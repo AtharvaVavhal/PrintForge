@@ -35,6 +35,19 @@ export async function fetchHomepageSettings(): Promise<HomepageSettings> {
   return res.data.data ?? {}
 }
 
+/** The customer-facing store name shown in the storefront chrome. Read from
+ * the public `GET /settings/:key` surface (same one the announcement bar
+ * uses). The backend already substitutes the "PrintForge" default when no
+ * value has been saved; `null` here means the endpoint was unreachable, and
+ * the caller falls back on its own. `storeAdminName` is intentionally NOT
+ * fetched — it is never public. */
+export async function fetchStoreName(): Promise<string | null> {
+  const res = await apiClient.get<ApiSuccessResponse<{ value: string | null }>>(
+    '/settings/storeName',
+  )
+  return res.data.data?.value ?? null
+}
+
 // ─── Admin: configurable app settings ──────────────────────────────────
 
 /** Mirrors backend AdminSettingView (app-setting.service.ts). `kind`

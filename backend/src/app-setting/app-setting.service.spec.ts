@@ -266,4 +266,83 @@ describe('AppSettingService — configurable settings', () => {
       expect(upsert).not.toHaveBeenCalled();
     });
   });
+
+  describe('store identity — storeName / storeAdminName', () => {
+    it('defaults storeName to "PrintForge" when no row exists (backward compatibility)', async () => {
+      const { service } = buildService();
+      const list = await service.listConfigurable();
+      const storeName = list.find((s) => s.key === 'storeName');
+      expect(storeName).toMatchObject({
+        kind: 'text',
+        value: 'PrintForge',
+        default: 'PrintForge',
+      });
+    });
+
+    it('defaults storeAdminName to an empty string (no name field to seed from)', async () => {
+      const { service } = buildService();
+      const list = await service.listConfigurable();
+      const adminName = list.find((s) => s.key === 'storeAdminName');
+      expect(adminName).toMatchObject({ value: '', default: '' });
+    });
+
+    it('reflects a stored store name over the default', async () => {
+      const { service } = buildService({ storeName: 'Atharva Prints' });
+      const list = await service.listConfigurable();
+      expect(list.find((s) => s.key === 'storeName')?.value).toBe(
+        'Atharva Prints',
+      );
+    });
+
+    it('accepts and trims a new store name', async () => {
+      const { service, upsert } = buildService();
+      const view = await service.updateConfigurable(
+        'storeName',
+        '  Atharva Prints  ',
+      );
+      expect(view.value).toBe('Atharva Prints');
+      expect(upsert).toHaveBeenCalledWith({
+        where: { key: 'storeName' },
+        update: { value: 'Atharva Prints' },
+        create: { key: 'storeName', value: 'Atharva Prints' },
+      });
+    });
+
+    it('rejects an empty / whitespace-only store name (required)', async () => {
+      const { service, upsert } = buildService();
+      await expect(
+        service.updateConfigurable('storeName', '   '),
+      ).rejects.toThrow(/store name is required/i);
+      expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects a store name over 60 characters', async () => {
+      const { service } = buildService();
+      await expect(
+        service.updateConfigurable('storeName', 'x'.repeat(61)),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('accepts and trims a store admin name', async () => {
+      const { service } = buildService();
+      const view = await service.updateConfigurable(
+        'storeAdminName',
+        '  Atharva Vavhal  ',
+      );
+      expect(view.value).toBe('Atharva Vavhal');
+    });
+
+    it('allows an empty store admin name (optional)', async () => {
+      const { service } = buildService();
+      const view = await service.updateConfigurable('storeAdminName', '   ');
+      expect(view.value).toBe('');
+    });
+
+    it('rejects a store admin name over its length limit', async () => {
+      const { service } = buildService();
+      await expect(
+        service.updateConfigurable('storeAdminName', 'x'.repeat(121)),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
 });

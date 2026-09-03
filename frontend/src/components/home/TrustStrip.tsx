@@ -1,4 +1,5 @@
 import { ShieldCheck, Palette, PackageSearch } from 'lucide-react'
+import { useStoreName } from '@/hooks/useStoreName'
 import styles from './TrustStrip.module.css'
 
 /**
@@ -26,10 +27,12 @@ const ITEMS = [
 ] as const
 
 export function TrustStrip() {
+  const storeName = useStoreName()
+
   return (
     <section className={styles.section} aria-labelledby="home-trust-heading">
       <h2 id="home-trust-heading" className={styles.srOnly}>
-        Why shop with PrintForge
+        Why shop with {storeName}
       </h2>
       <ul className={styles.grid}>
         {ITEMS.map(({ icon: Icon, title, text }) => (

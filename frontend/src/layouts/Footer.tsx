@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'
+import { useStoreName } from '@/hooks/useStoreName'
 import styles from './Footer.module.css'
 
 /**
@@ -33,13 +34,15 @@ const COLUMNS: { heading: string; links: { label: string; to: string }[] }[] = [
 ]
 
 export function Footer() {
+  const storeName = useStoreName()
+
   return (
     <footer className={styles.footer}>
       <div className={styles.inner}>
         <div className={styles.top}>
           <div className={styles.brandBlock}>
             <Link to={ROUTES.HOME} className={styles.brand}>
-              PrintForge
+              {storeName}
             </Link>
             <p className={styles.tagline}>Custom prints, made to order.</p>
           </div>
@@ -63,7 +66,7 @@ export function Footer() {
         </div>
 
         <p className={styles.copyright}>
-          &copy; {new Date().getFullYear()} PrintForge. All rights reserved.
+          &copy; {new Date().getFullYear()} {storeName}. All rights reserved.
         </p>
       </div>
     </footer>

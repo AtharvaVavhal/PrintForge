@@ -18,8 +18,15 @@ import styles from './AdminSettingsPage.module.css'
 /** Client-side presentation grouping only — derived from the setting
  * `key` prefixes the backend already uses (`tax.*`, `invoice.*`). It
  * adds no configuration and changes no value. */
+const STORE_IDENTITY_KEYS = ['storeName', 'storeAdminName']
+
 const GROUPS: { title: string; belongs: (key: string) => boolean }[] = [
-  { title: 'Storefront', belongs: (k) => !k.startsWith('tax.') && !k.startsWith('invoice.') },
+  { title: 'Store identity', belongs: (k) => STORE_IDENTITY_KEYS.includes(k) },
+  {
+    title: 'Storefront',
+    belongs: (k) =>
+      !STORE_IDENTITY_KEYS.includes(k) && !k.startsWith('tax.') && !k.startsWith('invoice.'),
+  },
   { title: 'Tax (GST)', belongs: (k) => k.startsWith('tax.') },
   { title: 'Invoicing', belongs: (k) => k.startsWith('invoice.') },
 ]
@@ -91,7 +98,7 @@ function SettingRow({ setting }: SettingRowProps) {
     reset,
     formState: { errors, isDirty },
   } = useForm<{ value: string }>({
-    resolver: zodResolver(schemaForKind(setting.kind)),
+    resolver: zodResolver(schemaForKind(setting.kind, setting.key)),
     defaultValues: { value: setting.value },
   })
 

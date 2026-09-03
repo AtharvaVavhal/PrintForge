@@ -12,6 +12,11 @@ export const PUBLIC_SETTING_KEYS = [
   'hero_slides',
   'banners',
   'showcase_categories',
+  // Store identity — the customer-facing store name the storefront chrome
+  // renders (Header / hero / footer). `storeAdminName` is deliberately NOT
+  // public: it is store-owner information, only ever read behind the admin
+  // guard.
+  'storeName',
 ] as const;
 
 export type PublicSettingKey = (typeof PUBLIC_SETTING_KEYS)[number];
@@ -51,6 +56,8 @@ const MAX_SHIPPING_FEE_RUPEES = 100000;
 const MAX_ANNOUNCEMENT_LENGTH = 200;
 const MAX_NAME_LENGTH = 200;
 const MAX_ADDRESS_LENGTH = 500;
+const MAX_STORE_NAME_LENGTH = 60;
+const MAX_STORE_ADMIN_NAME_LENGTH = 120;
 const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/;
 const INVOICE_PREFIX_PATTERN = /^[A-Z0-9/-]{1,16}$/;
 
@@ -98,6 +105,22 @@ function boundedText(max: number, label: string) {
     }
     return { valid: true, value: trimmed };
   };
+}
+
+/** The customer-facing store name. Required — the storefront always shows
+ * a name, and an empty value would blank the header / hero / footer. */
+function normalizeStoreName(raw: string): NormalizeResult {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return { valid: false, error: 'Store name is required' };
+  }
+  if (trimmed.length > MAX_STORE_NAME_LENGTH) {
+    return {
+      valid: false,
+      error: `Store name cannot exceed ${MAX_STORE_NAME_LENGTH} characters`,
+    };
+  }
+  return { valid: true, value: trimmed };
 }
 
 function normalizeBoolean(raw: string): NormalizeResult {
@@ -192,6 +215,11 @@ function normalizeTaxPricingMode(raw: string): NormalizeResult {
 const NORMALIZERS: Record<string, (raw: string) => NormalizeResult> = {
   shippingFeeFlat: normalizeMoney,
   announcement_text: boundedText(MAX_ANNOUNCEMENT_LENGTH, 'Announcement text'),
+  storeName: normalizeStoreName,
+  // Store-owner display name — optional (the User model has no name column
+  // to seed it from), only length-bounded. Same rule shape as the invoice
+  // seller-identity fields.
+  storeAdminName: boundedText(MAX_STORE_ADMIN_NAME_LENGTH, 'Store admin name'),
   'tax.enabled': normalizeBoolean,
   'tax.pricingMode': normalizeTaxPricingMode,
   'tax.ratePercent': normalizePercent,
@@ -203,6 +231,24 @@ const NORMALIZERS: Record<string, (raw: string) => NormalizeResult> = {
 };
 
 export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
+  {
+    key: 'storeName',
+    label: 'Store name',
+    description:
+      'The name customers see for this store — in the header, the homepage hero and the footer. This is the STORE name, not the "PrintForge" platform name. Required.',
+    kind: 'text',
+    // Backward compatibility: the storefront shows exactly this until the
+    // owner changes it, matching the value that was previously hardcoded.
+    default: 'PrintForge',
+  },
+  {
+    key: 'storeAdminName',
+    label: 'Store admin name',
+    description:
+      'Display name for the store owner / administrator. Optional — used where store-owner attribution is needed. Never shown to customers unless a specific context calls for it.',
+    kind: 'text',
+    default: '',
+  },
   {
     key: 'shippingFeeFlat',
     label: 'Flat shipping fee (₹)',

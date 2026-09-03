@@ -22,8 +22,14 @@
   color: var(--color-text-strong);
   text-decoration: none;
   letter-spacing: -0.02em;
-  flex-shrink: 0;
   border-radius: var(--radius-sm);
+  /* The store name is configurable and can be long. Let it give way to the
+   * fixed-width controls (hamburger, cart) and ellipsis rather than push
+   * the row wider than the viewport. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .brand:focus-visible {
@@ -424,6 +430,7 @@
   justify-content: center;
   width: 40px;
   height: 40px;
+  flex-shrink: 0;
   border: none;
   background: transparent;
   color: var(--color-text);

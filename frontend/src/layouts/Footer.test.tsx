@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { screen } from '@testing-library/react'
+import { renderWithProviders } from '@/test/test-utils'
 import { Footer } from './Footer'
 
 function renderFooter() {
-  return render(
-    <MemoryRouter>
-      <Footer />
-    </MemoryRouter>,
-  )
+  // Footer reads the configured store name (useStoreName → TanStack Query),
+  // so it needs the provider stack. No /settings/storeName mock here — the
+  // hook falls back to "PrintForge", which is what these tests assert.
+  return renderWithProviders(<Footer />)
 }
 
 describe('Footer', () => {

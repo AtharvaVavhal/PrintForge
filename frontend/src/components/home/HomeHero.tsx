@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ROUTES } from '@/constants/routes'
 import { Button } from '@/components/ui/Button'
+import { useStoreName } from '@/hooks/useStoreName'
 import styles from './HomeHero.module.css'
 
 /**
@@ -11,10 +12,12 @@ import styles from './HomeHero.module.css'
  * the admin control plane and HeroCarousel renders it instead.
  */
 export function HomeHero() {
+  const storeName = useStoreName()
+
   return (
     <section className={styles.hero} aria-labelledby="home-hero-heading">
       <div className={styles.inner}>
-        <p className={styles.eyebrow}>PrintForge</p>
+        <p className={styles.eyebrow}>{storeName}</p>
         <h1 id="home-hero-heading" className={styles.headline}>
           Custom prints, made to order
         </h1>
