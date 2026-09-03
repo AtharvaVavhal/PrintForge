@@ -145,6 +145,9 @@ export function AdminProductDetailPage() {
 
   // ─── Create mode ───────────────────────────────────────────────────────
   if (isCreating) {
+    if (categoriesQuery.isPending) {
+      return <AdminPageSkeleton rows={4} />
+    }
     return (
       <AdminPage
         title="New product"
@@ -153,7 +156,9 @@ export function AdminProductDetailPage() {
           { label: 'New product' },
         ]}
       >
-        {categoriesQuery.data && (
+        {categoriesQuery.isError ? (
+          <Alert variant="error">{getApiErrorMessage(categoriesQuery.error)}</Alert>
+        ) : (
           <AdminCard as="section" title="Product details">
             <ProductForm
               categories={categoriesQuery.data}
@@ -291,7 +296,9 @@ export function AdminProductDetailPage() {
       </AdminCard>
 
       <AdminCard as="section" title="Product details">
-        {categoriesQuery.data && (
+        {categoriesQuery.isError ? (
+          <Alert variant="error">{getApiErrorMessage(categoriesQuery.error)}</Alert>
+        ) : categoriesQuery.data ? (
           <ProductForm
             categories={categoriesQuery.data}
             defaultValues={toFormValues(product)}
@@ -300,7 +307,7 @@ export function AdminProductDetailPage() {
             submitLabel="Save changes"
             onSubmit={(values) => void handleUpdate(values)}
           />
-        )}
+        ) : null}
       </AdminCard>
 
       <VariantManager

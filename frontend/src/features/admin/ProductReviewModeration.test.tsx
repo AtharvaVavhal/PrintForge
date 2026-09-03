@@ -157,6 +157,17 @@ describe('ProductReviewModeration', () => {
     expect(screen.queryByText('Great mug, arrived quickly')).not.toBeInTheDocument()
   })
 
+  it('announces the first-load skeleton via a polite, visually-hidden status', () => {
+    mock.onGet(REVIEWS_URL).reply(() => new Promise(() => {}))
+    render()
+
+    const announcement = screen.getByText('Loading reviews…')
+    expect(announcement).toHaveClass('srOnly')
+    expect(announcement.closest('[role="status"]')).not.toBeNull()
+    // The skeleton table itself is hidden from assistive tech.
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
   // 15
   it('surfaces a list query error in its own Alert', async () => {
     mock.onGet(REVIEWS_URL).reply(500, {

@@ -28,7 +28,7 @@ export const AdminSelect = forwardRef<HTMLSelectElement, AdminSelectProps>(
       <div className={cn(styles.field, className)}>
         <label
           htmlFor={selectId}
-          className={cn(styles.label, hideLabel && styles.labelHidden)}
+          className={cn(styles.label, hideLabel && 'srOnly')}
         >
           {label}
         </label>

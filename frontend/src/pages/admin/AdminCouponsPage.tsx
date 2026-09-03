@@ -222,14 +222,18 @@ export function AdminCouponsPage() {
         </Button>
       }
     >
-      {isAdding && categoriesQuery.data && (
+      {isAdding && (
         <AdminCard as="section" title="New coupon">
-          <CreateCouponFormFields
-            categories={categoriesQuery.data}
-            onSubmit={(values) => void handleCreate(values)}
-            isSubmitting={createCoupon.isPending}
-            submitError={createCoupon.isError ? getApiErrorMessage(createCoupon.error) : null}
-          />
+          {categoriesQuery.isError ? (
+            <Alert variant="error">{getApiErrorMessage(categoriesQuery.error)}</Alert>
+          ) : categoriesQuery.data ? (
+            <CreateCouponFormFields
+              categories={categoriesQuery.data}
+              onSubmit={(values) => void handleCreate(values)}
+              isSubmitting={createCoupon.isPending}
+              submitError={createCoupon.isError ? getApiErrorMessage(createCoupon.error) : null}
+            />
+          ) : null}
         </AdminCard>
       )}
 

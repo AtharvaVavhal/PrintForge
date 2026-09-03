@@ -41,8 +41,29 @@ describe('AdminTable', () => {
 
   it('keeps the caption available to assistive tech even when visually hidden', () => {
     render(<SampleTable />)
-    // Default: hidden class, but still in the a11y tree as the table's name.
+    // Default: hidden via the shared global utility, but still in the a11y
+    // tree as the table's name.
     expect(screen.getByRole('table', { name: 'Orders' })).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: 'Orders' })
+    const caption = table.querySelector('caption') as HTMLElement
+    expect(caption).toHaveTextContent('Orders')
+    expect(caption).toHaveClass('srOnly')
+  })
+
+  it('shows the caption visibly when captionVisible is set', () => {
+    render(
+      <AdminTable caption="Recent orders" captionVisible>
+        <AdminTable.Body>
+          <AdminTable.Row>
+            <AdminTable.Cell>x</AdminTable.Cell>
+          </AdminTable.Row>
+        </AdminTable.Body>
+      </AdminTable>,
+    )
+    const caption = screen.getByRole('table', { name: 'Recent orders' }).querySelector(
+      'caption',
+    ) as HTMLElement
+    expect(caption).not.toHaveClass('srOnly')
   })
 
   it('wraps the table in a horizontally scrollable, focusable region', () => {

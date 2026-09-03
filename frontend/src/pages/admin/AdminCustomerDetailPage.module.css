@@ -5,6 +5,11 @@
   white-space: nowrap;
 }
 
+.backLink {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+
 .statGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));

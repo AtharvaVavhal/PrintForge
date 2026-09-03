@@ -26,7 +26,7 @@ export function AdminTable({ caption, captionVisible = false, children, classNam
   return (
     <div className={styles.scroll} role="region" aria-label={caption} tabIndex={0}>
       <table className={cn(styles.table, className)}>
-        <caption className={captionVisible ? styles.caption : styles.captionHidden}>
+        <caption className={captionVisible ? styles.caption : 'srOnly'}>
           {caption}
         </caption>
         {children}

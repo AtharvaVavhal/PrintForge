@@ -467,6 +467,12 @@ describe('AdminOrderDetailPage', () => {
 
     expect(await screen.findByText('Order not found')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Order')
+    // Recovery: an in-body link back to the list, plus the breadcrumb.
+    expect(screen.getByRole('link', { name: 'Back to orders' })).toHaveAttribute(
+      'href',
+      '/admin/orders',
+    )
+    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute('href', '/admin/orders')
   })
 
   it('shows the invoice link only for an invoiceable status', async () => {

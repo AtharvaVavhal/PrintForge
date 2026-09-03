@@ -74,6 +74,11 @@ export function AdminOrderDetailPage() {
         breadcrumbs={[{ label: 'Orders', to: ROUTES.ADMIN_ORDERS }, { label: 'Order' }]}
       >
         <Alert variant="error">{getApiErrorMessage(error)}</Alert>
+        <p>
+          <Link to={ROUTES.ADMIN_ORDERS} className={styles.backLink}>
+            Back to orders
+          </Link>
+        </p>
       </AdminPage>
     )
   }

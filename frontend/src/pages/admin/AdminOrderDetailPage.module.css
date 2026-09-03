@@ -5,6 +5,11 @@
   white-space: nowrap;
 }
 
+.backLink {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+
 .emptyPad {
   padding: var(--space-4);
 }

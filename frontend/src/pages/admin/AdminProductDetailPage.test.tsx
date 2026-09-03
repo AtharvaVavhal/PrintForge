@@ -208,6 +208,40 @@ describe('AdminProductDetailPage', () => {
     )
   })
 
+  it('create mode: surfaces a categories fetch failure instead of a blank page', async () => {
+    mock.reset()
+    mock.onGet('/categories').reply(500, {
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Categories unavailable', details: [] },
+    })
+
+    renderAt('/admin/products/new')
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'New product' })).toBeInTheDocument()
+    expect(await screen.findByText('Categories unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Categories unavailable')
+  })
+
+  it('edit mode: surfaces a categories fetch failure in the Product details card', async () => {
+    mock.reset()
+    mock.onGet('/products/prod-1/reviews').reply(200, {
+      success: true,
+      data: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 1 },
+    })
+    mock.onGet('/categories').reply(500, {
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Categories unavailable', details: [] },
+    })
+
+    renderAt('/admin/products/prod-1', { product: buildProduct() })
+
+    await screen.findByRole('heading', { level: 1, name: 'Ceramic Mug' })
+    expect(await screen.findByText('Categories unavailable')).toBeInTheDocument()
+    // The rest of the page (variants, images, reviews) still renders.
+    expect(screen.getByRole('heading', { level: 2, name: 'Variants' })).toBeInTheDocument()
+  })
+
   // ─── Status / deactivate ───────────────────────────────────────────────
 
   it('deactivates through a confirmation modal and stays on the page offering Reactivate', async () => {

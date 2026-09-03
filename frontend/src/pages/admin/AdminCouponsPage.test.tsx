@@ -557,6 +557,27 @@ describe('AdminCouponsPage', () => {
     expect(screen.queryByText('No coupons yet')).not.toBeInTheDocument()
   })
 
+  // W2
+  it('surfaces a categories fetch failure in the New coupon card instead of silently hiding the form', async () => {
+    const user = userEvent.setup()
+    mock.reset()
+    mock.onGet('/admin/coupons').reply(200, listResponse([buildCoupon()]))
+    mock.onGet('/categories').reply(500, {
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Categories unavailable', details: [] },
+    })
+
+    renderWithProviders(<AdminCouponsPage />)
+    await screen.findByText('SAVE10')
+
+    await openNewCoupon(user)
+
+    const card = screen.getByRole('heading', { name: 'New coupon' }).closest('section') as HTMLElement
+    expect(within(card).getByRole('alert')).toHaveTextContent('Categories unavailable')
+    // The form itself is not rendered without its category options.
+    expect(within(card).queryByLabelText('Code')).not.toBeInTheDocument()
+  })
+
   // X
   it('renders a semantic table with the expected column headers', async () => {
     mock.onGet('/admin/coupons').reply(200, listResponse([buildCoupon()]))

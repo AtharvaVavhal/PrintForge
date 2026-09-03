@@ -263,6 +263,15 @@ describe('AdminCustomerDetailPage', () => {
 
     expect(await screen.findByText('Customer not found')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Customer')
+    // Recovery: an in-body link back to the list, plus the breadcrumb.
+    expect(screen.getByRole('link', { name: 'Back to customers' })).toHaveAttribute(
+      'href',
+      '/admin/customers',
+    )
+    expect(screen.getByRole('link', { name: 'Customers' })).toHaveAttribute(
+      'href',
+      '/admin/customers',
+    )
   })
 
   // ─── Negative assertions ───────────────────────────────────────────────

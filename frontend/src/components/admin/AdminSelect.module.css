@@ -11,18 +11,6 @@
   color: var(--color-text);
 }
 
-.labelHidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .select {
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-md);

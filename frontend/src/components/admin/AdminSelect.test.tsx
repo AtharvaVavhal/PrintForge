@@ -24,6 +24,19 @@ describe('AdminSelect', () => {
     )
     // Still reachable by its accessible name.
     expect(screen.getByRole('combobox', { name: 'Filter by status' })).toBeInTheDocument()
+    // Hidden via the shared global utility, kept alongside the base label class.
+    const label = screen.getByText('Filter by status')
+    expect(label.tagName).toBe('LABEL')
+    expect(label).toHaveClass('srOnly')
+  })
+
+  it('does not hide the label by default', () => {
+    render(
+      <AdminSelect label="Status" name="status">
+        <option value="">Any</option>
+      </AdminSelect>,
+    )
+    expect(screen.getByText('Status')).not.toHaveClass('srOnly')
   })
 
   it('surfaces an error with aria-invalid and role="alert"', () => {

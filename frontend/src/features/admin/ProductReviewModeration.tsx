@@ -105,12 +105,17 @@ export function ProductReviewModeration({ productId }: ProductReviewModerationPr
 
       <div className={styles.results} aria-busy={reviewsQuery.isFetching || undefined}>
         {reviewsQuery.isPending ? (
-          <AdminCard flush>
-            <AdminTable caption="Reviews for this product">
-              <ReviewTableHead />
-              <AdminTable.SkeletonBody columns={TABLE_COLUMNS} />
-            </AdminTable>
-          </AdminCard>
+          <div role="status">
+            <span className="srOnly">Loading reviews…</span>
+            <AdminCard flush>
+              <div aria-hidden="true">
+                <AdminTable caption="Reviews for this product">
+                  <ReviewTableHead />
+                  <AdminTable.SkeletonBody columns={TABLE_COLUMNS} />
+                </AdminTable>
+              </div>
+            </AdminCard>
+          </div>
         ) : items.length === 0 ? (
           <AdminEmptyState
             title="No published reviews yet"
