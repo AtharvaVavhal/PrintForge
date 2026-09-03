@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useInvoice, useAdminInvoice } from '@/hooks/useInvoice'
-import { Alert } from '@/components/ui/Alert'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { formatPrice } from '@/utils/formatPrice'
@@ -43,8 +43,7 @@ export function InvoicePage() {
     return (
       <section className={styles.wrap}>
         <Seo title="Invoice" noindex />
-        <h1>Invoice</h1>
-        <Alert variant="error">{getApiErrorMessage(error)}</Alert>
+        <ErrorState title="Invoice" message={getApiErrorMessage(error)} />
       </section>
     )
   }

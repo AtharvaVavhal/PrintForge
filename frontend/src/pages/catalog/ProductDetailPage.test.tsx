@@ -208,7 +208,13 @@ describe('ProductDetailPage', () => {
 
     renderAtSlug('does-not-exist')
 
-    expect(await screen.findByText('Product not found')).toBeInTheDocument()
+    // UX-46 shared ErrorState: heading + assertive server message + the
+    // page's existing "back to shop" recovery link, destination unchanged.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Product unavailable' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Product not found')
+    expect(screen.getByRole('link', { name: /back to shop/i })).toHaveAttribute('href', '/products')
   })
 
   it('updates the displayed price when a variant with a price delta is selected', async () => {

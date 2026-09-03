@@ -1,0 +1,16 @@
+/* Page-level fetch-error state (UX-46). Flow layout — a heading, the
+   error Alert, then an optional recovery action — matching what the
+   product / order / invoice / cart / checkout error branches already
+   rendered, now in one place. Not centred: these errors sit in the normal
+   page flow, unlike the centred EmptyState. The 24px gap replaces the
+   per-page mix of heading margins and Page gaps with one consistent
+   rhythm. */
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.title {
+  margin: 0;
+}

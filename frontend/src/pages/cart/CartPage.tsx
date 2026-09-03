@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useCart } from '@/hooks/useCart'
 import { getApiErrorMessage } from '@/utils/apiError'
-import { Alert } from '@/components/ui/Alert'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { CartLineItem } from '@/features/cart/CartLineItem'
@@ -42,8 +42,7 @@ export function CartPage() {
   } else if (isError) {
     body = (
       <Page>
-        <h1>Your cart</h1>
-        <Alert variant="error">{getApiErrorMessage(error)}</Alert>
+        <ErrorState title="Your cart" message={getApiErrorMessage(error)} />
       </Page>
     )
   } else if (cart.items.length === 0) {

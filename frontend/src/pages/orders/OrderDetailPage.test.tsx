@@ -98,6 +98,20 @@ describe('OrderDetailPage', () => {
     delete (window as { Razorpay?: unknown }).Razorpay
   })
 
+  it('renders a shared error state (heading + assertive message + "All orders" link) when the order fetch fails', async () => {
+    mock.onGet('/orders/order-1').reply(404, {
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Order not found', details: [] },
+    })
+
+    renderOrderDetail()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Order not found')
+    expect(screen.getByRole('heading', { level: 1, name: 'Order' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /all orders/i })).toHaveAttribute('href', '/orders')
+  })
+
   it('shows no discount row when no coupon was applied (discountAmount is "0.00", not null)', async () => {
     mock.onGet('/orders/order-1').reply(200, {
       success: true,

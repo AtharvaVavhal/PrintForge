@@ -145,8 +145,10 @@ describe('InvoicePage', () => {
     })
 
     renderAt('CUSTOMER')
-    expect(
-      await screen.findByText(/only available once the order has been paid/i),
-    ).toBeInTheDocument()
+    // UX-46 shared ErrorState: the exact 409 message is surfaced assertively
+    // under an "Invoice" heading — no fabricated invoice content.
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/only available once the order has been paid/i)
+    expect(screen.getByRole('heading', { level: 1, name: 'Invoice' })).toBeInTheDocument()
   })
 })

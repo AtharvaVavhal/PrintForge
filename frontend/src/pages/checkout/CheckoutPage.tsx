@@ -13,6 +13,7 @@ import { CouponForm } from '@/features/checkout/CouponForm'
 import { PriceBreakdown } from '@/features/checkout/PriceBreakdown'
 import { OrderPendingPayment } from '@/features/checkout/OrderPendingPayment'
 import { Alert } from '@/components/ui/Alert'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PaymentLoadError } from '@/components/ui/PaymentLoadError'
@@ -178,8 +179,7 @@ export function CheckoutPage() {
   if (isCartError) {
     return withSeo(
       <Page>
-        <h1>Checkout</h1>
-        <Alert variant="error">{getApiErrorMessage(cartError)}</Alert>
+        <ErrorState title="Checkout" message={getApiErrorMessage(cartError)} />
       </Page>,
     )
   }

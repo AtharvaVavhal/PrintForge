@@ -5,7 +5,7 @@ import { useCategoryTree } from '@/hooks/useCategoryTree'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { formatPrice } from '@/utils/formatPrice'
 import { ROUTES, productDetailPath } from '@/constants/routes'
-import { Alert } from '@/components/ui/Alert'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { Page } from '@/components/ui/Page'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Breadcrumbs, type Crumb } from '@/components/ui/Breadcrumbs'
@@ -71,11 +71,15 @@ export function ProductDetailPage() {
     return (
       <Page>
         <Seo title="Product not found" noindex />
-        <h1>Product unavailable</h1>
-        <Alert variant="error">{getApiErrorMessage(error)}</Alert>
-        <p className={styles.backLink}>
-          <Link to={ROUTES.PRODUCTS}>← Back to shop</Link>
-        </p>
+        <ErrorState
+          title="Product unavailable"
+          message={getApiErrorMessage(error)}
+          action={
+            <p className={styles.backLink}>
+              <Link to={ROUTES.PRODUCTS}>← Back to shop</Link>
+            </p>
+          }
+        />
       </Page>
     )
   }

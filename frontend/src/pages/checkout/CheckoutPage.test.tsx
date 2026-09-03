@@ -195,6 +195,24 @@ describe('CheckoutPage', () => {
     delete (window as { Razorpay?: unknown }).Razorpay
   })
 
+  it('renders a shared error state under a "Checkout" heading when the cart fetch fails (UX-46)', async () => {
+    mock.resetHandlers()
+    mock.onGet('/cart').reply(500, {
+      success: false,
+      error: { code: 'INTERNAL_SERVER_ERROR', message: 'Something broke', details: [] },
+    })
+    mock.onGet('/users/me').reply(200, { success: true, data: PROFILE_NO_ADDRESS })
+
+    renderCheckout()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Something broke')
+    expect(screen.getByRole('heading', { level: 1, name: 'Checkout' })).toBeInTheDocument()
+    // no shipping form and no step indicator in the blocking error branch
+    expect(screen.queryByLabelText('Recipient name')).not.toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Checkout progress' })).not.toBeInTheDocument()
+  })
+
   it('keeps the two-column grid and the coupon input row able to shrink on a narrow viewport (no horizontal overflow)', async () => {
     mock.onPost('/checkout/validate').reply(200, {
       success: true,

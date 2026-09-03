@@ -100,7 +100,13 @@ describe('CartPage', () => {
 
     render(<CartPage />)
 
-    expect(await screen.findByText('Something broke')).toBeInTheDocument()
+    // The exact server message is still surfaced, assertively, under the
+    // page's single <h1> (UX-46: shared ErrorState).
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Something broke')
+    const h1s = screen.getAllByRole('heading', { level: 1 })
+    expect(h1s).toHaveLength(1)
+    expect(h1s[0]).toHaveTextContent('Your cart')
   })
 
   it('renders the unavailable-item state distinctly and blocks checkout', async () => {
