@@ -55,6 +55,27 @@ describe('AccountPage', () => {
     expect(screen.queryByRole('button', { name: /change password/i })).not.toBeInTheDocument()
   })
 
+  it('lets a long unbroken email value wrap so it cannot overflow the viewport on mobile', async () => {
+    const longEmail = 'averylongunbrokenlocalpartthatwillnotwrapnicely@examplemail.test'
+    mock.onGet('/users/me').reply(200, { success: true, data: buildProfile({ email: longEmail }) })
+
+    renderWithProviders(<AccountPage />, {
+      authValue: createMockAuthContext({
+        status: 'authenticated',
+        user: { id: 'user-1', email: longEmail, role: 'CUSTOMER', createdAt: '2026-01-01T00:00:00.000Z' },
+      }),
+    })
+
+    // Still a plain <dd> value — layout/markup unchanged.
+    const emailValue = await screen.findByText(longEmail)
+    expect(emailValue.tagName).toBe('DD')
+    // The value cell may break inside the word; the label cell must not.
+    expect(getComputedStyle(emailValue).overflowWrap).toBe('anywhere')
+    const label = screen.getByText('Email')
+    expect(label.tagName).toBe('DT')
+    expect(getComputedStyle(label).overflowWrap).not.toBe('anywhere')
+  })
+
   it('links to the orders page and offers a sign-out action', async () => {
     mock.onGet('/users/me').reply(200, { success: true, data: buildProfile() })
 

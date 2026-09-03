@@ -65,6 +65,12 @@
 .details dd {
   margin: 0;
   color: var(--color-text);
+  /* A long unbroken value (e.g. an email with no dots/hyphens in the
+     local-part) must be allowed to break inside the word so the details
+     grid's flexible column — and the card — can shrink to the viewport on
+     narrow screens. `anywhere` (not `break-word`) also lets the value
+     contribute its post-break min-content size to track sizing. */
+  overflow-wrap: anywhere;
 }
 
 .side {
