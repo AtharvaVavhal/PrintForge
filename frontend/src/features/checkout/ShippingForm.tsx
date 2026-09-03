@@ -109,6 +109,7 @@ export function ShippingForm({
       )}
       <TextField
         label="Recipient name"
+        required
         autoComplete="name"
         error={errors.shippingRecipientName?.message}
         {...register('shippingRecipientName')}
@@ -116,6 +117,7 @@ export function ShippingForm({
       />
       <TextField
         label="Phone number"
+        required
         type="tel"
         autoComplete="tel"
         inputMode="tel"
@@ -126,6 +128,7 @@ export function ShippingForm({
       />
       <TextField
         label="Address line 1"
+        required
         autoComplete="address-line1"
         error={errors.shippingAddressLine1?.message}
         {...register('shippingAddressLine1')}
@@ -142,6 +145,7 @@ export function ShippingForm({
         <div className={styles.pinField}>
           <TextField
             label="Postal code"
+            required
             autoComplete="postal-code"
             inputMode="numeric"
             maxLength={6}
@@ -160,6 +164,7 @@ export function ShippingForm({
         </div>
         <TextField
           label="City"
+          required
           autoComplete="address-level2"
           error={errors.shippingCity?.message}
           {...register('shippingCity')}
@@ -169,6 +174,7 @@ export function ShippingForm({
       <div className={styles.row}>
         <TextField
           label="State"
+          required
           autoComplete="address-level1"
           error={errors.shippingState?.message}
           {...register('shippingState')}
@@ -176,6 +182,7 @@ export function ShippingForm({
         />
         <TextField
           label="Country"
+          required
           autoComplete="country-name"
           error={errors.shippingCountry?.message}
           {...register('shippingCountry')}

@@ -63,6 +63,7 @@ export function LoginPage() {
           label="Email"
           type="email"
           autoComplete="email"
+          required
           error={errors.email?.message}
           {...register('email')}
         />
@@ -71,6 +72,7 @@ export function LoginPage() {
           type="password"
           autoComplete="current-password"
           revealable
+          required
           error={errors.password?.message}
           {...register('password')}
         />

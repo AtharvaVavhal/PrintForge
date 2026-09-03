@@ -27,6 +27,15 @@ async function fillAndSubmit(
 }
 
 describe('RegisterPage', () => {
+  it('marks email, password and confirm password as required (UX-46)', () => {
+    renderWithProviders(<RegisterPage />)
+    for (const label of ['Email', 'Password', 'Confirm password']) {
+      expect(screen.getByLabelText(label)).toHaveAttribute('aria-required', 'true')
+    }
+    // Three fields, three visual markers.
+    expect(screen.getAllByText('*')).toHaveLength(3)
+  })
+
   it('rejects a password shorter than 8 characters', async () => {
     const user = userEvent.setup()
     renderWithProviders(<RegisterPage />)

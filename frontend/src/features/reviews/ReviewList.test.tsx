@@ -126,6 +126,14 @@ describe('ReviewList', () => {
     await screen.findByText('No reviews yet.')
 
     await user.click(screen.getByRole('button', { name: 'Write a review' }))
+
+    // UX-46: rating is required (schema enum), the review body is optional.
+    expect(screen.getByRole('radiogroup', { name: /your rating/i })).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+    expect(screen.getByLabelText('Your review (optional)')).not.toHaveAttribute('aria-required')
+
     await user.click(screen.getByRole('radio', { name: '5 stars' }))
     await user.type(screen.getByLabelText('Your review (optional)'), 'Loved it')
     await user.click(screen.getByRole('button', { name: 'Submit review' }))

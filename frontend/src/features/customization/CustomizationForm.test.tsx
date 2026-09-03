@@ -63,12 +63,34 @@ describe('CustomizationForm', () => {
     apiMock.restore()
   })
 
+  it('marks required customization fields (text / colour / file) and not optional ones (UX-46)', () => {
+    renderWithProviders(<CustomizationForm fields={[LOGO_FIELD, COLOR_FIELD, CAPTION_FIELD]} />)
+
+    // File upload keeps the "*" inside its <label> (aria-hidden), so TL's
+    // label lookup includes it; the semantic is on the input.
+    expect(screen.getByLabelText('Logo *', { selector: 'input' })).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+    expect(screen.getByRole('radiogroup', { name: 'Mug Color' })).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+    // CAPTION_FIELD is isRequired:false — plain label, no aria-required.
+    expect(screen.getByLabelText('Caption')).not.toHaveAttribute('aria-required')
+    // Two required fields → two visual "*" markers.
+    expect(screen.getAllByText('*')).toHaveLength(2)
+  })
+
   it('shows a required-field error after a required text field is touched and left blank', async () => {
     const user = userEvent.setup()
     const requiredText = buildField({ id: 'slogan', label: 'Slogan', isRequired: true })
     renderWithProviders(<CustomizationForm fields={[requiredText]} />)
 
-    const input = screen.getByLabelText('Slogan *')
+    // The label is the plain field name; the required "*" (UX-46) is a
+    // sibling of <label>, and the input carries aria-required.
+    const input = screen.getByLabelText('Slogan')
+    expect(input).toHaveAttribute('aria-required', 'true')
     await user.type(input, 'a')
     await user.clear(input)
 

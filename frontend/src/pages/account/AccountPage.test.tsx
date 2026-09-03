@@ -100,6 +100,13 @@ describe('AccountPage', () => {
     expect(screen.getByLabelText('Postal code')).toHaveValue('400001')
     expect(screen.getByLabelText('Phone')).toHaveValue('9876543210')
     expect(screen.getByLabelText('Address line 2')).toHaveValue('')
+
+    // Every profile field is optional per accountSchema — none is marked
+    // required (UX-46).
+    for (const label of ['Address line 1', 'Address line 2', 'City', 'State', 'Postal code', 'Country', 'Phone']) {
+      expect(screen.getByLabelText(label)).not.toHaveAttribute('aria-required')
+    }
+    expect(screen.queryByText('*')).not.toBeInTheDocument()
   })
 
   it('validates field length before submit and never fires the PATCH', async () => {

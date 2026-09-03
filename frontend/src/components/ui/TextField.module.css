@@ -5,6 +5,11 @@
   text-align: left;
 }
 
+.labelRow {
+  display: flex;
+  align-items: baseline;
+}
+
 .label {
   font-size: 0.875rem;
   font-weight: var(--font-weight-semibold);

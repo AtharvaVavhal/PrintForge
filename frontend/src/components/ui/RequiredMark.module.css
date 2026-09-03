@@ -1,0 +1,4 @@
+.mark {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-normal);
+}

@@ -43,6 +43,13 @@ function renderAuthChain(
 }
 
 describe('LoginPage', () => {
+  it('marks email and password as required (UX-46)', () => {
+    renderWithProviders(<LoginPage />)
+    expect(screen.getByLabelText('Email')).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('Password')).toHaveAttribute('aria-required', 'true')
+    expect(screen.getAllByText('*')).toHaveLength(2)
+  })
+
   it('shows validation errors for an invalid email and empty password', async () => {
     const user = userEvent.setup()
     renderWithProviders(<LoginPage />)

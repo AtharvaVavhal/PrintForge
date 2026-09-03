@@ -39,6 +39,26 @@ describe('ShippingForm', () => {
     mock.restore()
   })
 
+  it('marks every schema-required field as required and leaves Address line 2 optional (UX-46)', () => {
+    renderForm()
+    for (const label of [
+      'Recipient name',
+      'Phone number',
+      'Address line 1',
+      'Postal code',
+      'City',
+      'State',
+      'Country',
+    ]) {
+      expect(screen.getByLabelText(label)).toHaveAttribute('aria-required', 'true')
+    }
+    expect(screen.getByLabelText('Address line 2 (optional)')).not.toHaveAttribute(
+      'aria-required',
+    )
+    // One "*" per required field, none for the optional one.
+    expect(screen.getAllByText('*')).toHaveLength(7)
+  })
+
   it('keeps the address fields editable while the payment script is loading (UX-05)', () => {
     renderForm({ isScriptLoading: true })
 

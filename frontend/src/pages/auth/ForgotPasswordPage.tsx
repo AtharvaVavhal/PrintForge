@@ -53,6 +53,7 @@ export function ForgotPasswordPage() {
             label="Email"
             type="email"
             autoComplete="email"
+            required
             error={errors.email?.message}
             {...register('email')}
           />

@@ -379,6 +379,10 @@ describe('CheckoutPage', () => {
           Boolean((JSON.parse(r.data as string) as { couponCode?: string }).couponCode),
       )
 
+    // The coupon code is an optional supplemental action, not a required
+    // checkout field — no required indicator (UX-46).
+    expect(screen.getByLabelText('Coupon code')).not.toHaveAttribute('aria-required')
+
     await user.type(screen.getByLabelText('Coupon code'), 'save10')
     expect(couponValidateCalls()).toHaveLength(0)
 

@@ -1,6 +1,7 @@
 import type { UseFormRegister } from 'react-hook-form'
 import type { CustomizationField } from '@/types/catalog'
 import { TextField } from '@/components/ui/TextField'
+import { RequiredMark } from '@/components/ui/RequiredMark'
 import { computeFieldSurcharge } from '@/utils/customizationPricing'
 import { formatPrice } from '@/utils/formatPrice'
 import styles from './TextCustomizationField.module.css'
@@ -39,7 +40,7 @@ export function TextCustomizationField({
       <div className={styles.field}>
         <label className={styles.label} htmlFor={field.id}>
           {field.label}
-          {field.isRequired && <span className={styles.required}> *</span>}
+          {field.isRequired && <RequiredMark />}
         </label>
         {field.helpText && <p className={styles.helpText}>{field.helpText}</p>}
         <textarea
@@ -47,6 +48,7 @@ export function TextCustomizationField({
           className={styles.textarea}
           maxLength={constraints.maxLength}
           aria-invalid={Boolean(error)}
+          aria-required={field.isRequired || undefined}
           {...register(field.id)}
         />
         {error && (
@@ -61,7 +63,8 @@ export function TextCustomizationField({
   return (
     <div className={styles.field}>
       <TextField
-        label={field.isRequired ? `${field.label} *` : field.label}
+        label={field.label}
+        required={field.isRequired}
         id={field.id}
         maxLength={constraints.maxLength}
         error={error}

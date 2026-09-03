@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { reviewSchema, type ReviewFormValues } from '@/schemas/review.schema'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
+import { RequiredMark } from '@/components/ui/RequiredMark'
 import styles from './ReviewForm.module.css'
 
 const RATING_VALUES = ['1', '2', '3', '4', '5'] as const
@@ -54,8 +55,14 @@ export function ReviewForm({
       <div className={styles.field}>
         <span className={styles.label} id="review-rating-label">
           Your rating
+          <RequiredMark />
         </span>
-        <div className={styles.stars} role="radiogroup" aria-labelledby="review-rating-label">
+        <div
+          className={styles.stars}
+          role="radiogroup"
+          aria-labelledby="review-rating-label"
+          aria-required="true"
+        >
           {RATING_VALUES.map((star) => (
             <label key={star} className={styles.starLabel}>
               <input

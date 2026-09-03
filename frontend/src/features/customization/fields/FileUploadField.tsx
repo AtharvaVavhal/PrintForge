@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react'
 import type { CustomizationField } from '@/types/catalog'
 import { useUploadFile } from '@/hooks/useUploadFile'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { RequiredMark } from '@/components/ui/RequiredMark'
 import styles from './FileUploadField.module.css'
 
 interface FieldConstraints {
@@ -176,7 +177,7 @@ export function FileUploadField({ field, value, onChange, error }: FileUploadFie
     <div className={styles.field}>
       <label className={styles.label} htmlFor={field.id}>
         {field.label}
-        {field.isRequired && <span className={styles.required}> *</span>}
+        {field.isRequired && <RequiredMark />}
       </label>
       {field.helpText && <p className={styles.helpText}>{field.helpText}</p>}
 
@@ -190,6 +191,7 @@ export function FileUploadField({ field, value, onChange, error }: FileUploadFie
         onChange={handleFileChange}
         disabled={upload.isPending}
         aria-invalid={Boolean(displayError)}
+        aria-required={field.isRequired || undefined}
         className={selected ? styles.inputHidden : undefined}
       />
 

@@ -12,6 +12,35 @@ describe('TextField', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a valid email address')
   })
 
+  describe('required indicator (UX-46)', () => {
+    it('marks a required field with a visual "*" and aria-required, keeping the accessible name clean', () => {
+      render(<TextField label="Recipient name" name="recipient" required />)
+      const input = screen.getByLabelText('Recipient name')
+      expect(input).toHaveAttribute('aria-required', 'true')
+      // The label text itself is just the field name.
+      expect(screen.getByText('Recipient name').tagName).toBe('LABEL')
+      // The "*" is present but decorative (aria-hidden), not part of the name.
+      const mark = screen.getByText('*')
+      expect(mark).toHaveAttribute('aria-hidden', 'true')
+    })
+
+    it('does not add an indicator or aria-required for an optional field', () => {
+      render(<TextField label="Address line 2" name="line2" />)
+      const input = screen.getByLabelText('Address line 2')
+      expect(input).not.toHaveAttribute('aria-required')
+      expect(screen.queryByText('*')).not.toBeInTheDocument()
+    })
+
+    it('still wires the label, error and aria-describedby when required', () => {
+      render(<TextField label="City" name="city" required error="City is required" />)
+      const input = screen.getByLabelText('City')
+      expect(input).toHaveAttribute('aria-required', 'true')
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+      expect(input).toHaveAttribute('aria-describedby', 'city-error')
+      expect(screen.getByRole('alert')).toHaveTextContent('City is required')
+    })
+  })
+
   it('merges a caller-supplied aria-describedby with the generated error id', () => {
     render(
       <TextField

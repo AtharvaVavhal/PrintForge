@@ -79,6 +79,7 @@ export function ResetPasswordPage() {
             type="password"
             autoComplete="new-password"
             revealable
+            required
             aria-describedby={PASSWORD_REQUIREMENTS_ID}
             error={errors.newPassword?.message}
             {...register('newPassword')}
@@ -89,6 +90,7 @@ export function ResetPasswordPage() {
             type="password"
             autoComplete="new-password"
             revealable
+            required
             error={errors.confirmPassword?.message}
             {...register('confirmPassword')}
           />

@@ -1,5 +1,6 @@
 import type { CustomizationField } from '@/types/catalog'
 import { cn } from '@/utils/cn'
+import { RequiredMark } from '@/components/ui/RequiredMark'
 import styles from './ColorSelectField.module.css'
 
 interface FieldConstraints {
@@ -58,11 +59,16 @@ export function ColorSelectField({ field, value, onChange, error }: ColorSelectF
     <fieldset className={styles.field}>
       <legend className={styles.label}>
         {field.label}
-        {field.isRequired && <span className={styles.required}> *</span>}
+        {field.isRequired && <RequiredMark />}
       </legend>
       {field.helpText && <p className={styles.helpText}>{field.helpText}</p>}
 
-      <div className={styles.options} role="radiogroup" aria-label={field.label}>
+      <div
+        className={styles.options}
+        role="radiogroup"
+        aria-label={field.label}
+        aria-required={field.isRequired || undefined}
+      >
         {options.map((option) => {
           const swatch = swatchFor(option)
           return (

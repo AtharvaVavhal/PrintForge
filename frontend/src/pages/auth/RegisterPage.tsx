@@ -57,6 +57,7 @@ export function RegisterPage() {
           label="Email"
           type="email"
           autoComplete="email"
+          required
           error={errors.email?.message}
           {...register('email')}
         />
@@ -65,6 +66,7 @@ export function RegisterPage() {
           type="password"
           autoComplete="new-password"
           revealable
+          required
           aria-describedby={PASSWORD_REQUIREMENTS_ID}
           error={errors.password?.message}
           {...register('password')}
@@ -75,6 +77,7 @@ export function RegisterPage() {
           type="password"
           autoComplete="new-password"
           revealable
+          required
           error={errors.confirmPassword?.message}
           {...register('confirmPassword')}
         />
