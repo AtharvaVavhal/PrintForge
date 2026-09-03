@@ -31,6 +31,12 @@ export interface AppConfig {
     apiKey: string;
     apiSecret: string;
   };
+  postal: {
+    /** Base URL of the PIN-code lookup provider (see PostalLookupService).
+     * Has a working public default — never a production-required secret,
+     * and checkout stays usable if the provider is down. */
+    providerBaseUrl: string;
+  };
 }
 
 export default (): AppConfig => ({
@@ -60,5 +66,9 @@ export default (): AppConfig => ({
     cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
     apiKey: process.env.CLOUDINARY_API_KEY ?? '',
     apiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
+  },
+  postal: {
+    providerBaseUrl:
+      process.env.POSTAL_LOOKUP_BASE_URL ?? 'https://api.pincodeapi.in/api/v1',
   },
 });

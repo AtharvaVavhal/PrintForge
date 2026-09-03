@@ -14,12 +14,37 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+  align-items: start;
 }
 
 @media (max-width: 480px) {
   .row {
     grid-template-columns: 1fr;
   }
+}
+
+.pinField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* Always rendered so the PIN-lookup status (loading / matched / error)
+   swaps text in place without shifting the fields below it. */
+.pinStatus {
+  margin: 0;
+  min-height: 1.15rem;
+  font-size: var(--text-sm);
+  line-height: 1.15rem;
+  color: var(--color-text-muted);
+}
+
+.pinStatus[data-variant='success'] {
+  color: var(--color-success);
+}
+
+.pinStatus[data-variant='error'] {
+  color: var(--color-danger);
 }
 
 .submit {

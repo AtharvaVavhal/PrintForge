@@ -23,6 +23,7 @@ import { CouponsModule } from './coupons/coupons.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PostalModule } from './postal/postal.module';
 import { ProductsModule } from './products/products.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { UploadsModule } from './uploads/uploads.module';
@@ -83,6 +84,7 @@ import { UsersModule } from './users/users.module';
     OrdersModule,
     PaymentsModule,
     CheckoutModule,
+    PostalModule,
     ReviewsModule,
     AdminModule,
     AuthModule,

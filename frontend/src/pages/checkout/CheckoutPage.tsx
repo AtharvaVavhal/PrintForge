@@ -15,6 +15,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { PaymentLoadError } from '@/components/ui/PaymentLoadError'
 import { getApiErrorMessage } from '@/utils/apiError'
+import { normalizeIndianMobile } from '@/utils/phone'
 import { Seo } from '@/seo/Seo'
 import { orderDetailPath } from '@/constants/routes'
 import type { ShippingFormValues } from '@/schemas/checkout.schema'
@@ -133,6 +134,9 @@ export function CheckoutPage() {
       const created = await createOrder.mutateAsync({
         payload: {
           ...values,
+          // The schema already guaranteed this normalises; send the
+          // canonical E.164 form (the server re-normalises regardless).
+          shippingPhone: normalizeIndianMobile(values.shippingPhone) ?? values.shippingPhone,
           shippingAddressLine2: values.shippingAddressLine2 || undefined,
           couponCode: couponPreview?.couponCode ?? undefined,
         },

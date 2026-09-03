@@ -140,14 +140,22 @@ function renderCheckout(profile: Record<string, unknown> = PROFILE_NO_ADDRESS) {
   )
 }
 
+const POSTAL_MUMBAI = {
+  postalCode: '400001',
+  city: 'Mumbai',
+  district: 'Mumbai',
+  state: 'Maharashtra',
+  country: 'India',
+}
+
 async function fillShippingForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Recipient name'), 'Jane Doe')
   await user.type(screen.getByLabelText('Phone number'), '9876543210')
   await user.type(screen.getByLabelText('Address line 1'), '123 Test St')
-  await user.type(screen.getByLabelText('City'), 'Mumbai')
-  await user.type(screen.getByLabelText('State'), 'MH')
+  // City / State / Country are auto-filled from the PIN lookup (mocked in
+  // beforeEach) — type the PIN last and wait for the autofill to land.
   await user.type(screen.getByLabelText('Postal code'), '400001')
-  await user.type(screen.getByLabelText('Country'), 'India')
+  await waitFor(() => expect(screen.getByLabelText('City')).toHaveValue('Mumbai'))
 }
 
 interface CapturedInstance {
@@ -168,6 +176,7 @@ describe('CheckoutPage', () => {
     // address-prefill test can vary it); each test registers its own
     // /checkout/validate handler(s) — the shipping form renders whether
     // or not the base preview resolves.
+    mock.onGet('/postal-codes/400001').reply(200, { success: true, data: POSTAL_MUMBAI })
     razorpayInstances = []
     // A plain `function`, not an arrow function — arrow functions have no
     // [[Construct]] slot, so `new Razorpay(...)` (openCheckout.ts) would

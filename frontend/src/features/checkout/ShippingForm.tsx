@@ -1,6 +1,8 @@
-import { useForm } from 'react-hook-form'
+import { useEffect, useRef } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { shippingSchema, type ShippingFormValues } from '@/schemas/checkout.schema'
+import { usePostalLookup } from '@/hooks/usePostalLookup'
 import { TextField } from '@/components/ui/TextField'
 import { Button } from '@/components/ui/Button'
 import styles from './ShippingForm.module.css'
@@ -33,7 +35,15 @@ const EMPTY_VALUES: ShippingFormValues = {
 
 /** Collects shipping details for a fresh checkout. Initial values may be
  * seeded from the customer's saved profile address (§11 still keeps an
- * immutable snapshot onto the order regardless). */
+ * immutable snapshot onto the order regardless).
+ *
+ * PIN-code assist: once the Postal code field holds exactly six digits the
+ * form looks the PIN up (via the backend proxy) and fills City / State /
+ * Country from the result. Those fields stay fully editable; a given
+ * lookup result is applied exactly once, so manual edits are never
+ * clobbered on re-render, and only a *new* PIN re-applies. A failed or
+ * unavailable lookup never blocks the form — the customer can type the
+ * address by hand. */
 export function ShippingForm({
   onSubmit,
   isSubmitting,
@@ -44,11 +54,51 @@ export function ShippingForm({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    control,
+    setValue,
+    formState: { errors, dirtyFields },
   } = useForm<ShippingFormValues>({
+    // Validate on blur (and on submit) — not on every keystroke.
+    mode: 'onTouched',
     resolver: zodResolver(shippingSchema),
     defaultValues: { ...EMPTY_VALUES, ...defaultValues },
   })
+
+  // useWatch (a subscription hook), not the form instance's own watch()
+  // function — same reasoning as CustomizationForm / ReviewForm.
+  const postalCodeValue =
+    useWatch({ control, name: 'shippingPostalCode', defaultValue: '' }) ?? ''
+  // Only look a PIN up once the customer has actually touched the field —
+  // a PIN seeded from the saved profile address (UX-07) must not trigger a
+  // lookup that overwrites the rest of that saved address on mount.
+  const pinTouched = Boolean(dirtyFields.shippingPostalCode)
+  const lookup = usePostalLookup(pinTouched ? postalCodeValue : '')
+
+  // The last lookup result we applied, so a re-render / refetch of the same
+  // PIN never re-fills over the customer's manual edits — only a genuinely
+  // new PIN result does.
+  const appliedPinRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (lookup.status !== 'success' || !lookup.data) return
+    const result = lookup.data
+    if (appliedPinRef.current === result.postalCode) return
+
+    setValue('shippingCity', result.city, { shouldValidate: true, shouldDirty: true })
+    setValue('shippingState', result.state, { shouldValidate: true, shouldDirty: true })
+    setValue('shippingCountry', result.country, { shouldValidate: true, shouldDirty: true })
+    appliedPinRef.current = result.postalCode
+  }, [lookup.status, lookup.data, setValue])
+
+  // When the PIN is cleared / shortened, forget the applied result so
+  // re-entering it later re-fills.
+  useEffect(() => {
+    if (!/^\d{6}$/.test(postalCodeValue.trim())) {
+      appliedPinRef.current = null
+    }
+  }, [postalCodeValue])
+
+  const pinStatus = describePinStatus(lookup)
 
   return (
     <form className={styles.form} onSubmit={(e) => void handleSubmit(onSubmit)(e)} noValidate>
@@ -68,6 +118,8 @@ export function ShippingForm({
         label="Phone number"
         type="tel"
         autoComplete="tel"
+        inputMode="tel"
+        placeholder="9876543210"
         error={errors.shippingPhone?.message}
         {...register('shippingPhone')}
         disabled={isSubmitting}
@@ -87,6 +139,25 @@ export function ShippingForm({
         disabled={isSubmitting}
       />
       <div className={styles.row}>
+        <div className={styles.pinField}>
+          <TextField
+            label="Postal code"
+            autoComplete="postal-code"
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="411046"
+            error={errors.shippingPostalCode?.message}
+            {...register('shippingPostalCode')}
+            disabled={isSubmitting}
+          />
+          {/* Live region so the lookup status (loading / matched / error)
+              is announced without stealing focus. Kept separate from the
+              field's own validation error, which TextField wires up via
+              aria-describedby itself. */}
+          <p className={styles.pinStatus} data-variant={pinStatus.variant} role="status">
+            {pinStatus.text}
+          </p>
+        </div>
         <TextField
           label="City"
           autoComplete="address-level2"
@@ -94,20 +165,13 @@ export function ShippingForm({
           {...register('shippingCity')}
           disabled={isSubmitting}
         />
+      </div>
+      <div className={styles.row}>
         <TextField
           label="State"
           autoComplete="address-level1"
           error={errors.shippingState?.message}
           {...register('shippingState')}
-          disabled={isSubmitting}
-        />
-      </div>
-      <div className={styles.row}>
-        <TextField
-          label="Postal code"
-          autoComplete="postal-code"
-          error={errors.shippingPostalCode?.message}
-          {...register('shippingPostalCode')}
           disabled={isSubmitting}
         />
         <TextField
@@ -129,4 +193,32 @@ export function ShippingForm({
       </Button>
     </form>
   )
+}
+
+function describePinStatus(
+  lookup: ReturnType<typeof usePostalLookup>,
+): { text: string; variant: 'muted' | 'success' | 'error' } {
+  switch (lookup.status) {
+    case 'loading':
+      return { text: 'Looking up postal code…', variant: 'muted' }
+    case 'success':
+      return lookup.data
+        ? {
+            text: `Matched ${lookup.data.district}, ${lookup.data.state} — edit below if needed.`,
+            variant: 'success',
+          }
+        : { text: '', variant: 'muted' }
+    case 'error':
+      return lookup.errorKind === 'not-found'
+        ? {
+            text: "We couldn't find this PIN code. Please check it and try again.",
+            variant: 'error',
+          }
+        : {
+            text: "We couldn't verify this PIN right now. Please check your PIN or enter your address manually.",
+            variant: 'error',
+          }
+    default:
+      return { text: '', variant: 'muted' }
+  }
 }

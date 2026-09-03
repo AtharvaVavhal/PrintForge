@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsNotEmpty,
   IsOptional,
@@ -5,6 +6,11 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+import {
+  INDIAN_MOBILE_E164_REGEX,
+  normalizeIndianMobile,
+  PIN_CODE_REGEX,
+} from '../../common/validation/indian-address.util';
 
 /**
  * Shipping address is collected directly on this request, not read from
@@ -12,6 +18,14 @@ import {
  * completeness. Snapshotted verbatim onto the Order row at creation time
  * (§11 "Immutable shipping snapshot") — a later profile edit never affects
  * an existing order.
+ *
+ * `shippingPhone` and `shippingPostalCode` carry real format rules as of
+ * the Checkout Contact & PIN Validation phase — the frontend normalises
+ * too, but the server never trusts that and re-normalises/re-validates
+ * here (this is the authoritative gate: the ValidationPipe runs before the
+ * order is ever created). Email is not collected here — order email is the
+ * authenticated account's `user.email`, already `@IsEmail`-validated at
+ * registration.
  */
 export class CreateOrderDto {
   @IsString()
@@ -19,9 +33,23 @@ export class CreateOrderDto {
   @MaxLength(160)
   shippingRecipientName: string;
 
+  /** Accepts `9876543210`, `+919876543210`, `+91 9876543210` (and common
+   * separators); normalised to canonical E.164 `+91XXXXXXXXXX` before
+   * validation and persistence. The `@Transform` runs first (class-
+   * transformer), then `@Matches` checks the normalised value — a value
+   * that can't be normalised is left as its trimmed original so the error
+   * reads as a format problem, not an empty-field one. */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string'
+      ? (normalizeIndianMobile(value) ?? value.trim())
+      : value,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(INDIAN_MOBILE_E164_REGEX, {
+    message: 'shippingPhone must be a valid Indian mobile number',
+  })
   shippingPhone: string;
 
   @IsString()
@@ -44,9 +72,17 @@ export class CreateOrderDto {
   @MaxLength(100)
   shippingState: string;
 
+  /** Exactly six digits (India). Format only — the postal-lookup endpoint,
+   * not this DTO, decides whether the PIN actually exists. */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @IsNotEmpty()
   @MaxLength(20)
+  @Matches(PIN_CODE_REGEX, {
+    message: 'shippingPostalCode must be a 6-digit PIN code',
+  })
   shippingPostalCode: string;
 
   @IsString()
