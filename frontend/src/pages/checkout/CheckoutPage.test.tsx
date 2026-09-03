@@ -10,6 +10,8 @@ import { ToastProvider } from '@/components/ui/toast/ToastProvider'
 import { createMockAuthContext, createTestQueryClient } from '@/test/test-utils'
 import type { RazorpayCheckoutOptions } from '@/types/razorpay'
 import { CheckoutPage } from './CheckoutPage'
+import layoutStyles from './CheckoutPage.module.css'
+import couponStyles from '@/features/checkout/CouponForm.module.css'
 
 const AUTH_VALUE = createMockAuthContext({
   status: 'authenticated',
@@ -191,6 +193,35 @@ describe('CheckoutPage', () => {
   afterEach(() => {
     mock.restore()
     delete (window as { Razorpay?: unknown }).Razorpay
+  })
+
+  it('keeps the two-column grid and the coupon input row able to shrink on a narrow viewport (no horizontal overflow)', async () => {
+    mock.onPost('/checkout/validate').reply(200, {
+      success: true,
+      data: { subtotal: '300.00', discountAmount: '0.00', shippingFee: '0.00', taxAmount: '0.00', taxMode: 'NONE', total: '300.00', couponCode: null },
+    })
+
+    renderCheckout()
+    await screen.findByLabelText('Recipient name')
+
+    // The <=720px layout collapses .layout to a single 1fr column; both grid
+    // children and the CouponForm input row must carry min-width:0 or their
+    // content min-content (the coupon input + "Apply") forces the page wider
+    // than the viewport below ~386px. Layout isn't computed in jsdom, so we
+    // assert the CSS contract that makes the collapse able to fit.
+    const formColumn = document.querySelector<HTMLElement>(`.${layoutStyles.formColumn}`)
+    const summaryColumn = document.querySelector<HTMLElement>(`.${layoutStyles.summaryColumn}`)
+    const inputRow = screen
+      .getByLabelText('Coupon code')
+      .closest<HTMLElement>(`.${couponStyles.inputRow}`)
+
+    expect(formColumn).not.toBeNull()
+    expect(summaryColumn).not.toBeNull()
+    expect(inputRow).not.toBeNull()
+    expect(getComputedStyle(formColumn!).minWidth).toBe('0px')
+    expect(getComputedStyle(summaryColumn!).minWidth).toBe('0px')
+    // the flexible coupon-input child of the row, not the "Apply" button
+    expect(getComputedStyle(inputRow!.firstElementChild as HTMLElement).minWidth).toBe('0px')
   })
 
   it('reuses the same Idempotency-Key across a failed attempt and its retry within one page mount', async () => {

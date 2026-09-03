@@ -24,6 +24,9 @@
 
 .inputRow > :first-child {
   flex: 1 1 auto;
+  /* Let the coupon input shrink so the input + "Apply" row fits a narrow
+     mobile column; "Apply" keeps its intrinsic width. */
+  min-width: 0;
 }
 
 .appliedRow {
