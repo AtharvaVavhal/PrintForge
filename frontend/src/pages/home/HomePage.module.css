@@ -1,9 +1,5 @@
-.heroSkeleton {
-  width: 100%;
-  background: var(--color-surface);
-}
-
 .skeletonSlide {
+  width: 100%;
   height: 500px;
   border-radius: 0;
 }

@@ -92,6 +92,15 @@ describe('CartPage', () => {
     expect(h1s[0]).toHaveTextContent('Your cart is empty')
   })
 
+  it('announces the loading state politely while the cart request is in flight', async () => {
+    mock.onGet('/cart').reply(() => new Promise(() => {})) // never settles
+
+    render(<CartPage />)
+
+    const label = await screen.findByText('Loading your cart')
+    expect(label.closest('[role="status"]')).toBeInTheDocument()
+  })
+
   it('renders an error state when the cart request fails', async () => {
     mock.onGet('/cart').reply(500, {
       success: false,

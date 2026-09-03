@@ -43,13 +43,7 @@ export function HomePage() {
         jsonLd={websiteJsonLd()}
       />
       {isLoading ? (
-        <div
-          className={styles.heroSkeleton}
-          aria-busy="true"
-          aria-label="Loading homepage"
-        >
-          <Skeleton className={styles.skeletonSlide} />
-        </div>
+        <Skeleton className={styles.skeletonSlide} label="Loading homepage" />
       ) : heroSlides.length > 0 ? (
         <HeroCarousel slides={heroSlides} />
       ) : (

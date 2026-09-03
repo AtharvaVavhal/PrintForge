@@ -104,7 +104,7 @@ export function Header() {
       <nav className={styles.navRowDesktop} aria-label="Product categories">
         <div className={styles.navInnerDesktop}>
           {treeLoading ? (
-            <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
+            <div className={styles.navSkeleton} aria-hidden="true" />
           ) : (
             <MegaMenuBar categories={categories} />
           )}
@@ -157,7 +157,7 @@ export function Header() {
             All products
           </NavLink>
           {treeLoading ? (
-            <div className={styles.navSkeleton} aria-busy="true" aria-label="Loading categories" />
+            <div className={styles.navSkeleton} aria-hidden="true" />
           ) : (
             <CategoryAccordion categories={categories} />
           )}

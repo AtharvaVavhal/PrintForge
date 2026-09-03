@@ -98,6 +98,21 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: /cart/i })).toHaveAttribute('href', '/cart')
   })
 
+  it('keeps the category-nav loading placeholder decorative — no bogus "Loading categories" announcement', async () => {
+    mock.resetHandlers()
+    mock.onGet('/cart').reply(200, { success: true, data: { id: 'c', items: [], itemCount: 0, subtotal: '0.00' } })
+    mock.onGet('/settings/storeName').reply(200, { success: true, data: { value: 'PrintForge' } })
+    mock.onGet('/categories/tree').reply(() => new Promise(() => {})) // never settles → stays in the loading branch
+
+    renderWithProviders(<Header />, { authValue: createMockAuthContext({ status: 'unauthenticated' }) })
+
+    // The category bar is still a labelled landmark while its contents load…
+    expect(await screen.findByRole('navigation', { name: 'Product categories' })).toBeInTheDocument()
+    // …but the shimmer placeholder is hidden from assistive tech, matching
+    // the homepage rails — it is not a live region and carries no label.
+    expect(screen.queryByLabelText('Loading categories')).not.toBeInTheDocument()
+  })
+
   it('renders a product search in the bar and inside the mobile nav drawer', () => {
     renderWithProviders(<Header />, { authValue: createMockAuthContext({ status: 'unauthenticated' }) })
 

@@ -110,6 +110,17 @@ describe('HomePage — storefront layout', () => {
     ).toHaveAttribute('href', '/products')
   })
 
+  it('announces the hero loading state politely while homepage settings are in flight', async () => {
+    mock.onGet('/settings').reply(() => new Promise(() => {})) // never settles
+    mock.onGet('/settings/storeName').reply(200, { success: true, data: { value: 'PrintForge' } })
+    mock.onGet('/categories').reply(...ok([category()]))
+    mock.onGet('/products').reply(...ok(NEW_ARRIVALS, { page: 1, limit: 12, total: 2, totalPages: 1 }))
+    renderWithProviders(<HomePage />)
+
+    const label = await screen.findByText('Loading homepage')
+    expect(label.closest('[role="status"]')).toBeInTheDocument()
+  })
+
   it('renders the configured store name as the hero eyebrow', async () => {
     mockHome({ storeName: 'Atharva Prints' })
     renderWithProviders(<HomePage />)
