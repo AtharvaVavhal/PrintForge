@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -13,6 +13,7 @@ interface HeroCarouselProps {
 export function HeroCarousel({ slides }: HeroCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(true)
+  const carouselRef = useRef<HTMLElement>(null)
 
   const slideCount = slides.length
 
@@ -30,11 +31,23 @@ export function HeroCarousel({ slides }: HeroCarouselProps) {
   }, [isPlaying, slideCount, nextSlide])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'ArrowRight') nextSlide()
-    if (e.key === 'ArrowLeft') prevSlide()
-    if (e.key === ' ') {
-      e.preventDefault()
-      setIsPlaying((p) => !p)
+    // Arrow keys only. Space is deliberately left alone so it keeps
+    // scrolling the page; the on-screen Pause/Play button is the keyboard
+    // control for auto-advance (WCAG 2.1.4 — no global character-key
+    // shortcuts, nothing that blocks the page's own keys).
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+
+    const root = carouselRef.current
+    const target = e.target as HTMLElement | null
+    // Only respond when focus is actually inside the carousel — never
+    // hijack arrow keys while the user is typing or navigating elsewhere.
+    if (!root || !target || !root.contains(target)) return
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return
+
+    if (e.key === 'ArrowRight') {
+      nextSlide()
+    } else {
+      prevSlide()
     }
   }, [nextSlide, prevSlide])
 
@@ -46,7 +59,7 @@ export function HeroCarousel({ slides }: HeroCarouselProps) {
   if (!slides.length) return null
 
   return (
-    <section className={styles.carousel} aria-label="Hero carousel">
+    <section ref={carouselRef} className={styles.carousel} aria-label="Hero carousel">
       <div className={styles.track} role="list">
         {slides.map((slide, index) => (
           <div key={index} className={cn(styles.slide, index === currentIndex && styles.active)} role="listitem" aria-hidden={index !== currentIndex}>
