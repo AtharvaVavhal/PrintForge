@@ -76,7 +76,15 @@ function mockHome({
   topRated = TOP_RATED,
   storeName = 'PrintForge',
 }: HomeMockOptions & { storeName?: string } = {}) {
-  mock.onGet('/settings').reply(200, { success: true, data: settings })
+  // Real GET /settings?keys=… wire shape: the settings map is nested at
+  // data.data and every value is a JSON string.
+  const settingsMap = Object.fromEntries(
+    Object.entries(settings).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? value : JSON.stringify(value),
+    ]),
+  )
+  mock.onGet('/settings').reply(200, { success: true, data: { data: settingsMap } })
   mock.onGet('/settings/storeName').reply(200, { success: true, data: { value: storeName } })
   mock.onGet('/categories').reply(...ok(categories))
   mock.onGet('/products').reply((config: AxiosRequestConfig) => {
@@ -135,7 +143,7 @@ describe('HomePage — storefront layout', () => {
 
   it('falls back to "PrintForge" for the hero eyebrow when the store-name endpoint fails', async () => {
     mock.onGet('/settings/storeName').reply(500)
-    mock.onGet('/settings').reply(200, { success: true, data: {} })
+    mock.onGet('/settings').reply(200, { success: true, data: { data: {} } })
     mock.onGet('/categories').reply(...ok([category()]))
     mock.onGet('/products').reply(...ok(NEW_ARRIVALS, { page: 1, limit: 12, total: 0, totalPages: 1 }))
     renderWithProviders(<HomePage />)
@@ -208,7 +216,7 @@ describe('HomePage — storefront layout', () => {
   })
 
   it('still renders the page when the catalogue APIs fail — rails just drop out', async () => {
-    mock.onGet('/settings').reply(200, { success: true, data: {} })
+    mock.onGet('/settings').reply(200, { success: true, data: { data: {} } })
     mock.onGet('/categories').reply(500)
     mock.onGet('/products').reply(500)
     renderWithProviders(<HomePage />)
@@ -259,6 +267,71 @@ describe('HomePage — heading hierarchy (UX-14)', () => {
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Sitewide sale' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 3, name: 'Sitewide sale' })).not.toBeInTheDocument()
+  })
+})
+
+describe('HomePage — configured promo content (data layer)', () => {
+  it('mounts the hero carousel from JSON-string hero_slides and hides the neutral hero', async () => {
+    mockHome({
+      settings: {
+        hero_slides: [
+          { imageUrl: '', headline: 'Summer drop', subtext: 'a', ctaText: 'Shop', ctaLink: '/products' },
+          { imageUrl: '', headline: 'Winter drop', subtext: 'b', ctaText: 'Shop', ctaLink: '/products' },
+        ],
+      },
+    })
+    renderWithProviders(<HomePage />)
+
+    expect(await screen.findByRole('region', { name: /hero carousel/i })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { level: 1, name: /custom prints, made to order/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders the promo banner grid from JSON-string banners', async () => {
+    mockHome({
+      settings: {
+        banners: [{ imageUrl: '', title: 'Sitewide sale', text: 'Up to 20% off', link: '/products' }],
+      },
+    })
+    renderWithProviders(<HomePage />)
+
+    const grid = await screen.findByRole('region', { name: /promotional banners/i })
+    expect(within(grid).getByRole('heading', { level: 2, name: 'Sitewide sale' })).toBeInTheDocument()
+  })
+
+  it('renders the curated category showcase from JSON-string showcase_categories, replacing the live rail', async () => {
+    mockHome({
+      settings: {
+        showcase_categories: [
+          { categoryId: 'c1', imageUrl: '', title: 'Mugs' },
+          { categoryId: 'c2', imageUrl: '', title: 'Apparel' },
+        ],
+      },
+      // A live category the CategoryRail would show if it were the one rendered.
+      categories: [category({ id: 'live-cat', name: 'Live Rail Category' })],
+    })
+    renderWithProviders(<HomePage />)
+
+    // "Shop <title>" links only exist in the curated CategoryShowcase.
+    const curatedLink = await screen.findByRole('link', { name: 'Shop Mugs' })
+    expect(curatedLink).toHaveAttribute('href', '/products?categoryId=c1')
+    expect(screen.getByRole('link', { name: 'Shop Apparel' })).toHaveAttribute(
+      'href',
+      '/products?categoryId=c2',
+    )
+    // The live rail is not rendered when a showcase is configured.
+    expect(screen.queryByRole('link', { name: 'Live Rail Category' })).not.toBeInTheDocument()
+  })
+
+  it('ignores a malformed hero_slides value and falls back to the neutral hero', async () => {
+    mockHome({ settings: { hero_slides: '[{"headline":"broken"' } })
+    renderWithProviders(<HomePage />)
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /custom prints, made to order/i }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /hero carousel/i })).not.toBeInTheDocument()
   })
 })
 

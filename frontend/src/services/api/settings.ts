@@ -28,11 +28,43 @@ export interface HomepageSettings {
   showcase_categories?: ShowcaseCategory[]
 }
 
+/**
+ * `GET /settings?keys=…` is the one bulk public-settings read. Its wire
+ * shape is `{ success, data: { data: Record<string, string> } }` — the
+ * controller returns `{ data: <map> }` and the response interceptor wraps
+ * that again (it has no `meta` to lift), so the settings map sits at
+ * `res.data.data.data`. This shape is deliberate and e2e-locked
+ * (admin-control-plane.e2e-spec.ts), so it is unwrapped here, not fixed
+ * upstream.
+ *
+ * Every value in the map is a raw string straight from the `value` TEXT
+ * column. `hero_slides` / `banners` / `showcase_categories` store a JSON
+ * array as a string, so each is `JSON.parse`d here. A missing key,
+ * unparseable JSON, or a non-array payload all collapse to `undefined`
+ * for that field — the homepage then falls back to its neutral layout
+ * rather than throwing.
+ */
 export async function fetchHomepageSettings(): Promise<HomepageSettings> {
-  const res = await apiClient.get<ApiSuccessResponse<HomepageSettings>>('/settings', {
+  const res = await apiClient.get<ApiSuccessResponse<{ data: Record<string, string> }>>('/settings', {
     params: { keys: 'hero_slides,banners,showcase_categories' },
   })
-  return res.data.data ?? {}
+  const raw = res.data.data?.data ?? {}
+
+  const parseList = <T>(value: string | undefined): T[] | undefined => {
+    if (!value) return undefined
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return Array.isArray(parsed) ? (parsed as T[]) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  return {
+    hero_slides: parseList<HeroSlide>(raw.hero_slides),
+    banners: parseList<Banner>(raw.banners),
+    showcase_categories: parseList<ShowcaseCategory>(raw.showcase_categories),
+  }
 }
 
 /** The customer-facing store name shown in the storefront chrome. Read from
