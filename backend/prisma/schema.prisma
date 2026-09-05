@@ -1,8 +1,14 @@
 // PrintForge — Prisma schema
-// Architecture frozen v1.2 — docs/architecture/BLUEPRINT-v1.2.md §15 (Complete Schema),
-// §12 (Payment Architecture), §14 (Order State Machine).
-// Single database, single deployable (§16). Do not add tables/fields beyond
-// what §15 specifies without an Architecture Change Request.
+// Authoritative architecture: PrintForge SaaS Architecture v1.0 (FROZEN) +
+// docs/saas/PRINTFORGE-SAAS-IMPLEMENTATION-MASTER-PLAN-v1.0.md (APPROVED).
+// docs/architecture/BLUEPRINT-v1.2.md is SUPERSEDED (retained as history) per
+// docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md (approved 2026-09-06).
+// Inline "§NN" comments below cite BLUEPRINT-v1.2 as historical provenance for
+// the original single-tenant design; those sections are historical, not current
+// authority. Schema changes follow the SaaS Master Plan's phased, additive,
+// expand -> migrate -> contract discipline. Phase 1 appends the SaaS Foundation
+// block at the end of this file (Tenant / Store / StoreDomain / TenantMembership
+// + Plan / Subscription shells) additively — no existing model is changed.
 
 generator client {
   provider = "prisma-client-js"
@@ -122,6 +128,13 @@ model User {
   reviews             Review[]
   createdCoupons      Coupon[]
   couponUsages        CouponUsage[]
+
+  // SaaS Foundation (Phase 1) — back-relations only; these add NO column to
+  // `users` (Prisma virtual fields — the FK columns live on tenant_memberships).
+  // User = platform/merchant identity (decision D5-a); a storefront Customer
+  // (Phase 2) never gets a TenantMembership.
+  tenantMemberships        TenantMembership[] @relation("TenantMembershipUser")
+  invitedTenantMemberships TenantMembership[] @relation("TenantMembershipInvitedBy")
 
   @@map("users")
 }
@@ -798,4 +811,234 @@ model CouponUsage {
 
   @@index([couponId, userId])
   @@map("coupon_usages")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SaaS Foundation — Phase 1
+//   Master Plan §7 · PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md §B.2–B.8
+//   Permitted by docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md (approved).
+//
+// ADDITIVE, NON-ENFORCING. These models are the tenant / store / membership
+// ownership roots plus the plan / subscription shells. In Phase 1 NOTHING here
+// is read for authorization, tenant scoping, billing, or domain resolution —
+// those are Phases 2, 3, 5, 7 and 9 respectively. No existing model or column
+// is changed by Phase 1. Enum value sets ratified by decision G-5 (verbatim for
+// TenantRole and SubscriptionStatus).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Tenant-specific role, carried on TenantMembership — never a flag on User
+// (frozen SaaS §5). Ratified verbatim (G-5). NOT read for authorization in
+// Phase 1 — that is Phase 2's permission layer.
+enum TenantRole {
+  OWNER
+  ADMIN
+  STAFF
+  VIEWER
+}
+
+// Tenant lifecycle. Ratified (G-5). PENDING_DELETION -> DELETED is a
+// controlled, audited, reversible-until-purge process (frozen SaaS §18) — in
+// Phase 1 only the state exists, there is no lifecycle logic.
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_DELETION
+  DELETED
+}
+
+// Store lifecycle. Ratified (G-5). Distinct from TenantStatus and from
+// SubscriptionStatus (frozen SaaS §12: "subscription status != store status").
+enum StoreStatus {
+  ACTIVE
+  DISABLED
+  DRAFT
+}
+
+// TenantMembership lifecycle. Ratified (G-5). INVITED = pending team
+// invitation; the invite/accept flow is Phase 5.
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+// StoreDomain verification state. Ratified (G-5). The verification *mechanism*
+// and host -> store -> tenant runtime resolution are Phase 9; Phase 1 has the
+// state only.
+enum DomainVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+// SaaS subscription state — the 7 frozen states, no additions (frozen SaaS §7;
+// ratified verbatim, G-5). Billing-provider coupling is Phase 7.
+enum SubscriptionStatus {
+  PENDING
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+// The top-level isolation and billing boundary — one merchant business on the
+// shared platform. Every tenant-owned row (Phase 4 onward) will resolve to
+// exactly one Tenant. A Tenant.id is NEVER an authorization boundary on its
+// own (frozen SaaS invariant 1): it is reached only via an authenticated
+// TenantMembership (merchant console) or Domain -> Store -> Tenant resolution
+// (storefront) — Phase 1 adds no guard. Per decision D3-A the existing
+// deployment becomes "Tenant #1", an ordinary tenant with no implicit
+// privileges; the tenant display name is a Phase 4 input (D3 Decision Log), so
+// Phase 1 identifies a tenant by `slug` only.
+model Tenant {
+  id     String       @id @default(uuid())
+  slug   String       @unique
+  status TenantStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  stores       Store[]
+  memberships  TenantMembership[]
+  storeDomains StoreDomain[]
+  subscription Subscription?
+
+  @@index([status])
+  @@map("tenants")
+}
+
+// One storefront belonging to a Tenant — the unit the shared storefront engine
+// renders (Phase 12). v1 baseline: exactly one primary Store per Tenant,
+// DB-enforced by a partial unique index Prisma's DSL cannot express natively:
+//
+//   CREATE UNIQUE INDEX "stores_tenant_primary_unique"
+//     ON "stores" ("tenantId") WHERE "isPrimary" = true;
+//
+// It is hand-added to the Phase 1 migration.sql, exactly like the existing
+// payment_attempts_order_captured_unique. Prisma will not remove a manually
+// added SQL statement on later migrations unless a schema change to this model
+// reintroduces it. Multiple stores per tenant stay future-compatible: Store is
+// a first-class table with its own id; `isPrimary` is a flag, not a schema
+// shortcut. Branding / a keyed StoreSetting are deferred to Phase 4/12
+// (spec §B.3) — `name` is the only display field in Phase 1.
+model Store {
+  id        String      @id @default(uuid())
+  tenantId  String
+  slug      String
+  name      String
+  status    StoreStatus @default(DRAFT)
+  isPrimary Boolean     @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  domains StoreDomain[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("stores")
+}
+
+// A hostname bound to a Store. `hostname` is GLOBALLY unique — a hostname
+// resolves to exactly one store -> one tenant (frozen SaaS §10). `tenantId` is
+// denormalized for isolation defence-in-depth (spec §B.6) and is FK-enforced.
+// Exactly one primary domain per store, DB-enforced by a partial unique index
+// hand-added to the Phase 1 migration.sql:
+//
+//   CREATE UNIQUE INDEX "store_domains_store_primary_unique"
+//     ON "store_domains" ("storeId") WHERE "isPrimary" = true;
+//
+// The verification *mechanism* and host -> store -> tenant runtime resolution
+// are Phase 9 — Phase 1 stores the model + state only.
+model StoreDomain {
+  id                 String                   @id @default(uuid())
+  storeId            String
+  tenantId           String
+  hostname           String                   @unique
+  isPrimary          Boolean                  @default(false)
+  verificationStatus DomainVerificationStatus @default(PENDING)
+  verificationToken  String?
+  verifiedAt         DateTime?
+
+  createdAt DateTime @default(now())
+
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([storeId])
+  @@index([tenantId])
+  @@map("store_domains")
+}
+
+// The join between a global (platform/merchant) User and a Tenant, carrying
+// the user's tenant-specific role. Merchant authorization lives HERE, never as
+// a flag on User (frozen SaaS §5). A storefront Customer (decision D5-a,
+// Phase 2) will NEVER hold a membership. `role` and `status` are DATA ONLY in
+// Phase 1 — nothing reads them for authorization (Phase 2's permission layer).
+// `invitedByUserId` is SET NULL (incidental reference, like
+// order_status_history.changedByUserId).
+model TenantMembership {
+  id              String           @id @default(uuid())
+  userId          String
+  tenantId        String
+  role            TenantRole
+  status          MembershipStatus @default(INVITED)
+  invitedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User   @relation("TenantMembershipUser", fields: [userId], references: [id], onDelete: Restrict)
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  invitedBy User?  @relation("TenantMembershipInvitedBy", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+// Platform-owned catalogue of subscription plans. Phase 1 shell only. `key`
+// is one of {free, starter, growth, business, enterprise} — a String, not an
+// enum (it is not among the six ratified Phase 1 enums, G-5). PlanFeature /
+// PlanLimit / Usage / entitlement logic are Phase 6.
+model Plan {
+  id       String  @id @default(uuid())
+  key      String  @unique
+  name     String
+  isPublic Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+// Exactly one primary subscription per Tenant (`tenantId` unique). Phase 1
+// shell: id, tenantId, planId, status (7 frozen states), period bounds,
+// createdAt only (spec §B.6). Lifecycle is written only by the Platform
+// Control Plane / billing (Phase 7); billing-provider coupling,
+// SubscriptionEvent and SaasInvoice are Phase 7. Column default is PENDING
+// (repo convention — enums default to their initial state); the Phase 1
+// bootstrap seed creates a Free/ACTIVE subscription explicitly.
+model Subscription {
+  id                 String             @id @default(uuid())
+  tenantId           String             @unique
+  planId             String
+  status             SubscriptionStatus @default(PENDING)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId])
+  @@map("subscriptions")
 }

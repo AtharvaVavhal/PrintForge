@@ -1,9 +1,16 @@
 # PrintForge — Architecture Freeze
 
-**Freeze status:** FROZEN
+> **SUPERSEDED — 6 September 2026.** Per **`docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md`**
+> (approved), **PrintForge SaaS Architecture v1.0 (FROZEN)** + **`docs/saas/PRINTFORGE-SAAS-IMPLEMENTATION-MASTER-PLAN-v1.0.md`**
+> (APPROVED) are now authoritative. `BLUEPRINT-v1.2.md` and this summary are **retained as
+> a historical record** of the original single-tenant architecture; they are not current
+> authority. The single-tenant design is being evolved into the multi-tenant SaaS target in
+> phases (see `docs/saas/`). SaaS-conversion decisions are recorded in `docs/saas/DECISIONS.md`.
+
+**Freeze status:** FROZEN (v1.2) — **SUPERSEDED by SaaS Architecture v1.0 per ACR-001**
 **Freeze date:** 25 August 2026
-**Architecture version:** v1.2
-**Authoritative document:** `docs/architecture/BLUEPRINT-v1.2.md` (this file is a summary/index, not a substitute for it)
+**Architecture version:** v1.2 (historical)
+**Historical document:** `docs/architecture/BLUEPRINT-v1.2.md` (this file is a summary/index, not a substitute for it)
 
 ---
 

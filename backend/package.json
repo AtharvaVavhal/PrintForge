@@ -23,7 +23,10 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed:storefront-preview": "ts-node prisma/seed-storefront-preview.ts",
+    "prisma:seed:storefront-preview:remove": "ts-node prisma/seed-storefront-preview.ts --remove",
+    "prisma:seed:tenant-bootstrap": "ts-node prisma/seed-tenant-bootstrap.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

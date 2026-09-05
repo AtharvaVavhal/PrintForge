@@ -30,6 +30,14 @@ const ALL_TABLES = [
   'idempotency_keys',
   'outbox_events',
   'app_settings',
+  // SaaS Foundation (Phase 1) — additive. No existing e2e test writes to
+  // these yet; listed so the truncate stays complete as later phases do.
+  'subscriptions',
+  'store_domains',
+  'stores',
+  'tenant_memberships',
+  'tenants',
+  'plans',
 ];
 
 /**
