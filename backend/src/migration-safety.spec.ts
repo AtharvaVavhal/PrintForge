@@ -3,25 +3,34 @@ import { join } from 'path';
 
 /**
  * G-10 — Additive-only migration safety guard (SaaS Master Plan Phase 1;
- * PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md §B.12 / AC-10; approved in
- * docs/saas/DECISIONS.md).
+ * docs/saas/PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md §B.12 / AC-10;
+ * approved in docs/saas/DECISIONS.md).
  *
- * From Phase 1 onward, every new Prisma migration must be **additive-only**:
- * `CREATE TABLE` / `CREATE TYPE` / `CREATE INDEX` (and, for the new tables it
- * creates in the same file, `ALTER TABLE <new> ADD CONSTRAINT ... FOREIGN KEY`,
- * which is how Prisma always emits FK creation). It must NOT:
- *   - DROP anything (table / column / index / constraint / type / schema)
- *   - DELETE / TRUNCATE / UPDATE existing rows
- *   - ALTER an existing (pre-Phase-1 or earlier-migration) table
- *   - add a NOT NULL column / SET NOT NULL on an existing table
+ * From Phase 1 onward, every new Prisma migration must be **additive-only**.
+ * Allowed:
+ *   - `CREATE TABLE` / `CREATE TYPE` / `CREATE INDEX` / `CREATE UNIQUE INDEX`
+ *   - `ALTER TABLE <t> ...` **only when `<t>` is CREATEd in the same migration
+ *     file** (this is how Prisma always emits FK creation), and even then not
+ *     `SET NOT NULL`.
+ * Forbidden anywhere:
+ *   - DROP (table / column / index / constraint / type / schema / view / sequence)
+ *   - DELETE / TRUNCATE / UPDATE of rows
+ *   - `ALTER TABLE` on any table NOT created in the same file (covers adding a
+ *     column, changing a type, dropping a default, etc. on a table an earlier
+ *     migration created — Phase 4's expand->contract work will need explicit
+ *     review, which is the point: Phase 1 risk P1-R6, scope creep)
+ *   - SET NOT NULL
+ *
+ * The detector validates **each migration file as self-contained** — it does not
+ * model the cumulative schema across earlier migrations (per audit finding P2-4:
+ * option A, "keep it simple"). Consequence: a later phase that legitimately
+ * needs an additive `ALTER TABLE <earlier-table> ADD COLUMN` must either split
+ * it so the change ships in the migration that created the table, or add that
+ * migration to LEGACY_MIGRATIONS **with a written justification in the
+ * migration's own comment and in docs/saas/DECISIONS.md**.
  *
  * This runs inside the existing `npm run test` job (same as
  * scheduler-registration.spec.ts), so CI enforces it with no new workflow.
- *
- * A genuinely destructive migration in a much later phase (e.g. Phase 4's
- * expand->contract waves) must be added to LEGACY_MIGRATIONS **with a written
- * justification in the migration's own comment and in docs/saas/DECISIONS.md** —
- * that friction is the point (Phase 1 risk P1-R6, scope creep).
  */
 
 const MIGRATIONS_DIR = join(__dirname, '..', 'prisma', 'migrations');
@@ -30,7 +39,7 @@ const MIGRATIONS_DIR = join(__dirname, '..', 'prisma', 'migrations');
  * Migrations created BEFORE the G-10 guard existed (the original single-tenant
  * schema build). These legitimately contain e.g. `UPDATE "orders"` (the
  * 20260902 tax backfill) and are exempt. Do NOT add to this list without a
- * recorded decision.
+ * recorded decision (see the file header).
  */
 const LEGACY_MIGRATIONS = new Set<string>([
   '20260825190725_init',
@@ -42,36 +51,6 @@ const LEGACY_MIGRATIONS = new Set<string>([
   '20260831213237_add_category_is_active',
   '20260901211106_webhook_event_bounded_retry',
   '20260902031308_order_tax_snapshot_and_invoices',
-]);
-
-/** Tables that existed before the first guarded (Phase 1) migration. */
-const PRE_PHASE_1_TABLES = new Set<string>([
-  'users',
-  'refresh_tokens',
-  'categories',
-  'products',
-  'product_images',
-  'product_variants',
-  'customization_fields',
-  'uploaded_files',
-  'carts',
-  'cart_items',
-  'cart_item_customizations',
-  'orders',
-  'invoices',
-  'order_items',
-  'order_item_customizations',
-  'payment_attempts',
-  'refunds',
-  'order_status_history',
-  'webhook_events',
-  'idempotency_keys',
-  'outbox_events',
-  'app_settings',
-  'reviews',
-  'coupons',
-  'coupon_usages',
-  '_prisma_migrations',
 ]);
 
 /** Strip `-- line` and `/* block *\/` comments so prose can't trip the scan. */
@@ -91,14 +70,11 @@ function tablesCreatedIn(sql: string): Set<string> {
 }
 
 /**
- * Returns a list of additive-only violations found in one migration's SQL.
- * `existingTables` = every table that exists before this migration runs.
- * Empty array = additive-only.
+ * Returns a list of additive-only violations found in one migration's SQL,
+ * validating the file **as self-contained** (see the file header). Empty array
+ * = additive-only.
  */
-export function findAdditiveOnlyViolations(
-  rawSql: string,
-  existingTables: ReadonlySet<string>,
-): string[] {
+export function findAdditiveOnlyViolations(rawSql: string): string[] {
   const sql = stripSqlComments(rawSql);
   const violations: string[] = [];
   const newInThisFile = tablesCreatedIn(sql);
@@ -141,12 +117,12 @@ export function findAdditiveOnlyViolations(
       const target = alter[1];
       if (!newInThisFile.has(target)) {
         violations.push(
-          `ALTER TABLE on an existing table ("${target}") is not allowed in an additive migration: ${stmt.slice(0, 120)}`,
+          `ALTER TABLE on a table not created in this migration ("${target}") is not allowed in an additive migration: ${stmt.slice(0, 120)}`,
         );
         continue;
       }
-      // ALTER on a table created in THIS file — only ADD CONSTRAINT / ADD
-      // COLUMN with no NOT-NULL-without-default is fine (Prisma FK creation).
+      // ALTER on a table created in THIS file — ADD CONSTRAINT / ADD COLUMN is
+      // fine (Prisma FK creation), but never SET NOT NULL.
       if (/\bSET\s+NOT\s+NULL\b/.test(upper)) {
         violations.push(`SET NOT NULL is not allowed: ${stmt.slice(0, 120)}`);
       }
@@ -167,16 +143,11 @@ export function findAdditiveOnlyViolations(
     }
   }
 
-  // existingTables is accepted for future multi-migration composition; Phase 1
-  // has a single guarded migration so PRE_PHASE_1_TABLES is the full set.
-  void existingTables;
   return violations;
 }
 
 describe('migration safety — additive-only guard (G-10)', () => {
   describe('findAdditiveOnlyViolations() detector', () => {
-    const NONE = new Set<string>(PRE_PHASE_1_TABLES);
-
     it('accepts CREATE TABLE / CREATE TYPE / CREATE INDEX', () => {
       const sql = `
         CREATE TYPE "Foo" AS ENUM ('A','B');
@@ -184,7 +155,7 @@ describe('migration safety — additive-only guard (G-10)', () => {
         CREATE UNIQUE INDEX "widgets_id_key" ON "widgets"("id");
         CREATE INDEX "widgets_x" ON "widgets"("id") WHERE "id" IS NOT NULL;
       `;
-      expect(findAdditiveOnlyViolations(sql, NONE)).toEqual([]);
+      expect(findAdditiveOnlyViolations(sql)).toEqual([]);
     });
 
     it('accepts ALTER TABLE ADD CONSTRAINT FK on a table created in the same file', () => {
@@ -192,49 +163,64 @@ describe('migration safety — additive-only guard (G-10)', () => {
         CREATE TABLE "widgets" ("id" TEXT NOT NULL, "userId" TEXT NOT NULL);
         ALTER TABLE "widgets" ADD CONSTRAINT "widgets_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
       `;
-      expect(findAdditiveOnlyViolations(sql, NONE)).toEqual([]);
+      expect(findAdditiveOnlyViolations(sql)).toEqual([]);
     });
 
     it('rejects DROP TABLE', () => {
-      expect(
-        findAdditiveOnlyViolations('DROP TABLE "orders";', NONE),
-      ).toHaveLength(1);
+      expect(findAdditiveOnlyViolations('DROP TABLE "orders";')).toHaveLength(
+        1,
+      );
     });
 
     it('rejects DROP COLUMN', () => {
       expect(
-        findAdditiveOnlyViolations(
-          'ALTER TABLE "orders" DROP COLUMN "total";',
-          NONE,
-        ),
+        findAdditiveOnlyViolations('ALTER TABLE "orders" DROP COLUMN "total";'),
       ).not.toHaveLength(0);
     });
 
-    it('rejects ALTER TABLE on an existing (pre-Phase-1) table', () => {
+    it('rejects ALTER TABLE on a table not created in the same migration', () => {
       const v = findAdditiveOnlyViolations(
         'ALTER TABLE "orders" ADD COLUMN "note" TEXT;',
-        NONE,
       );
-      expect(v.join(' ')).toMatch(/existing table \("orders"\)/);
+      expect(v.join(' ')).toMatch(
+        /ALTER TABLE on a table not created in this migration \("orders"\)/,
+      );
+    });
+
+    it('rejects an additive ALTER on an earlier-migration table too (self-contained rule)', () => {
+      // `tenants` is created by a *different* migration file, so an ALTER here
+      // must be flagged even though ADD COLUMN is itself additive.
+      const v = findAdditiveOnlyViolations(
+        'CREATE TABLE "customers" ("id" TEXT NOT NULL); ALTER TABLE "tenants" ADD COLUMN "x" TEXT;',
+      );
+      expect(v).toHaveLength(1);
+      expect(v[0]).toMatch(/\("tenants"\)/);
     });
 
     it('rejects DELETE / TRUNCATE / UPDATE of existing rows', () => {
+      expect(findAdditiveOnlyViolations('DELETE FROM "orders";')).toHaveLength(
+        1,
+      );
       expect(
-        findAdditiveOnlyViolations('DELETE FROM "orders";', NONE),
+        findAdditiveOnlyViolations('TRUNCATE TABLE "orders";'),
       ).toHaveLength(1);
       expect(
-        findAdditiveOnlyViolations('TRUNCATE TABLE "orders";', NONE),
-      ).toHaveLength(1);
-      expect(
-        findAdditiveOnlyViolations(`UPDATE "orders" SET "total" = 0;`, NONE),
+        findAdditiveOnlyViolations(`UPDATE "orders" SET "total" = 0;`),
       ).toHaveLength(1);
     });
 
-    it('rejects SET NOT NULL', () => {
+    it('does not flag ON UPDATE CASCADE inside a FK clause', () => {
+      const sql = `
+        CREATE TABLE "widgets" ("id" TEXT NOT NULL, "userId" TEXT NOT NULL);
+        ALTER TABLE "widgets" ADD CONSTRAINT "fk" FOREIGN KEY ("userId") REFERENCES "users"("id") ON UPDATE CASCADE;
+      `;
+      expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+    });
+
+    it('rejects SET NOT NULL (even on a table created in the same file)', () => {
       expect(
         findAdditiveOnlyViolations(
-          'ALTER TABLE "widgets" ALTER COLUMN "x" SET NOT NULL;',
-          NONE,
+          'CREATE TABLE "widgets" ("x" TEXT); ALTER TABLE "widgets" ALTER COLUMN "x" SET NOT NULL;',
         ),
       ).not.toHaveLength(0);
     });
@@ -245,7 +231,7 @@ describe('migration safety — additive-only guard (G-10)', () => {
         /* nothing is dropped here */
         CREATE TABLE "widgets" ("id" TEXT NOT NULL);
       `;
-      expect(findAdditiveOnlyViolations(sql, NONE)).toEqual([]);
+      expect(findAdditiveOnlyViolations(sql)).toEqual([]);
     });
   });
 
@@ -266,8 +252,7 @@ describe('migration safety — additive-only guard (G-10)', () => {
         join(MIGRATIONS_DIR, dir, 'migration.sql'),
         'utf8',
       );
-      const violations = findAdditiveOnlyViolations(sql, PRE_PHASE_1_TABLES);
-      expect(violations).toEqual([]);
+      expect(findAdditiveOnlyViolations(sql)).toEqual([]);
     });
 
     it('every legacy migration name in the exemption list actually exists', () => {

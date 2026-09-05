@@ -279,4 +279,113 @@ describe('SaaS Foundation — Phase 1 tenancy models', () => {
     });
     expect(domain.tenantId).toBe(tenant.id);
   });
+
+  // ── Foreign-key enforcement on the remaining new-model edges ─────────────
+  // (audit finding P2-3: StoreDomain.tenantId + Subscription.planId were
+  // untested.)
+  it('StoreDomain.tenantId FK rejects an invalid tenant', async () => {
+    const tenantId = await makeTenant();
+    const storeId = await makeStore(tenantId);
+    await expect(
+      prisma.storeDomain.create({
+        data: {
+          storeId,
+          tenantId: randomUUID(), // no such tenant
+          hostname: `bad-${randomUUID()}.example.test`,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2003' });
+  });
+
+  it('StoreDomain.storeId FK rejects an invalid store', async () => {
+    const tenantId = await makeTenant();
+    await expect(
+      prisma.storeDomain.create({
+        data: {
+          storeId: randomUUID(), // no such store
+          tenantId,
+          hostname: `bad-${randomUUID()}.example.test`,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2003' });
+  });
+
+  it('Subscription.planId FK rejects an invalid plan, and a referenced Plan cannot be deleted (RESTRICT)', async () => {
+    const tenantId = await makeTenant();
+    await expect(
+      prisma.subscription.create({
+        data: { tenantId, planId: randomUUID() }, // no such plan
+      }),
+    ).rejects.toMatchObject({ code: 'P2003' });
+
+    const plan = await prisma.plan.create({
+      data: { key: `k-${randomUUID()}`, name: 'K' },
+    });
+    await prisma.subscription.create({ data: { tenantId, planId: plan.id } });
+    await expect(
+      prisma.plan.delete({ where: { id: plan.id } }),
+    ).rejects.toMatchObject({ code: 'P2003' });
+  });
+
+  it('TenantMembership.tenantId FK rejects an invalid tenant', async () => {
+    const userId = await makeUser();
+    await expect(
+      prisma.tenantMembership.create({
+        data: { userId, tenantId: randomUUID(), role: 'OWNER' },
+      }),
+    ).rejects.toMatchObject({ code: 'P2003' });
+  });
+
+  // ── Column defaults (audit finding P2-3) ────────────────────────────────
+  it('column defaults: Store.status=DRAFT, Store.isPrimary=false', async () => {
+    const tenantId = await makeTenant();
+    const store = await prisma.store.create({
+      data: { tenantId, slug: `s-${randomUUID()}`, name: 'Defaults' },
+    });
+    expect(store.status).toBe('DRAFT');
+    expect(store.isPrimary).toBe(false);
+  });
+
+  it('column defaults: TenantMembership.status=INVITED', async () => {
+    const userId = await makeUser();
+    const tenantId = await makeTenant();
+    const m = await prisma.tenantMembership.create({
+      data: { userId, tenantId, role: 'STAFF' },
+    });
+    expect(m.status).toBe('INVITED');
+  });
+
+  it('column defaults: Subscription.status=PENDING', async () => {
+    const tenantId = await makeTenant();
+    const plan = await prisma.plan.create({
+      data: { key: `d-${randomUUID()}`, name: 'D' },
+    });
+    const sub = await prisma.subscription.create({
+      data: { tenantId, planId: plan.id },
+    });
+    expect(sub.status).toBe('PENDING');
+  });
+
+  it('column defaults: Tenant.status=ACTIVE, StoreDomain.{isPrimary=false, verificationStatus=PENDING}, Plan.isPublic=true', async () => {
+    const tenant = await prisma.tenant.create({
+      data: { slug: `t-${randomUUID()}` },
+    });
+    expect(tenant.status).toBe('ACTIVE');
+
+    const storeId = await makeStore(tenant.id);
+    const domain = await prisma.storeDomain.create({
+      data: {
+        storeId,
+        tenantId: tenant.id,
+        hostname: `d-${randomUUID()}.example.test`,
+      },
+    });
+    expect(domain.isPrimary).toBe(false);
+    expect(domain.verificationStatus).toBe('PENDING');
+
+    const plan = await prisma.plan.create({
+      data: { key: `pub-${randomUUID()}`, name: 'Pub' },
+    });
+    expect(plan.isPublic).toBe(true);
+  });
 });

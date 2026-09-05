@@ -100,7 +100,9 @@ The generated SQL was inspected before applying. Contents:
 - **6 × `CREATE TYPE`** — additive.
 - **6 × `CREATE TABLE`** (`tenants`, `stores`, `store_domains`, `tenant_memberships`, `plans`,
   `subscriptions`) — all new.
-- **17 × `CREATE [UNIQUE] INDEX`** — all on new tables (incl. the 2 hand-added partial uniques).
+- **15 × `CREATE [UNIQUE] INDEX`** — all on new tables: 13 Prisma-generated + 2 hand-added
+  partial unique indexes (`stores_tenant_primary_unique`, `store_domains_store_primary_unique`).
+  *(Corrected 2026-09-06 per audit finding P2-1 — was stated as 17.)*
 - **8 × `ALTER TABLE <t> ADD CONSTRAINT … FOREIGN KEY`** where `<t>` ∈ {`stores`,
   `store_domains`, `tenant_memberships`, `subscriptions`} — **every target table is created
   earlier in the same migration**. This is how Prisma always emits FK creation (every existing
@@ -159,33 +161,36 @@ Result: **11/11 pass.** The Phase 1 migration passes the live additive-only chec
 
 ## 11. Tests executed
 
+*(Numbers below are the **post-audit-fix** state — after the `fix(saas): resolve phase 1
+audit findings` commit that added the P2-3 e2e/seed coverage and reworked the G-10 detector
+per P2-4.)*
+
 | Suite | Command | Environment |
 |---|---|---|
-| Backend unit (incl. G-10 spec, scheduler-registration spec) | `npm run test` | jest, no DB |
-| Backend e2e (incl. new `tenancy-foundation.e2e-spec.ts`) | `npm run test:e2e` | real Postgres `printforge_test` (migration applied) |
+| Backend unit (incl. `migration-safety.spec.ts`, `scheduler-registration.spec.ts`) | `npm run test` | jest, no DB |
+| Backend e2e (incl. `tenancy-foundation.e2e-spec.ts`, `tenant-bootstrap-seed.e2e-spec.ts`) | `npm run test:e2e` | real Postgres `printforge_test` (migration applied) |
 | Backend lint | `npm run lint` | eslint `--fix` |
 | Backend build | `npm run build` | `nest build` |
 | Frontend unit/component | `npm run test` (frontend) | vitest + jsdom |
-| Prisma | `prisma validate`, `prisma migrate deploy` (×3 scratch/local DBs), `prisma migrate status` | — |
-| Seed | `ts-node prisma/seed-tenant-bootstrap.ts` ×2 (idempotency) | scratch DB |
+| Prisma | `prisma validate`, `prisma migrate deploy` (scratch/local DBs), `prisma migrate status` | — |
+| Seed smoke | `tenant-bootstrap-seed.e2e-spec.ts` — real `ts-node prisma/seed-tenant-bootstrap.ts` subprocess ×3 (rows, idempotency, prod-guard) | `printforge_test` |
 
 ## 12. Test results
 
-| Suite | Result | Delta vs baseline |
+| Suite | Result | Delta vs `b20c849` baseline |
 |---|---|---|
-| Backend unit | **28 suites / 255 tests — PASS** | +1 suite, +11 tests (`migration-safety.spec.ts`). `scheduler-registration.spec.ts` still green (exactly one `ScheduleModule.forRoot()`). |
-| Backend e2e | **16 suites / 129 tests — PASS** (6 of 7 full runs green) | +1 suite, +14 tests (`tenancy-foundation.e2e-spec.ts`, green every run). |
-| Backend lint | **PASS** (exit 0; 1 pre-existing `warning` in `test/e2e/support/fixtures.ts`, not this task's) | — |
+| Backend unit | **28 suites / 257 tests — PASS** | +1 suite, +13 tests (`migration-safety.spec.ts`). `scheduler-registration.spec.ts` still green (exactly one `ScheduleModule.forRoot()`). |
+| Backend e2e | **17 suites / 140 tests — PASS** | +2 suites: `tenancy-foundation.e2e-spec.ts` (22 tests) + `tenant-bootstrap-seed.e2e-spec.ts` (3 tests). All green across repeated runs. |
+| Backend lint | **PASS** (exit 0; 1 pre-existing `warning` in `test/e2e/support/fixtures.ts`, not this work's) | — |
 | Backend build | **PASS** (exit 0) | — |
 | Frontend | **100 files / 759 tests — PASS** | unchanged (frontend not touched) |
 | `prisma validate` | **valid** | — |
-| `prisma migrate status` | **up to date, no drift** | — |
-| Seed idempotency | **PASS** (1 row of each after 2 runs) | — |
+| `prisma migrate status` | **up to date, no drift** (10 migrations) | — |
 
-**Non-blocking finding NB-1 (§18):** on the *first* full e2e run, 1 test in a pre-existing
-timing-sensitive spec (webhook-retry / reconciliation family) failed; it passed on all 6
-subsequent runs. This is a **pre-existing intermittent flake unrelated to Phase 1** — Phase 1
-changes are purely additive, and `tenancy-foundation.e2e-spec.ts` passed every run.
+**NB-1 (§18):** during the original Phase 1 implementation, one pre-existing timing-sensitive
+e2e spec (webhook-retry / reconciliation family) flaked once, then passed on every subsequent
+run (6/7 green then, and every run since). Not caused by Phase 1 — all Phase 1 changes are
+additive; the tenancy specs pass every run. Recommend the team stabilise that spec separately.
 
 ## 13. ACR-001 follow-through
 
@@ -195,28 +200,35 @@ Per `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md` "Post-approval actions":
 |---|:-:|---|
 | 1. `schema.prisma` header — cite SaaS Architecture v1.0 + Master Plan; drop the `BLUEPRINT-v1.2 §15/§12/§14` authority line | ✅ | Lines 1–11 (4 old header lines removed, 11 new). Inline `§NN` comments retained as historical provenance (noted in the header). |
 | 2. `docs/architecture/ARCHITECTURE-FREEZE.md` — record `BLUEPRINT-v1.2` superseded + retained as history | ✅ | Top "SUPERSEDED — 6 September 2026" notice + label tweaks (freeze status, "Historical document"). **No section rewritten; no history deleted.** |
-| 3. Link ACR-001 from both | ✅ | Both cite `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md`. |
-| — `docs/architecture/BLUEPRINT-v1.2.md` itself | **not modified** | ACR-001 explicitly retains it unchanged as history. Its pre-existing ` M` state predates this task (mtime `2026-09-05 14:02`). |
+| 3. Link ACR-001 from both | ✅ | Both cite `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md` — **committed to the repo by the audit-fix commit** (audit finding P1-1; it was untracked in `c3fc160`). |
+| — `docs/architecture/BLUEPRINT-v1.2.md` itself | **not modified** | ACR-001 explicitly retains it unchanged as history. Its pre-existing ` M` state predates this work (mtime `2026-09-05 14:02`). |
 
-## 14. Files changed (by this task)
+## 14. Files changed
 
-**Modified (tracked):**
+**Commit `c3fc160` — `feat(saas): implement phase 1 tenancy foundation`:**
 | File | Change |
 |---|---|
-| `backend/prisma/schema.prisma` | +247 / −4 — header (ACR-001), `User` 2 back-relations, appended SaaS Foundation block (6 enums + 6 models). No existing model line changed. |
+| `backend/prisma/schema.prisma` | +247 / −4 — header (ACR-001), `User` 2 virtual back-relations, appended SaaS Foundation block (6 enums + 6 models). No existing model line changed. |
+| `backend/prisma/migrations/20260905191258_add_saas_foundation/migration.sql` | NEW — the additive migration (171 lines). |
+| `backend/src/migration-safety.spec.ts` | NEW — G-10 additive-only CI check + tests. |
+| `backend/test/e2e/tenancy-foundation.e2e-spec.ts` | NEW — tenancy DB-constraint e2e. |
 | `backend/test/e2e/support/db.ts` | +8 — 6 new table names in `ALL_TABLES` + comment. Additive. |
-| `backend/package.json` | +1 line — `prisma:seed:tenant-bootstrap` script (shares a hunk with the pre-existing `storefront-preview` scripts). |
+| `backend/prisma/seed-tenant-bootstrap.ts` | NEW — dev/test tenant bootstrap seed (AC-14). |
+| `backend/package.json` | +3 script lines (of which 2 were unrelated — see below). |
 | `docs/architecture/ARCHITECTURE-FREEZE.md` | +13 / −4 — ACR-001 supersession notice + header labels. |
+| `docs/saas/PHASE-1-CHANGE-MAP.md`, `docs/saas/PHASE-1-IMPLEMENTATION-REPORT.md` | NEW. |
 
-**Created:**
-| File | Purpose |
+**Commit `fix(saas): resolve phase 1 audit findings` (this follow-up):**
+| File | Change |
 |---|---|
-| `backend/prisma/migrations/20260905191258_add_saas_foundation/migration.sql` | The additive migration (171 lines). |
-| `backend/src/migration-safety.spec.ts` | G-10 additive-only CI check + tests. |
-| `backend/test/e2e/tenancy-foundation.e2e-spec.ts` | Tenancy DB-constraint e2e (14 tests). |
-| `backend/prisma/seed-tenant-bootstrap.ts` | Dev/test tenant bootstrap seed (AC-14). |
-| `docs/saas/PHASE-1-CHANGE-MAP.md` | Phase 1 change map (STEP 2). |
-| `docs/saas/PHASE-1-IMPLEMENTATION-REPORT.md` | This file. |
+| `backend/package.json` | **−2** — removed the unrelated `prisma:seed:storefront-preview` + `:remove` scripts (P1-2). Final scripts: `prisma:seed` + `prisma:seed:tenant-bootstrap`. |
+| `backend/src/migration-safety.spec.ts` | Removed the unused `existingTables` parameter; documented the self-contained validation model; +2 detector tests (P2-4). 11 → 13 tests. Detector not weakened. |
+| `backend/test/e2e/tenancy-foundation.e2e-spec.ts` | +8 tests — `StoreDomain.tenantId`/`storeId` FK, `Subscription.planId` FK + `Plan` RESTRICT, `TenantMembership.tenantId` FK, and column-default assertions for `Store.status`/`isPrimary`, `TenantMembership.status`, `Subscription.status`, `Tenant.status`, `StoreDomain.isPrimary`/`verificationStatus`, `Plan.isPublic` (P2-3). 14 → 22 tests. |
+| `backend/test/e2e/tenant-bootstrap-seed.e2e-spec.ts` | NEW — CI seed-smoke: runs `seed-tenant-bootstrap.ts` as a subprocess against `printforge_test`, verifies the 5 linked rows, idempotency, and the `NODE_ENV=production` guard (P2-3). |
+| `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md`, `PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md`, `DECISIONS.md`, `PHASE-1-START-GATE-RESULT.md`, `PHASE-0-REPOSITORY-INVENTORY.md`, `PHASE-0.5-DECISION-CLOSURE.md`, `PHASE-0.5-DECISION-STATUS.md`, `PRINTFORGE-SAAS-IMPLEMENTATION-MASTER-PLAN-v1.0.md` | NEW (committed) — the governance chain (P1-1). |
+| `docs/saas/PHASE-1-IMPLEMENTATION-REPORT.md`, `docs/saas/PHASE-1-CHANGE-MAP.md` | Corrected index count 17 → 15 (P2-1); replaced the stale "nothing committed" claim (P2-2); noted the P1/P2 resolutions. |
+
+*(`node_modules/@prisma/client` regenerated by `prisma generate` — not tracked.)*
 
 *(`node_modules/@prisma/client` was regenerated by `prisma generate` — not tracked.)*
 
@@ -238,7 +250,16 @@ all existing `backend/src/**` runtime code, guards, decorators, services, contro
 | `backend/printforge-backend-source.zip` | `??` untracked, unmodified | ✅ |
 | `SC-STOREFRONT-READINESS-AUDIT.md` | `??` untracked, unmodified | ✅ |
 
-No `git add`, no `git add -A`, nothing staged, nothing committed, nothing pushed.
+**Commit history (updated 2026-09-06 per audit finding P2-2):** the Phase 1 implementation
+was committed as **`c3fc160` — `feat(saas): implement phase 1 tenancy foundation`** (author:
+project owner). An independent audit (Codex) then found the commit incomplete (governance
+docs missing) and contaminated (two unrelated storefront `package.json` scripts). A single
+follow-up commit — **`fix(saas): resolve phase 1 audit findings`** — adds the governance
+chain, removes the stray scripts, and applies the selected P2 corrections. Neither commit was
+pushed to any remote by this work. `git add .` / `git add -A` were never used; only the
+specific Phase-1 and audit-fix paths were staged. The pre-existing storefront-redesign
+working-tree changes (`frontend/**`, `backend/prisma/seed-storefront-preview.ts`) remain
+**uncommitted and outside Phase 1 scope**.
 
 ## 17. Phase 1 boundary verification (STEP 8 checklist)
 
@@ -287,9 +308,25 @@ No `git add`, no `git add -A`, nothing staged, nothing committed, nothing pushed
 - **NB-6 — G-9 not exercised.** The pre-migration snapshot requirement is approved and
   documented as an execution-time condition; this task performed no shared-environment deploy.
 - **NB-7 — `StoreDomain.tenantId` denorm not composite-FK-tied to `storeId`.** Both are plain
-  FKs into one tenant subtree (sufficient for Phase 1 — no FK can link two tenants). A
-  composite `(storeId, tenantId)` same-store FK guaranteeing the denorm matches is Phase 4/9
-  defence-in-depth (Master Plan wave W6).
+  FKs into one tenant subtree (sufficient for Phase 1 — no FK can link two tenants). Both are
+  now e2e-tested to reject an invalid target (audit fix P2-3). A composite `(storeId,
+  tenantId)` same-store FK guaranteeing the denorm *matches* is Phase 4/9 defence-in-depth
+  (Master Plan wave W6).
+
+### Independent audit (Codex) — findings & resolutions
+
+An independent audit of `c3fc160` returned **NOT READY** on two P1 completeness defects
+(not correctness defects). Both are resolved by the `fix(saas): resolve phase 1 audit
+findings` commit:
+
+| Finding | Resolution |
+|---|---|
+| **P1-1** governance chain absent from the commit | Committed `ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md`, `PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md`, `DECISIONS.md`, `PHASE-1-START-GATE-RESULT.md` + the supporting Phase 0/0.5 docs + the Master Plan. All cross-references in `schema.prisma` / `ARCHITECTURE-FREEZE.md` / this report now resolve. |
+| **P1-2** two unrelated `storefront-preview` scripts + broken file ref in `package.json` | Removed both lines. `seed-storefront-preview.ts` stays **uncommitted** (storefront work, outside Phase 1). |
+| **P2-1** report/change-map index count 17 | Corrected to 15 (13 Prisma + 2 hand-added partial). |
+| **P2-2** stale "nothing committed" claim | Replaced with an accurate commit-history statement (§16). |
+| **P2-3** missing FK / default / seed coverage | +8 e2e tests (`StoreDomain`/`Subscription`/`TenantMembership` FKs, 7 column-default assertions) + new `tenant-bootstrap-seed.e2e-spec.ts` CI seed-smoke (rows + idempotency + prod-guard). |
+| **P2-4** dead `existingTables` param in the G-10 detector | Removed the param; documented the self-contained validation model; +2 detector tests. Detector behaviour unchanged / not weakened. |
 
 ## 19. Phase 2 intentionally deferred items
 
@@ -321,8 +358,8 @@ Every mandatory acceptance criterion (AC-1 … AC-17,
   `Subscription` 1:1 + 7 states (e2e) · AC-10 ✅ migration additive-only, G-10 check green ·
   AC-11 ✅ no cross-tenant FK possible · AC-12 ✅ no data statement, existing row counts
   untouched · AC-13 ✅ `git diff backend/src` = only the new spec; guards/JWT untouched ·
-  AC-14 ✅ seed bootstraps a full linked tenant (e2e + seed run) · AC-15 ✅ unit 255/255,
-  e2e 129/129, frontend 759/759, scheduler-registration green · AC-16 ✅ applies cleanly,
+  AC-14 ✅ seed bootstraps a full linked tenant (e2e + CI seed-smoke) · AC-15 ✅ unit 257/257,
+  e2e 140/140, frontend 759/759, scheduler-registration green · AC-16 ✅ applies cleanly,
   no drift, `DROP TABLE`-reversible · AC-17 ✅ no `src/tenancy` / `src/plans` dirs → no route/guard.
 
 The findings in §18 are documentation-level / pre-existing / deliberate-minimization — none

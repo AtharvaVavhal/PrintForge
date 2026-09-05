@@ -51,12 +51,13 @@ Model count 25 → **31**. Enum count 12 → **18**.
 
 ### 2.2 Migration — `backend/prisma/migrations/20260905191258_add_saas_foundation/` (NEW)
 
-171 lines, additive-only: 6 × `CREATE TYPE`, 6 × `CREATE TABLE`, 17 × `CREATE [UNIQUE] INDEX`
-(incl. 2 hand-added partial unique indexes — `stores_tenant_primary_unique`,
-`store_domains_store_primary_unique`), 8 × `ALTER TABLE <new-table> ADD CONSTRAINT ... FOREIGN
-KEY` (standard Prisma FK creation, all on tables created in the same migration). **No** `DROP`,
-`DELETE`, `TRUNCATE`, `UPDATE`, `SET NOT NULL`, or `ALTER TABLE` on any pre-existing table.
-Migration count 9 → **10**.
+171 lines, additive-only: 6 × `CREATE TYPE`, 6 × `CREATE TABLE`, **15** × `CREATE [UNIQUE]
+INDEX` (13 Prisma-generated + 2 hand-added partial unique indexes —
+`stores_tenant_primary_unique`, `store_domains_store_primary_unique`), 8 × `ALTER TABLE
+<new-table> ADD CONSTRAINT ... FOREIGN KEY` (standard Prisma FK creation, all on tables created
+in the same migration). **No** `DROP`, `DELETE`, `TRUNCATE`, `UPDATE`, `SET NOT NULL`, or
+`ALTER TABLE` on any pre-existing table. Migration count 9 → **10**.
+*(Index count corrected 2026-09-06 per audit finding P2-1 — was stated as 17.)*
 
 ### 2.3 G-10 migration-safety CI check — `backend/src/migration-safety.spec.ts` (NEW)
 
@@ -85,12 +86,20 @@ Plan + Tenant #1 + primary Store + OWNER `TenantMembership` + Free/ACTIVE `Subsc
 
 ### 2.7 Docs — `docs/saas/` + `docs/architecture/ARCHITECTURE-FREEZE.md`
 
-- `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md` — existed from Phase 0.5; referenced.
 - `docs/architecture/ARCHITECTURE-FREEZE.md` — ACR-001 action 2: top notice that
   `BLUEPRINT-v1.2` is superseded by SaaS Architecture v1.0 and retained as history (13-line
   diff — additive notice + 4 header-label tweaks; **no section rewritten, no history deleted**).
-- `docs/saas/PHASE-1-CHANGE-MAP.md` (this file) — NEW.
-- `docs/saas/PHASE-1-IMPLEMENTATION-REPORT.md` — NEW.
+- `docs/saas/PHASE-1-CHANGE-MAP.md` (this file) — NEW (in `c3fc160`).
+- `docs/saas/PHASE-1-IMPLEMENTATION-REPORT.md` — NEW (in `c3fc160`).
+- **Governance chain committed by the audit-fix commit (audit finding P1-1)** — these existed
+  from Phase 0 / 0.5 and are referenced by the committed `schema.prisma` header,
+  `ARCHITECTURE-FREEZE.md`, and this change map, but were untracked in `c3fc160`:
+  `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md` (authorizes the schema additions per
+  `BLUEPRINT-v1.2 §38`), `PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md` (the G-4-approved
+  Phase 1 contract), `DECISIONS.md` (records D1/D3/D5/G-4/G-5/G-9/G-10 approvals and the
+  D2/D4 `OPEN` status), `PHASE-1-START-GATE-RESULT.md` (START GATE = READY),
+  `PHASE-0-REPOSITORY-INVENTORY.md`, `PHASE-0.5-DECISION-CLOSURE.md`,
+  `PHASE-0.5-DECISION-STATUS.md`, `PRINTFORGE-SAAS-IMPLEMENTATION-MASTER-PLAN-v1.0.md`.
 
 ### 2.8 NOT done in Phase 1 (deferred, in-scope minimization)
 
@@ -118,7 +127,7 @@ except `backend/package.json` (see note).
 | `backend/prisma/seed-storefront-preview.ts` | `??` | Pre-existing untracked (Phase 13.8 storefront preview seed). Untouched. |
 | `backend/printforge-backend-source.zip` | `??` | **Protected file.** Untouched. |
 | `.DS_Store`, `PHASE-6-IMPLEMENTATION-PLAN.md`, `SC-STOREFRONT-READINESS-AUDIT.md` | `??` | **Protected files.** Untouched. |
-| `backend/package.json` | `M` | Pre-existing hunk already added `prisma:seed:storefront-preview[:remove]`. **Phase 1 adds exactly one line to the same hunk:** `"prisma:seed:tenant-bootstrap"`. The `git diff` shows all three script lines together because they share a hunk; only the `tenant-bootstrap` line is this task's. |
+| `backend/package.json` | `M` | Phase 1 adds exactly one script: `"prisma:seed:tenant-bootstrap"`. Commit `c3fc160` inadvertently also carried the pre-existing `prisma:seed:storefront-preview[:remove]` scripts (target file not in the repo); the audit-fix commit **removes those two** (audit finding P1-2). Final scripts: `prisma:seed` + `prisma:seed:tenant-bootstrap`. |
 
 ---
 
