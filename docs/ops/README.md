@@ -9,6 +9,10 @@ do not introduce new infrastructure.
 | [`ENVIRONMENT.md`](./ENVIRONMENT.md) | Every backend and frontend environment variable — required-when, purpose, format, where it is provisioned. |
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Pre-deploy checklist, migration procedure, deploy + rollback steps, incident basics. |
 | [`BACKUP-RESTORE.md`](./BACKUP-RESTORE.md) | Database backup responsibility, RPO/RTO assumptions, restore procedure, what is not yet verified. |
+| [`D8-RESTORE-DRILL-RUNBOOK.md`](./D8-RESTORE-DRILL-RUNBOOK.md) | Operator runbook for closing the SaaS-conversion **D8** gate (`docs/saas/DECISIONS.md`) — production `pg_dump` → disposable scratch restore → load verification. **PREPARED — NOT EXECUTED.** |
+| [`D8-OWNER-OPS-HANDOFF.md`](./D8-OWNER-OPS-HANDOFF.md) | Concise owner/Ops checklist of what must be provisioned/authorized before the D8 runbook can be executed. **HANDOFF DOCUMENT — NOT EXECUTED.** |
+| [`D8-INFRASTRUCTURE-SETUP-CHECKLIST.md`](./D8-INFRASTRUCTURE-SETUP-CHECKLIST.md) | Detailed Owner/Ops setup checklist for the three remaining D8 infrastructure prerequisites (production access, scratch PostgreSQL, artifact storage). **CHECKLIST — NOTHING PROVISIONED.** |
+| [`D8-OPS-PROVISIONING-GUIDE.md`](./D8-OPS-PROVISIONING-GUIDE.md) | Practical, provider-neutral how-to for provisioning the D8 prerequisites, plus a troubleshooting/STOP-condition table. **GUIDANCE — NOTHING PROVISIONED.** |
 | [`PRODUCTION-SMOKE-TEST.md`](./PRODUCTION-SMOKE-TEST.md) | Post-deploy checklist across infrastructure, auth, commerce, payment, email, admin, upload, security. |
 | [`DEPENDENCY-ADVISORIES.md`](./DEPENDENCY-ADVISORIES.md) | Known `npm audit` findings, why they are accepted for now, and the CI policy around them. |
 
