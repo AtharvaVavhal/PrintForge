@@ -5,6 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AppConfig } from '../../common/config/configuration';
 import { PrismaService } from '../../common/database/prisma.service';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { withPlatformRlsBypass } from '../../common/tenant/tenant-rls';
 
 /**
  * Access-token payload. Phase 2a (decision P2-D4) makes newly-issued merchant
@@ -32,7 +33,16 @@ interface AccessTokenPayload {
  * Phase 2a (SaaS Master Plan §8; decisions P2-D4, P2-D1): validate() also
  * loads the user's `platformRole` and ACTIVE tenant memberships as identity
  * facts. It does NOT derive an active tenant and does NOT make a tenant
- * authorization decision — that is Phase 3 (P2-D9; D6 deferred).
+ * authorization decision — that is Phase 3 (P2-D9; D6 resolved 2026-09-07;
+ * see `TenantContextGuard`).
+ *
+ * Phase 3 (decision D4 — RLS defense-in-depth on `tenant_memberships`):
+ * this query is explicitly cross-tenant by design (it loads a User's own
+ * memberships across every tenant they hold, before any one tenant is
+ * selected) — one of Master Plan §9's named "platform-scoped operations,"
+ * wrapped with `withPlatformRlsBypass` so RLS's fail-closed default does
+ * not hide these rows. The query and its result are unchanged from Phase
+ * 2a — only the transport (a `SET LOCAL`-scoped transaction) is new.
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -52,15 +62,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      include: {
-        tenantMemberships: {
-          where: { status: 'ACTIVE' },
-          select: { tenantId: true, role: true },
+    const user = await withPlatformRlsBypass(this.prisma, (tx) =>
+      tx.user.findUnique({
+        where: { id: payload.sub },
+        include: {
+          tenantMemberships: {
+            where: { status: 'ACTIVE' },
+            select: { tenantId: true, role: true },
+          },
         },
-      },
-    });
+      }),
+    );
 
     if (!user || !user.isActive || user.tokenVersion !== payload.tokenVersion) {
       throw new UnauthorizedException();

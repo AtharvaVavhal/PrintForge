@@ -218,7 +218,7 @@ describe('SaaS Phase 2a — merchant identity (JwtStrategy enrichment, thin toke
     }
   });
 
-  it('admin RBAC is unchanged — a normal user still cannot reach /admin/* (RolesGuard, not PlatformGuard)', async () => {
+  it('admin RBAC still denies — a normal user with no TenantMembership cannot reach /admin/* (Phase 3: PermissionsGuard, not RolesGuard/PlatformGuard)', async () => {
     const user: TestUser = await registerUser(app, 'rbac');
     await http(app)
       .get(apiPath('/admin/dashboard'))

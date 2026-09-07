@@ -11,7 +11,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { HealthModule } from './common/health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PlatformGuard } from './common/guards/platform.guard';
-import { RolesGuard } from './common/guards/roles.guard';
+import { TenantContextGuard } from './common/tenant/tenant-context.guard';
+import { PermissionsGuard } from './auth/permissions/permissions.guard';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 import { AdminModule } from './admin/admin.module';
@@ -44,14 +45,26 @@ import { UsersModule } from './users/users.module';
  *   -> reviews (-> orders)
  *   -> admin (-> orders, products, users, reviews, coupons), auth
  *
- * JwtAuthGuard + RolesGuard + ThrottlerGuard are global (§17/§23): every
- * route is protected and IP-throttled by default; routes opt out
- * individually with @Public().
+ * JwtAuthGuard + ThrottlerGuard are global (§17/§23): every route is
+ * protected and IP-throttled by default; routes opt out individually with
+ * @Public().
  *
- * PlatformGuard (Phase 2a; decision P2-D1/G-11) is also global but a no-op
- * for every current route — it only acts on @PlatformOnly() routes, of which
- * there are none until the Phase 5 platform console. It is registered here so
- * the mechanism is live and separate from RolesGuard (frozen SaaS invariant 4).
+ * Phase 3 (decisions D6, P2-D9, G-13, G-20; docs/saas/DECISIONS.md) replaced
+ * the legacy `RolesGuard`/`@Roles()` mechanism with two guards, registered
+ * in this order — order matters, each depends on the previous having run:
+ *   1. `TenantContextGuard` — resolves `request.tenantContext` (host/
+ *      subdomain + `X-Active-Tenant` header, cross-validated against the
+ *      caller's ACTIVE `TenantMembership` rows; D6). Skips @Public() and
+ *      @PlatformOnly() routes.
+ *   2. `PermissionsGuard` — checks `@RequirePermission(...)` against the
+ *      resolved tenant context's membership role (G-13's ratified
+ *      catalogue). Deny-by-default; no context + a declared permission
+ *      requirement = 403.
+ *
+ * PlatformGuard (Phase 2a; decision P2-D1/G-11) remains global, independent
+ * of both of the above (frozen SaaS invariant 4) — it only acts on
+ * @PlatformOnly() routes, of which there are none until the Phase 5
+ * platform console.
  */
 @Module({
   imports: [
@@ -98,7 +111,8 @@ import { UsersModule } from './users/users.module';
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: TenantContextGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: PlatformGuard },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },

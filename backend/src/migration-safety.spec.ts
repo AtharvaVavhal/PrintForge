@@ -11,6 +11,7 @@ import { join } from 'path';
  * From Phase 1 onward, every new Prisma migration must be **additive-only**.
  * Allowed:
  *   - `CREATE TABLE` / `CREATE TYPE` / `CREATE INDEX` / `CREATE UNIQUE INDEX`
+ *     / `CREATE POLICY` (a `CREATE`, already covered by the catch-all below)
  *   - `ALTER TABLE <t> ...` when `<t>` is CREATEd in the same migration file
  *     (this is how Prisma always emits FK creation), and even then not
  *     `SET NOT NULL`.
@@ -21,7 +22,17 @@ import { join } from 'path';
  *     "platformRole" "PlatformRole"` needs, and what Phase 4's expand steps
  *     will need. It stays safe because a nullable column with no default is an
  *     instant metadata-only change that back-fills nothing and locks nothing.
- * Forbidden anywhere (unchanged — G-19 does NOT weaken these):
+ *   - **(Phase 3 / D4 / G-20)** `ALTER TABLE <existing> ENABLE ROW LEVEL
+ *     SECURITY` and `ALTER TABLE <existing> FORCE ROW LEVEL SECURITY` — and
+ *     ONLY those two verbs, alone, on an existing table. A narrow extension
+ *     of the same shape as G-19's, following its own precedent ("a narrow
+ *     detector refinement with positive + negative tests") rather than a
+ *     `LEGACY_MIGRATIONS` escape hatch. Justification: enabling/forcing RLS
+ *     changes access-control metadata only — it touches no row, no column,
+ *     no constraint, and is fully reversible via `DISABLE ROW LEVEL
+ *     SECURITY`. This is what the D4-resolved (docs/saas/DECISIONS.md)
+ *     RLS-enabling migration on the six Phase 1/2a tenancy tables needs.
+ * Forbidden anywhere (unchanged — G-19 and this extension do NOT weaken these):
  *   - DROP (table / column / index / constraint / type / schema / view / sequence)
  *   - DELETE / TRUNCATE / UPDATE of rows
  *   - SET NOT NULL
@@ -139,9 +150,19 @@ export function findAdditiveOnlyViolations(rawSql: string): string[] {
         if (addColumnOnly && singleAction && !hasNotNull && !hasDefault) {
           continue; // approved additive nullable ADD COLUMN (G-19)
         }
+        // Phase 3 / D4 / G-20: ENABLE/FORCE ROW LEVEL SECURITY alone, on an
+        // existing table, with no other clause — access-control metadata
+        // only, reversible via DISABLE ROW LEVEL SECURITY.
+        const isRlsToggleOnly =
+          /^ALTER\s+TABLE\s+(?:ONLY\s+)?"[^"]+"\s+(?:ENABLE|FORCE)\s+ROW\s+LEVEL\s+SECURITY\s*$/i.test(
+            stmt,
+          );
+        if (isRlsToggleOnly) {
+          continue; // approved additive RLS enable/force toggle (D4/G-20)
+        }
         violations.push(
           `ALTER TABLE on a table not created in this migration ("${target}") is not allowed in an additive migration ` +
-            `(G-19 permits ONLY a single nullable ADD COLUMN with no DEFAULT / NOT NULL): ${stmt.slice(0, 120)}`,
+            `(G-19 permits ONLY a single nullable ADD COLUMN with no DEFAULT / NOT NULL; D4/G-20 additionally permits a bare ENABLE/FORCE ROW LEVEL SECURITY): ${stmt.slice(0, 120)}`,
         );
         continue;
       }
@@ -235,6 +256,38 @@ describe('migration safety — additive-only guard (G-10)', () => {
         'ALTER TABLE "users" ALTER COLUMN "email" TYPE TEXT;', // type change
         'ALTER TABLE "orders" ADD CONSTRAINT "c" FOREIGN KEY ("x") REFERENCES "y"("id");', // add constraint
         'ALTER TABLE "users" RENAME COLUMN "email" TO "mail";', // rename
+      ];
+      for (const sql of cases) {
+        expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+      }
+    });
+
+    // Phase 3 / D4 / G-20 (docs/saas/DECISIONS.md): a bare ENABLE/FORCE ROW
+    // LEVEL SECURITY on an earlier-migration table is now permitted — and
+    // ONLY that, with no other clause on the same statement.
+    it('D4/G-20: permits a bare ENABLE/FORCE ROW LEVEL SECURITY on an earlier-migration table', () => {
+      expect(
+        findAdditiveOnlyViolations(
+          'ALTER TABLE "tenants" ENABLE ROW LEVEL SECURITY;',
+        ),
+      ).toEqual([]);
+      expect(
+        findAdditiveOnlyViolations(
+          'ALTER TABLE "tenants" FORCE ROW LEVEL SECURITY;',
+        ),
+      ).toEqual([]);
+      expect(
+        findAdditiveOnlyViolations(
+          'ALTER TABLE "stores" ENABLE ROW LEVEL SECURITY; ALTER TABLE "stores" FORCE ROW LEVEL SECURITY; CREATE POLICY "p" ON "stores" USING (true);',
+        ),
+      ).toEqual([]);
+    });
+
+    it('D4/G-20: still rejects ROW LEVEL SECURITY combined with any other action, and rejects DISABLE', () => {
+      const cases = [
+        'ALTER TABLE "tenants" ENABLE ROW LEVEL SECURITY, ADD COLUMN "x" TEXT;', // combined
+        'ALTER TABLE "tenants" DISABLE ROW LEVEL SECURITY;', // disable is a removal of protection, not additive
+        'ALTER TABLE "tenants" NO FORCE ROW LEVEL SECURITY;', // weakening the force setting
       ];
       for (const sql of cases) {
         expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);

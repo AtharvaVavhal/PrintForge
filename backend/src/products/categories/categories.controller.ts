@@ -11,8 +11,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '../../common/enums/role.enum';
+import { RequirePermission } from '../../auth/permissions/require-permission.decorator';
 import { ProductsService } from '../products.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
@@ -48,19 +47,19 @@ export class CategoriesController {
     return this.productsService.getCategoryTree();
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:read')
   @Get('admin')
   async adminList() {
     return this.productsService.adminListCategories();
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Post()
   async create(@Body() dto: CreateCategoryDto) {
     return this.productsService.createCategory(dto);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Patch(':id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -70,7 +69,7 @@ export class CategoriesController {
   }
 
   /** Soft-delete (isActive=false), mirroring DELETE /products/:id. */
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async deactivate(
@@ -81,7 +80,7 @@ export class CategoriesController {
   }
 
   /** Mirrors POST /products/:id/reactivate. */
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Post(':id/reactivate')
   @HttpCode(HttpStatus.OK)
   async reactivate(

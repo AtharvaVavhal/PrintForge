@@ -57,13 +57,44 @@ export async function promoteToAdmin(
   await prisma.user.update({ where: { id: userId }, data: { role: 'ADMIN' } });
 }
 
+/**
+ * Phase 3 (decisions P2-D9, G-13, G-20): `/admin/*` is gated by
+ * `PermissionsGuard`, which reads `TenantContext.membership.role` — the
+ * legacy `role='ADMIN'` column alone (above) is no longer sufficient,
+ * exactly mirroring what the real Phase 2b production backfill did
+ * (`role='ADMIN'` User -> `OWNER` `TenantMembership`, see
+ * docs/saas/PHASE-2B-IMPLEMENTATION-REPORT.md). This gives every
+ * `registerAdmin()` caller a Tenant + `ACTIVE` `OWNER` membership, so
+ * `TenantContextGuard`'s single-membership convenience default resolves a
+ * tenant with no `X-Active-Tenant` header needed — existing tests that
+ * call `registerAdmin()` and hit `/admin/*` continue to work unchanged.
+ */
+export async function grantOwnerMembership(
+  prisma: PrismaService,
+  userId: string,
+): Promise<{ tenantId: string }> {
+  const tenant = await prisma.tenant.create({
+    data: { slug: `test-tenant-${randomUUID()}` },
+  });
+  await prisma.tenantMembership.create({
+    data: {
+      userId,
+      tenantId: tenant.id,
+      role: 'OWNER',
+      status: 'ACTIVE',
+    },
+  });
+  return { tenantId: tenant.id };
+}
+
 export async function registerAdmin(
   app: INestApplication,
   prisma: PrismaService,
-): Promise<TestUser> {
+): Promise<TestUser & { tenantId: string }> {
   const user = await registerUser(app, 'admin');
   await promoteToAdmin(prisma, user.id);
-  return user;
+  const { tenantId } = await grantOwnerMembership(prisma, user.id);
+  return { ...user, tenantId };
 }
 
 export function authHeader(user: TestUser): [string, string] {

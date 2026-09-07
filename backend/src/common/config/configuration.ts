@@ -37,6 +37,72 @@ export interface AppConfig {
      * and checkout stays usable if the provider is down. */
     providerBaseUrl: string;
   };
+  /**
+   * Per-module tenant-scoping rollout flags (decision P3-D1,
+   * docs/saas/DECISIONS.md; Master Plan §9 "per-module rollout flag").
+   * `'advisory'` = a would-be cross-tenant query is logged, never thrown;
+   * `'enforced'` = thrown. Every module defaults to `'advisory'` when its
+   * `TENANT_ENFORCEMENT_*` env var is unset or unrecognized — a missing or
+   * misconfigured value must fail toward "logs, does not throw."
+   *
+   * None of these commerce tables carry a `tenantId` column yet (Phase 4's
+   * backfill) — the tenant-scoped Prisma client
+   * (`src/common/tenant/tenant-prisma.ts`) has nothing to scope them by
+   * today, so `'enforced'` is a structural no-op for every key here until
+   * Phase 4 adds the column, exactly as Master Plan §9's EXIT CRITERIA
+   * anticipates ("Enforcement flags may still be advisory for modules
+   * whose data Phase 4 hasn't scoped yet"). The flags exist now so Phase 4
+   * only has to flip a value, not build the mechanism.
+   */
+  tenantEnforcement: Record<TenantEnforcementModule, TenantEnforcementMode>;
+}
+
+export type TenantEnforcementMode = 'advisory' | 'enforced';
+
+export const TENANT_ENFORCEMENT_MODULES = [
+  'products',
+  'cart',
+  'checkout',
+  'orders',
+  'payments',
+  'invoices',
+  'coupons',
+  'reviews',
+  'uploads',
+  'appSetting',
+  'notifications',
+] as const;
+
+export type TenantEnforcementModule =
+  (typeof TENANT_ENFORCEMENT_MODULES)[number];
+
+const ENV_KEY_BY_MODULE: Record<TenantEnforcementModule, string> = {
+  products: 'TENANT_ENFORCEMENT_PRODUCTS',
+  cart: 'TENANT_ENFORCEMENT_CART',
+  checkout: 'TENANT_ENFORCEMENT_CHECKOUT',
+  orders: 'TENANT_ENFORCEMENT_ORDERS',
+  payments: 'TENANT_ENFORCEMENT_PAYMENTS',
+  invoices: 'TENANT_ENFORCEMENT_INVOICES',
+  coupons: 'TENANT_ENFORCEMENT_COUPONS',
+  reviews: 'TENANT_ENFORCEMENT_REVIEWS',
+  uploads: 'TENANT_ENFORCEMENT_UPLOADS',
+  appSetting: 'TENANT_ENFORCEMENT_APP_SETTING',
+  notifications: 'TENANT_ENFORCEMENT_NOTIFICATIONS',
+};
+
+function readEnforcementMode(envKey: string): TenantEnforcementMode {
+  return process.env[envKey] === 'enforced' ? 'enforced' : 'advisory';
+}
+
+function loadTenantEnforcement(): Record<
+  TenantEnforcementModule,
+  TenantEnforcementMode
+> {
+  const result = {} as Record<TenantEnforcementModule, TenantEnforcementMode>;
+  for (const mod of TENANT_ENFORCEMENT_MODULES) {
+    result[mod] = readEnforcementMode(ENV_KEY_BY_MODULE[mod]);
+  }
+  return result;
 }
 
 export default (): AppConfig => ({
@@ -71,4 +137,5 @@ export default (): AppConfig => ({
     providerBaseUrl:
       process.env.POSTAL_LOOKUP_BASE_URL ?? 'https://api.pincodeapi.in/api/v1',
   },
+  tenantEnforcement: loadTenantEnforcement(),
 });

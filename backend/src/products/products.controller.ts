@@ -12,8 +12,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../common/enums/role.enum';
+import { RequirePermission } from '../auth/permissions/require-permission.decorator';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -60,7 +59,7 @@ export class ProductsController {
   // Not isActive-filtered — a deactivated product stays visible here for
   // management and reactivation.
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:read')
   @Get('admin')
   async adminList(@Query() query: ListAdminProductsQueryDto) {
     return this.productsService.adminListProducts(
@@ -72,7 +71,7 @@ export class ProductsController {
     );
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:read')
   @Get('admin/:id')
   async adminGet(@Param('id', ParseUUIDPipe) id: string) {
     return this.productsService.adminGetProduct(id);
@@ -84,14 +83,14 @@ export class ProductsController {
     return this.productsService.getProductBySlug(slug);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreateProductDto) {
     return this.productsService.createProduct(dto);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Patch(':id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -100,7 +99,7 @@ export class ProductsController {
     return this.productsService.updateProduct(id, dto);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async remove(
@@ -114,7 +113,7 @@ export class ProductsController {
    * to it. A dedicated route rather than an `isActive` field on
    * UpdateProductDto, same reasoning as deactivation: exactly one path
    * flips this flag in either direction, both explicit. */
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Post(':id/reactivate')
   @HttpCode(HttpStatus.OK)
   async reactivate(
@@ -124,7 +123,7 @@ export class ProductsController {
     return { message: 'Product reactivated' };
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Post(':id/variants')
   @HttpCode(HttpStatus.CREATED)
   async addVariant(
@@ -134,7 +133,7 @@ export class ProductsController {
     return this.productsService.createVariant(id, dto);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Patch(':id/variants/:variantId')
   async updateVariant(
     @Param('id', ParseUUIDPipe) id: string,
@@ -151,7 +150,7 @@ export class ProductsController {
    * §29 has this module shipping the GET /products/:slug contract as the
    * dynamic-form data source). Only admin create/update live here.
    */
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Post(':id/customization-fields')
   @HttpCode(HttpStatus.CREATED)
   async addCustomizationField(
@@ -161,7 +160,7 @@ export class ProductsController {
     return this.productsService.createCustomizationField(id, dto);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Patch(':id/customization-fields/:fieldId')
   async updateCustomizationField(
     @Param('id', ParseUUIDPipe) id: string,
@@ -171,7 +170,7 @@ export class ProductsController {
     return this.productsService.updateCustomizationField(id, fieldId, dto);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Post(':id/images')
   @HttpCode(HttpStatus.CREATED)
   async addImage(
@@ -181,7 +180,7 @@ export class ProductsController {
     return this.productsService.addImage(id, dto);
   }
 
-  @Roles(Role.ADMIN)
+  @RequirePermission('products:write')
   @Delete(':id/images/:imageId')
   @HttpCode(HttpStatus.OK)
   async removeImage(

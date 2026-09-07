@@ -21,12 +21,12 @@
 | Document | PrintForge SaaS — Canonical Decision Register (`docs/saas/DECISIONS.md`) |
 | Version | 1.2 |
 | Created | 2026-09-06 |
-| Last updated | 2026-09-07 (later same day) — **D8 RESOLVED** (evidence `D8-20260907-02`); **G-16 APPROVED — AUTHORIZED**; **Phase 2b EXECUTED and reconciled**; **Phase 2 COMPLETION = `COMPLETE`**. *(Earlier the same day: recorded explicit owner decision for **D2** (RESOLVED — OPTION A). 2026-09-06 — recorded explicit owner decisions for **P2-D1…P2-D13**, **G-11, G-12, G-15, G-17, G-18, G-19** (APPROVED), **G-13 / G-14** (NOT REQUIRED for Phase 2), **D6** (DEFERRED — Phase 3 re-scope); applied the **G-18** correction to the D5 narrative fields.)* |
+| Last updated | 2026-09-07 (G-20) — **G-20 APPROVED**: the Phase 3 specification (`PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md`) is verified internally consistent with D6/D4/G-13/P3-D1/P3-D2, the Master Plan, Phase 2's completed state, and the frozen invariants (one non-blocking operational-verification caveat noted, not a contradiction). **Phase 3 START GATE = `READY`**; implementation authorized, not yet begun; this approval does **not** extend to Phase 4. *(Earlier the same day, Phase 3 decision docket: **D6, D4, P3-D2 RESOLVED**; **G-13 APPROVED — RATIFIED**; **P3-D1 RESOLVED**. Earlier still: **D8 RESOLVED**, **G-16 APPROVED — AUTHORIZED**, **Phase 2b EXECUTED**, **Phase 2 COMPLETION = `COMPLETE`**; **D2** RESOLVED — OPTION A. 2026-09-06 — **P2-D1…P2-D13**, **G-11, G-12, G-15, G-17, G-18, G-19** (APPROVED), **G-14** (NOT REQUIRED for Phase 2); **G-18** correction to D5.)* |
 | Repository | `AtharvaVavhal/PrintForge`, branch `main`, HEAD `5609fa8` |
-| Records held | 32 — D1, D2, D3, D5, D6, D8, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11…G-19 |
-| Records `RESOLVED` / `APPROVED` | **27** (D1, D2, D3, D5, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11, G-12, G-15, G-17, G-18, G-19) |
-| Records `NOT REQUIRED` (for their phase) | **2** (G-13, G-14 — see records) |
-| Records `OPEN` / `DEFERRED` | **G-16** OPEN (gated on D8; D2 resolved 2026-09-07); **D6** DEFERRED (Phase 3, re-scope approved); **D4, D7–D15** OPEN (bottom table) |
+| Records held | 36 — D1, D2, D3, D4, D5, D6, D8, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11…G-19, P3-D1, P3-D2, G-20 |
+| Records `RESOLVED` / `APPROVED` | **35** (D1, D2, D3, D4, D5, D6, D8, G-4, G-5, G-9, G-10, G-13, P2-D1…P2-D13, G-11, G-12, G-15, G-16, G-17, G-18, G-19, P3-D1, P3-D2, G-20) |
+| Records `NOT REQUIRED` (for their phase) | **1** (G-14 — see record; G-13 was ratified 2026-09-07) |
+| Records `OPEN` / `DEFERRED` | None among the 35 records held. **D7, D9–D15** remain OPEN (bottom table, not yet given a full record). |
 | Companion | `docs/saas/PHASE-0.5-DECISION-STATUS.md`; `docs/saas/PHASE-1-START-GATE-RESULT.md`; `docs/saas/PHASE-2-DECISION-CLOSURE.md`; `docs/saas/PHASE-2-START-GATE-RESULT.md`; `docs/saas/PHASE-2-DECISION-RESOLUTION-AND-SPEC.md`; `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md` |
 
 **Status vocabulary:** `OPEN` (no owner decision yet) · `RESOLVED` (decision made — for D-items)
@@ -130,6 +130,57 @@ counts in Document Control. Do not overwrite history — append.
 
 ---
 
+## D4 — Tenant isolation mechanism
+
+| Field | Content |
+|---|---|
+| **ID** | D4 |
+| **Decision (question)** | Should tenant isolation be enforced by (i) application-layer scoping only (a Prisma client extension injecting `where: { tenantId }`), (ii) Postgres Row-Level Security only, or (iii) both, app-layer primary and RLS as defense-in-depth? |
+| **Owner** | Architecture owner + Ops owner |
+| **Date** | 2026-09-07 |
+| **Status** | **RESOLVED — OPTION (iii), BOTH, app-layer primary** |
+| **Decision (approved option)** | **BOTH — application-layer scoping is the primary enforcement mechanism; PostgreSQL Row-Level Security is enabled as defense-in-depth** on the Phase 1/2a tenancy tables (`tenants`, `stores`, `store_domains`, `tenant_memberships`, `subscriptions`, `customers`), per Master Plan §9's original design intent, **now factually confirmed viable by P3-D2** (see that record) rather than merely assumed. |
+| **Rationale** | Per `PHASE-3-DECISION-DOCKET.md` item 2's recommendation, adopted following the owner's explicit instruction not to finalize D4 until P3-D2 was factually answered. **P3-D2's findings support RLS**: the production application role (`printforge_db_user`) is confirmed non-superuser and non-`BYPASSRLS` (RLS policies would actually apply to it, not be silently bypassed), and an empirical connection-topology probe found no evidence of transaction-mode connection pooling (the same backend PID persisted across multiple transactions within one client connection; a `SET LOCAL` value was correctly scoped to its own transaction and did not leak to a second, independent connection) — the two preconditions Master Plan §9 KEY RISKS/INFRASTRUCTURE IMPACT named as required before RLS could be trusted. With both preconditions holding, defense-in-depth (app-layer bug caught by RLS, RLS misconfiguration caught by app-layer) is preferred over either single mechanism alone, matching the general principle for the highest-consequence bug class in a multi-tenant system (cross-tenant data leak). |
+| **Source document / section** | `PHASE-3-DECISION-DOCKET.md` item 2; P3-D2 record (this file, immediately following); `PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md` §2, §12–§13; Master Plan §9 DATABASE/DATA IMPACT, INFRASTRUCTURE IMPACT, KEY RISKS. |
+| **Consequences** | Phase 3 ships one additive migration enabling RLS + policies on the six tenancy tables named above (enable-only, no data/enforcement change to business tables — RLS on business/commerce tables waits for Phase 4's `tenantId` backfill, per the Phase 3 spec's exclusion list). The tenant-scoped Prisma client (app-layer) remains the primary, always-on enforcement point that every domain service uses; RLS is a backstop that fires only if the app-layer path is somehow bypassed. |
+| **Affected phase(s)** | **Phase 3 (defining)** — tenant-scoped client design and the RLS-enabling migration; **Phase 4** — RLS enforcement extends to business/commerce tables once `tenantId` is backfilled onto them. |
+| **Reversibility** | RLS is reversible via `DISABLE ROW LEVEL SECURITY` / `DROP POLICY` (additive-safe, no data loss). App-layer scoping is ordinary application code, reversible like any other code change. |
+| **Explicit approval wording (recorded)** | Per instruction: *"Do NOT finalize D4 until P3-D2 has been factually answered… If the facts support RLS, resolve D4 as BOTH app-layer + RLS, with app-layer primary."* (project owner, 2026-09-07). P3-D2's facts (below) support RLS; D4 is resolved accordingly under that standing instruction — no separate, additional owner utterance chose "(iii)" by name beyond this conditional directive. |
+| **Not to be implemented until this record is `RESOLVED`** | ~~Any RLS-enabling migration; any tenant-scoped Prisma client design assuming a specific isolation mechanism.~~ **CLEARED 2026-09-07.** |
+
+### D4 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-07 | Architecture + Ops owner (project owner, Atharva) | **RESOLVED — BOTH, app-layer primary** (conditional on P3-D2, which resolved favorably) | `"Do NOT finalize D4 until P3-D2 has been factually answered… If the facts support RLS, resolve D4 as BOTH app-layer + RLS, with app-layer primary."` | `PHASE-3-DECISION-DOCKET.md` item 2; P3-D2 record |
+
+---
+
+## P3-D2 — RLS DB-role and connection-pooler compatibility (fact-finding)
+
+| Field | Content |
+|---|---|
+| **ID** | P3-D2 |
+| **Owner** | Ops owner |
+| **Date** | 2026-09-07 |
+| **Status** | **RESOLVED — FACTS FOUND, FAVORABLE TO RLS** |
+| **Decision (question)** | Is the production application database role a superuser or `BYPASSRLS`-privileged (which would make RLS policies silently inert for it), and does the actual connection path support `SET LOCAL` correctly (i.e., no transaction-mode connection pooler reassigning backend connections mid-session)? This is a fact-finding item, not a preference. |
+| **Decision (recorded)** | **Findings, from safe, non-mutating, read-only inspection of production (no configuration changed, no migration run, no RLS enabled, no data written):**<br>1. `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;` → **`rolsuper = false`, `rolbypassrls = false`** for `printforge_db_user`. The application role is **not** exempt from RLS — policies would actually be enforced against it.<br>2. Empirical pooling-mode probe: `pg_backend_pid()` returned the **identical** backend PID at connect time, inside a first transaction, immediately after `COMMIT`, and inside a second transaction within the **same** client (psql) connection — the signature of a direct connection or session-mode pooling, **not** transaction-mode pooling (which would tend to reassign a different backend per transaction).<br>3. `SET LOCAL app.probe = 'marker-abc'` was visible inside its own transaction and **correctly reverted to empty immediately after `COMMIT`** in the same session (proper transaction-scoping), and was **not visible at all** in a second, independent connection opened concurrently (`pid_second_connection` was a different PID, `setting_seen = (null)`) — no cross-connection state bleed observed.<br>4. Connection identity confirmed unchanged from prior D8 checks: `printforge_db` @ `10.28.26.163:5432` (Render-managed PostgreSQL). |
+| **Rationale** | These are exactly the two preconditions Master Plan §9 INFRASTRUCTURE IMPACT flagged as "REQUIRES DECISION-minor / ops" before RLS could be trusted as part of the isolation mechanism. Both resolved favorably from direct, safe inspection rather than being assumed. |
+| **Source document / section** | `PHASE-3-DECISION-DOCKET.md` item 5; Master Plan §9 INFRASTRUCTURE IMPACT, KEY RISKS ("RLS + pooler incompatibility"); D4 record (this file, immediately preceding), which this record's findings directly feed. |
+| **Consequences** | D4 is resolved to **BOTH** (app-layer primary + RLS) on the strength of these findings — see D4 record. **Caveat, stated for completeness, not as an unresolved blocker:** this is a point-in-time, single-connection empirical probe via `psql`, not a load test of Prisma's actual production connection-pool behavior at scale, and it does not consult Render's platform-level configuration directly (e.g., whether Render's optional "Connection Pooling" add-on is explicitly enabled for this database). No evidence of transaction-mode pooling was found by the safe tests available; if Render's platform configuration is later found to differ from what this probe observed, D4 should be revisited. |
+| **Affected phase(s)** | **Phase 3** (gates D4, and therefore the RLS-enabling migration). |
+| **Reversibility** | N/A — factual record of an inspection's findings, not a design choice. Would only be re-opened if the production connection topology changes (e.g., a pooler is added later) or if further platform-level confirmation contradicts these findings. |
+| **Explicit approval wording (recorded)** | N/A (fact-finding item; no owner preference was recorded, per instruction — "Determine, using only safe non-mutating inspection… If production inspection is not authorized or cannot be performed safely, mark P3-D2 BLOCKED rather than guessing." Inspection was authorized and performed safely; findings are recorded above rather than a guess). |
+
+### P3-D2 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-07 | Ops owner (project owner, Atharva) | **RESOLVED — facts found, favorable to RLS** | `"Determine, using only safe non-mutating inspection, whether the production database environment is compatible with the proposed RLS design… If production inspection is not authorized or cannot be performed safely, mark P3-D2 BLOCKED rather than guessing."` | `PHASE-3-DECISION-DOCKET.md` item 5; D4 record |
+
+---
+
 ## D5 — Customer identity model
 
 | Field | Content |
@@ -166,21 +217,25 @@ counts in Document Control. Do not overwrite history — append.
 | **Decision (question)** | How does a merchant-console request derive **which tenant** it is operating on (host / subdomain / an explicit `X-Active-Tenant` header that must match a membership, else 403), so that a tenant-scoped `PermissionsGuard` can select the membership whose permissions to check? |
 | **Owner** | Architecture owner + product |
 | **Date** | 2026-09-06 |
-| **Status** | **DEFERRED — Phase 3 (Phase 2 re-scoped; approved via G-17)** |
-| **Decision (approved option)** | **DEFER WITH APPROVED RE-SCOPE.** D6 is **not resolved** here. Instead, **Phase 2 is explicitly re-scoped** (G-17) so that all D6-dependent work — tenant-context derivation, the `@Roles → @RequirePermission` swap, `PermissionsGuard` activation, cross-tenant enforcement, scoped Prisma / query enforcement — is **deferred to Phase 3**. No tenant-context mechanism is chosen, invented, or implemented in Phase 2. |
-| **Rationale** | The owner explicitly directed: *"D6: DEFER WITH APPROVED RE-SCOPE. Do not invent tenant-context behavior. Do not implement tenant-context middleware. Do not implement scoped Prisma. Do not implement cross-tenant authorization."* Master Plan §8 lists D6 as a Phase 2 dependency **and** lists "permission guard live" as a Phase 2 exit criterion — not both satisfiable while D6 is OPEN. The re-scope resolves that tension by moving the permission machinery to Phase 3 (Master Plan §9), where `TenantContext` is built and which already lists *"Phase 2 (membership + permissions + Customer)"* as its input. |
-| **Source document / section** | Master Plan §8 DEPENDENCIES ("D6 (context derivation)"), §8 EXIT CRITERIA; Master Plan §9 (Phase 3 — Tenant Context & Authorization); `PHASE-0.5-DECISION-STATUS.md` (D6 "SAFE TO DEFER"); `PHASE-2-DECISION-RESOLUTION-AND-SPEC.md §A.6`; `PHASE-2-DECISION-CLOSURE.md §11, §15.2`; P2-D9 record. |
-| **Consequences** | **Phase 2:** the merchant `JwtStrategy` loads membership **facts** + `platformRole` into `AuthenticatedUser` (identity representation only — no active-tenant selection); `RolesGuard` + `@Roles(Role.ADMIN)` remain the **unchanged** live authorization mechanism for the single global admin surface. **Phase 3:** D6 is resolved (host / subdomain / `X-Active-Tenant`), `TenantContext` is built, the guard swap happens, `PermissionsGuard` goes live. **The Phase 2 START GATE gains a Phase 2a / Phase 2b split** (documented under G-17) as a consequence of this re-scope. |
-| **Affected phase(s)** | **Phase 3 (defining — D6 resolved and consumed there)**. Phase 2 is re-scoped to exclude D6-dependent work. |
-| **Reversibility** | Fully reversible — D6 is deferred, not decided. Phase 3 records the actual owner decision on the derivation mechanism. |
-| **Explicit approval wording (recorded)** | `"D6: DEFER WITH APPROVED RE-SCOPE"` → *"Phase 2 is explicitly re-scoped so D6-dependent tenant context and customer-auth activation are deferred to Phase 3/9/12 as documented."* (project owner, 2026-09-06). |
-| **Not to be implemented until this record is `RESOLVED`** | Any tenant-context middleware / interceptor; any active-tenant resolution or `X-Active-Tenant` handling; any tenant-scoped Prisma client; any `PermissionsGuard` wired to a route; any `@Roles → @RequirePermission` swap. **All of the above are Phase 3.** |
+| **Status** | **RESOLVED — BOTH mechanisms, header cross-validated** (2026-09-07) |
+| **Decision (approved option)** | **BOTH tenant-resolution mechanisms are used**: (1) host/subdomain/store-domain resolution, and (2) an explicit `X-Active-Tenant` request header. The header, when present, **must be cross-validated against the authenticated `User`'s `ACTIVE` `TenantMembership` rows** — a value that does not match an existing membership is rejected (403), never silently accepted or falled back from. **No client-supplied tenant identifier (header or otherwise) may ever be trusted by itself** — the derived value is always checked server-side against the caller's actual memberships before being used as `TenantContext.tenantId`. |
+| **Rationale** | The owner's explicit 2026-09-07 decision, matching the recommendation in `PHASE-3-DECISION-DOCKET.md` item 1: host/subdomain resolution is the long-run, spoof-resistant mechanism for the storefront path and for a future per-tenant admin-subdomain topology, but the current merchant console has no per-tenant host routing built yet, so a `User` holding more than one `TenantMembership` needs an explicit selector *today*. Using both, with the header always cross-checked, gets the immediate multi-membership capability without weakening the invariant that context is server-derived, not client-asserted (Master Plan §9 SECURITY IMPACT). |
+| **Source document / section** | `PHASE-3-DECISION-DOCKET.md` item 1; `PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md` §4, §9; Master Plan §9 BACKEND IMPACT ("`TenantContext` resolution"), KEY RISKS ("Context derivation spoof"); original D6 question wording (this record, "host / subdomain / an explicit `X-Active-Tenant` header"). |
+| **Consequences** | Phase 3's `TenantContext` merchant-path resolver: (a) attempts host/subdomain resolution first (`StoreDomain`/subdomain lookup, once such routing exists for the admin console); (b) reads `X-Active-Tenant` if present and cross-validates it against `AuthenticatedUser.memberships` — mismatch → 403; (c) with no header and no host-resolvable tenant, falls back to **no implicit default** (a `User` with exactly one membership may reasonably auto-select it as a convenience, but this is an implementation detail for the Phase 3 spec/PR, not a security relaxation — a `User` with zero or multiple memberships and no explicit selector gets no tenant context, not a guess). **Final, full domain-based (Host → `StoreDomain` → `Store` → `Tenant`) resolution for the admin/merchant console specifically is completed in Phase 9** (storefront domain resolution) — Phase 3 ships the mechanism and the header path now; the merchant-console host-routing half matures as admin subdomains are built. |
+| **Affected phase(s)** | **Phase 3 (defining — implements both paths)**; **Phase 9** (full Domain → Store → Tenant runtime resolution, of which the merchant-console host half is completed there). |
+| **Reversibility** | The header-based path can be deprecated later without a data migration once host-based routing fully covers the merchant console — purely a code/config change, no schema impact. |
+| **Explicit approval wording (recorded)** | `"Use BOTH tenant-resolution mechanisms: host/subdomain/store-domain resolution, and an explicit X-Active-Tenant header. The header must be cross-validated against the authenticated user's active tenant memberships. No client-supplied tenant identifier may be trusted by itself."` (project owner, 2026-09-07). |
+| **Alternatives rejected** | **Host/subdomain only** — rejected because the current admin console has no per-tenant host routing built, which would leave any `User` with more than one `TenantMembership` unable to select a non-default tenant until Phase 5's platform/console work lands; unworkable as a sole mechanism today. **Header only** — rejected because it gives up the more spoof-resistant, DNS-anchored host signal for tenants that eventually get dedicated admin subdomains, deferring rather than avoiding a second design pass. |
+| **Security implications** | The header is explicitly a **hint only** — every resolution path ends in a server-side cross-check against the caller's actual `ACTIVE` memberships; a mismatch is a 403, verified by a dedicated e2e negative test (`PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md` §14). This directly closes the spoof risk Master Plan §9 KEY RISKS names ("attacker sets `X-Active-Tenant` to another tenant"). |
+| **Backward-compatibility implications** | No token or session shape changes — Phase 2a already loads `memberships` onto every request's `AuthenticatedUser`; this decision only defines how one of those memberships becomes "active" per request. No re-login, no `tokenVersion` bump, no migration. |
+| **Not to be implemented until this record is `RESOLVED`** | ~~Any tenant-context middleware / interceptor; any active-tenant resolution or `X-Active-Tenant` handling; any tenant-scoped Prisma client; any `PermissionsGuard` wired to a route; any `@Roles → @RequirePermission` swap.~~ **CLEARED 2026-09-07 — implementation may proceed once the Phase 3 start gate (G-20-equivalent spec approval) is otherwise satisfied; no code has been written under this record.** |
 
 ### D6 — Decision Log
 
 | Date | Owner | Choice | Approval wording (verbatim) | Reference |
 |---|---|---|---|---|
 | 2026-09-06 | Architecture owner + product (project owner) | **DEFER WITH APPROVED RE-SCOPE** | `"D6: DEFER WITH APPROVED RE-SCOPE"`; `"G-17: APPROVE — Phase 2 is explicitly re-scoped so D6-dependent tenant context and customer-auth activation are deferred to Phase 3/9/12 as documented."` | `PHASE-2-DECISION-CLOSURE.md §11`; Master Plan §9; P2-D9 / G-17 records |
+| 2026-09-07 | Architecture owner + product (project owner, Atharva) | **RESOLVED — BOTH, header cross-validated** | `"Use BOTH tenant-resolution mechanisms: host/subdomain/store-domain resolution, and an explicit X-Active-Tenant header. The header must be cross-validated against the authenticated user's active tenant memberships. No client-supplied tenant identifier may be trusted by itself."` | `PHASE-3-DECISION-DOCKET.md` item 1 |
 
 ---
 
@@ -706,21 +761,24 @@ counts in Document Control. Do not overwrite history — append.
 | **ID** | G-13 |
 | **Owner** | Architecture owner + security owner |
 | **Date** | 2026-09-06 |
-| **Status** | **NOT REQUIRED FOR PHASE 2** |
-| **Decision (question)** | Ratify the permission catalogue (strings + `TenantRole → Set<Permission>` map) for Phase 2? |
-| **Decision (recorded)** | **NOT REQUIRED FOR PHASE 2** — permission-catalogue authoring, ratification, and `PermissionsGuard` activation belong to **Phase 3** (per P2-D9). The **representation** choice (typed constant) is recorded in P2-D8. A G-13-equivalent ratification of the exact permission strings will be required **at the start of Phase 3**. |
-| **Rationale** | Owner's explicit direction: *"G-13: NOT REQUIRED FOR PHASE 2 — permission catalogue activation belongs to Phase 3."* Full tenant-aware enforcement depends on D6 / Phase 3. |
-| **Source document / section** | P2-D8, P2-D9 records; Master Plan §9; `PHASE-2-DECISION-CLOSURE.md §11, §16`. |
-| **Consequences** | Phase 2 does not author `src/auth/permissions/` (AC-P2-25). Phase 3 authors + ratifies + activates the catalogue. |
-| **Affected phase(s)** | **Phase 3.** |
-| **Reversibility** | N/A. |
-| **Explicit approval wording (recorded)** | `"G-13: NOT REQUIRED FOR PHASE 2 — permission catalogue activation belongs to Phase 3"` (project owner, 2026-09-06). |
+| **Status** | **APPROVED — RATIFIED** (2026-09-07) |
+| **Decision (question)** | Ratify the permission catalogue (strings + `TenantRole → Set<Permission>` map) for Phase 3? |
+| **Decision (approved option)** | **RATIFIED**, provided (and confirmed) internally consistent with the existing `TenantRole` enum (`OWNER`, `ADMIN`, `STAFF`, `VIEWER` — frozen, Phase 2a) and with the current backend's actual protected surface (`admin.controller.ts`, `products.controller.ts`, `products/categories/categories.controller.ts` — read directly from the tree, not assumed). Representation remains the typed constant frozen by P2-D8; this record ratifies the *contents*. <br><br>**Permission catalogue (13 strings):** `dashboard:read`, `orders:read`, `orders:transition`, `customers:read`, `reviews:moderate`, `coupons:read`, `coupons:write`, `settings:read`, `settings:write`, `products:read`, `products:write`, `members:manage` *(reserved — no current route uses it; anticipates a future team-management surface)*, `payment-account:manage` *(reserved — no current route uses it; anticipates Phase 8)`.<br><br>**Role → Permission map:**<br>• `OWNER` — all 13 permissions.<br>• `ADMIN` — all except `members:manage` and `payment-account:manage` (11 permissions) — team composition and payment-account linkage are reserved to `OWNER` as the two most sensitive, ownership-adjacent actions.<br>• `STAFF` — `dashboard:read`, `orders:read`, `orders:transition`, `customers:read`, `reviews:moderate`, `coupons:read`, `settings:read`, `products:read`, `products:write` (9 permissions) — every read, plus the two operational-write actions (fulfilling orders, managing the catalogue); excludes `coupons:write` and `settings:write` (direct revenue/configuration impact) and both `OWNER`-reserved permissions.<br>• `VIEWER` — every `:read` permission and no other (`dashboard:read`, `orders:read`, `customers:read`, `coupons:read`, `settings:read`, `products:read` — 6 permissions) — strictly read-only.<br>• `SUPER_ADMIN` (`PlatformRole`, not `TenantRole`) — **deliberately absent from this map.** A platform super-admin has no entry and therefore no tenant permission through `PermissionsGuard` under any circumstance, preserving frozen invariant 4 (`PlatformGuard` and `PermissionsGuard` stay fully independent; a `SUPER_ADMIN` with no `TenantMembership` passes the former and fails the latter). |
+| **Concrete swap mapping (informative — binds §8 of the Phase 3 spec, not a separate decision)** | `admin.controller.ts` (currently one controller-level `@Roles(Role.ADMIN)`, becomes 14 per-method `@RequirePermission(...)`): `GET orders` / `GET orders/:id` / `GET orders/:id/invoice` → `orders:read`; `PATCH orders/:id/status` → `orders:transition`; `GET dashboard` → `dashboard:read`; `GET customers` / `GET customers/:id` → `customers:read`; `PATCH reviews/:id/status` → `reviews:moderate`; `GET coupons` / `GET coupons/:id` → `coupons:read`; `POST coupons` / `PATCH coupons/:id` → `coupons:write`; `GET settings` → `settings:read`; `PATCH settings/:key` → `settings:write`. `products.controller.ts` (12 sites — corrected during Phase 3 implementation from this record's original count of 8, which omitted `updateVariant` and `removeImage`; the categorization is unchanged, both are `products:write` like their siblings): admin list + admin get-by-id → `products:read`; create/update/deactivate/reactivate/create-variant/update-variant/customization-field create+update/add-image/remove-image → `products:write`. `categories.controller.ts` (5 sites, unchanged): admin list → `products:read`; create/update/delete/reactivate → `products:write`. |
+| **Rejection of the legacy `@Roles`/`RolesGuard` model as the long-term mechanism** | `@Roles(Role.ADMIN)` + `RolesGuard` is a flat, single-tenant, two-value (`CUSTOMER`/`ADMIN`) role check with **no** tenant awareness and **no** distinction between different admin actions (today, e.g., viewing the dashboard and deleting a coupon require exactly the same check). This is explicitly rejected as the long-term authorization mechanism: it cannot express `STAFF`/`VIEWER`'s narrower grants, cannot select which `TenantMembership` a check applies to, and does not scale past a single global admin surface. `PermissionsGuard` + this ratified catalogue replaces it permanently — `RolesGuard`, `@Roles`, and `ROLES_KEY` are removed (not left running in parallel) once the swap lands. |
+| **Rationale** | Owner's explicit instruction: ratify the docket's proposed catalogue "provided it is internally consistent with the existing platform/tenant role model and Phase 3 implementation scope." Consistency was verified against the actual `TenantRole` enum values and the actual current controller routes (both read directly from the repository for this ratification, not assumed from documentation) before being recorded here. |
+| **Source document / section** | `PHASE-3-DECISION-DOCKET.md` item 3; P2-D8 (representation, frozen); P2-D9 (this phase's mandate); Master Plan §8 BACKEND IMPACT ("Permission model"), KEY RISKS ("privilege escalation via the role→permission map"); current tree: `backend/src/admin/admin.controller.ts`, `backend/src/products/products.controller.ts`, `backend/src/products/categories/categories.controller.ts`, `backend/prisma/migrations/20260905191258_add_saas_foundation/migration.sql` (`TenantRole` enum). |
+| **Consequences** | Phase 3 authors `backend/src/auth/permissions/` implementing exactly this catalogue and map (a pure, unit-testable `can()` function plus the typed constants — spec §17 step 3), then performs the mechanical swap (spec §8, §17 step 9) using the concrete mapping above, then activates `PermissionsGuard` globally and removes `RolesGuard`. Any *future* permission addition or role-mapping change should go through the same ratification discipline as this record (a lightweight repeat of this process), not be added ad hoc in a feature PR. |
+| **Affected phase(s)** | **Phase 3 (authoring + swap + activation).** `members:manage` is consumed when a team-management UI/route is built (likely Phase 5); `payment-account:manage` when payment-account linkage is built (Phase 8) — both permissions exist in the catalogue now so that work does not require reopening this ratification. |
+| **Reversibility** | Reversible — the typed constant can be revised; adding a 14th permission or renaming one is a code change + test update, not a migration. Removing a permission a route already depends on would need the corresponding route updated in the same change. |
+| **Explicit approval wording (recorded)** | `"Ratify the permission-string catalogue and role→permission mapping contained in the Phase 3 docket, provided it is internally consistent with the existing platform/tenant role model and Phase 3 implementation scope."` (project owner, 2026-09-07). Consistency confirmed as described above; catalogue ratified as recorded in this entry (expanded from the docket's illustrative sketch into the exact, complete set above, grounded in the current controller routes). |
 
 ### G-13 — Decision Log
 
 | Date | Owner | Choice | Approval wording (verbatim) | Reference |
 |---|---|---|---|---|
 | 2026-09-06 | Architecture + security owner (project owner) | **NOT REQUIRED FOR PHASE 2** | `"G-13: NOT REQUIRED FOR PHASE 2 — permission catalogue activation belongs to Phase 3"` | P2-D9 |
+| 2026-09-07 | Architecture + security owner (project owner, Atharva) | **APPROVED — RATIFIED** | `"Ratify the permission-string catalogue and role→permission mapping contained in the Phase 3 docket, provided it is internally consistent with the existing platform/tenant role model and Phase 3 implementation scope."` | `PHASE-3-DECISION-DOCKET.md` item 3; this record's catalogue/map |
 
 ---
 
@@ -809,7 +867,7 @@ counts in Document Control. Do not overwrite history — append.
 | **Date** | 2026-09-06 |
 | **Status** | **APPROVED — RE-SCOPE** |
 | **Decision (question)** | Resolve D6 now (guard swap stays in Phase 2), or formally re-scope Phase 2 to move the D6-dependent work (tenant-context, `@Roles → @RequirePermission` swap, `PermissionsGuard` activation) to Phase 3? |
-| **Decision (approved option)** | **APPROVE — Phase 2 is explicitly re-scoped so D6-dependent tenant context and customer-auth activation are deferred to Phase 3 / 9 / 12 as documented.** D6 is **DEFERRED** (see the D6 record), not resolved. |
+| **Decision (approved option)** | **APPROVE — Phase 2 is explicitly re-scoped so D6-dependent tenant context and customer-auth activation are deferred to Phase 3 / 9 / 12 as documented.** At the time of this record, D6 was **DEFERRED**, not resolved. *(D6 was subsequently resolved 2026-09-07 — see the D6 record; this G-17 record's own re-scope decision is historical and unchanged.)* |
 | **Rationale** | Owner's explicit approval. Master Plan §8 lists D6 as a Phase 2 dependency **and** "permission guard live" as a Phase 2 exit criterion — not both satisfiable while D6 is OPEN. The re-scope resolves the tension by moving the permission machinery to Phase 3 (Master Plan §9), which already lists "Phase 2 (membership + permissions + Customer)" as its input. |
 | **Source document / section** | Master Plan §8 DEPENDENCIES/EXIT CRITERIA; Master Plan §9; D6, P2-D9 records; `PHASE-2-DECISION-RESOLUTION-AND-SPEC.md §A.6`; `PHASE-2-DECISION-CLOSURE.md §11, §15.2, §20`. |
 | **Consequences — including the START-GATE definition change** | Per the owner's instruction (*"If the existing gate rules require changing the gate definition to support this approved Phase 2A / Phase 2B split, document that explicitly as part of the approved G-17 re-scope. Do not silently weaken the gate."*), the **Phase 2 START GATE is redefined to three checkpoints**: **(1) Phase 2a START** — the additive identity/schema foundation; gated on G-11, G-12, G-15 (design), G-17, G-18, G-19 and P2-D1…P2-D13 recorded (**does not** require D2/D6/D8). **(2) Phase 2b START** — the production identity backfill; additionally gated on **D2 answered + D8 verified restore artifact + G-16**. **(3) Phase 2 COMPLETION** — Phase 2a done + Phase 2b done + reconciliation (Master Plan §8 EXIT CRITERIA). This is **not** a weakening: every original mandatory item still gates the stage it belongs to; the split only makes explicit that additive work does not wait on production-data access. |
@@ -875,6 +933,68 @@ counts in Document Control. Do not overwrite history — append.
 
 ---
 
+# Phase 3 Decision Records (recorded 2026-09-07)
+
+*(D6 was resolved by updating its existing record in place, above — deferred decisions keep
+their original ID and location rather than being re-recorded here. D4 and P3-D2 were likewise
+placed near D3/D5 above, matching the existing D-number ordering; G-13 was updated in place
+above. Only genuinely new IDs with no natural prior slot are recorded in this section.)*
+
+## P3-D1 — Rollout / advisory-flag location
+
+| Field | Content |
+|---|---|
+| **ID** | P3-D1 |
+| **Owner** | Architecture owner + Ops owner |
+| **Date** | 2026-09-07 |
+| **Status** | **RESOLVED — ENVIRONMENT VARIABLE** |
+| **Decision (question)** | Where does each module's `TENANT_ENFORCEMENT[module] = 'advisory' \| 'enforced'` rollout state live: a code constant, an environment variable, or a DB-backed/feature-flag-service config? |
+| **Decision (approved option)** | **Environment variable, one per module, read through the existing `ConfigService<AppConfig, true>` pattern** already used throughout `backend/src/common/config/` — e.g. `TENANT_ENFORCEMENT_ORDERS`, `TENANT_ENFORCEMENT_PRODUCTS`, `TENANT_ENFORCEMENT_PAYMENTS`, one var per domain module listed in the Phase 3 spec §11 affected-services list. Each is validated/typed the same way other `AppConfig` fields are (matches the existing `configuration.ts` idiom — no new configuration subsystem introduced). |
+| **Rationale** | Owner's explicit decision, matching the docket's recommendation. This is a security-relevant but infrequently-changed setting (the rollout plan is "≥1 week advisory observation, then flip" — Master Plan §9), so a full runtime feature-flag service is disproportionate machinery for what Phase 4 is expected to retire once every module reaches `enforced` permanently. A code constant would falsify the "flip back without a deploy" rollback property (spec §16); an env var supports a restart-only rollback without introducing new infrastructure. |
+| **Source document / section** | `PHASE-3-DECISION-DOCKET.md` item 4; `PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md` §2, §16; existing `backend/src/common/config/configuration.ts` pattern. |
+| **Default behavior** | **Every module defaults to `advisory` when its environment variable is unset or unrecognized** — a missing or misconfigured variable must fail toward "logs a breadcrumb, does not throw," never toward "enforces unexpectedly" or "throws in production." This mirrors the existing `AppConfig` fail-safe conventions already in use elsewhere in the codebase. |
+| **Consequences** | Each module-migration PR (Phase 3 spec §17 step 7, §19 item 4) reads its own env var through `ConfigService`; flipping a module to `enforced` in any environment is an ops action (set the var, restart) requiring no code change or redeploy. A single optional global kill-switch (e.g. `TENANT_ENFORCEMENT_GLOBAL_OVERRIDE=advisory`) may additionally be implemented as a Phase 3 implementation detail for emergency rollback, at the implementer's discretion — not itself a separate decision. |
+| **Affected phase(s)** | **Phase 3** (defining); **Phase 4** (expected to retire the flag entirely once every module is permanently `enforced`). |
+| **Reversibility** | Fully reversible — this is operational configuration, not schema or data. |
+| **Explicit approval wording (recorded)** | `"Use an environment variable for the Phase 3 advisory/enforced rollout flag, accessed through the existing ConfigService pattern."` (project owner, 2026-09-07). |
+
+### P3-D1 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-07 | Architecture + Ops owner (project owner, Atharva) | **RESOLVED — environment variable via `ConfigService`** | `"Use an environment variable for the Phase 3 advisory/enforced rollout flag, accessed through the existing ConfigService pattern."` | `PHASE-3-DECISION-DOCKET.md` item 4 |
+
+---
+
+## G-20 — Phase 3 specification approval
+
+| Field | Content |
+|---|---|
+| **ID** | G-20 |
+| **Owner** | Project & Architecture Owner |
+| **Date** | 2026-09-07 |
+| **Status** | **APPROVED** |
+| **Decision (question)** | Does the Project & Architecture Owner approve `PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md` as the contract for Phase 3 implementation, now that its five decision-docket dependencies (D6, D4, G-13, P3-D1, P3-D2) are resolved? |
+| **Decision (approved option)** | **APPROVE.** `docs/saas/PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md` (all 19 sections) is accepted as the Phase 3 implementation contract, checked for internal consistency against the resolved decisions, the Master Plan, Phase 2's completed state, the existing RBAC/auth code, the frozen architecture invariants, the Phase 4 boundary, and the RLS/production facts — see the verification notes below. |
+| **Verification performed (not a re-litigation of D6/D4/G-13/P3-D1/P3-D2 — checking the spec against them)** | (1) Spec §4's merchant-path resolver ("whatever D6 resolves… host/subdomain, `X-Active-Tenant` header, or both") and its "client-supplied tenant identifier is only a hint" rule match D6's resolved text verbatim. (2) Spec §12–§13's RLS scope ("`tenants`, `stores`, `store_domains`, `tenant_memberships`, `subscriptions`, `customers`") matches D4's resolved scope exactly — no business/commerce table included, consistent with the Phase 4 boundary (§15). (3) Spec §6–§8's permission-model design (typed constant, `can()`, deny-by-default, mechanical `@Roles`→`@RequirePermission` swap) matches G-13's ratified 13-permission catalogue and role map; the swap's site count grows from the current 14 `@Roles` decorator instances to 27 `@RequirePermission` sites because `admin.controller.ts`'s single controller-level decorator is deliberately replaced by 14 per-method ones — an intentional, explained granularity increase (the entire point of the permission model), not a discrepancy. (4) Spec §7's "`PermissionsGuard` independent of `PlatformGuard`, never both on one handler" and G-13's "`SUPER_ADMIN` deliberately absent from the map" both preserve frozen invariant 4. (5) Spec §16's "rollback without a redeploy" claim and P3-D1's "restart, not redeploy" both rest on an operational assumption about this project's Render deployment behavior for a routine env-var value change; **this project's own `DEPLOYMENT.md` was checked and found to document a redeploy only for a distinct, unrelated scenario (a *missing* required variable causing a boot-time crash), not for changing an already-present optional variable's value** — so no *documented* contradiction exists, but this specific operational assumption has not been empirically verified against the actual Render service configuration. **Noted as a follow-up verification item for the implementer, not a blocking inconsistency**: confirm, before relying on it for an incident-response rollback, whether flipping a `TENANT_ENFORCEMENT_*` env var on this project's Render service triggers a mere restart or a full redeploy. (6) Spec §15's Phase 4 exclusion list (no `customerId`/`tenantId`/`storeId` columns, no FK re-pointing, no `User.role` drop, no RLS enforcement on business tables) was checked against Phase 2's actual completed state (`PHASE-2B-IMPLEMENTATION-REPORT.md`) and found consistent — Phase 2b touched only `plans`/`tenants`/`stores`/`subscriptions`/`tenant_memberships`/`customers`, exactly the tables Phase 3's RLS scope also targets, and none of the excluded commerce-table work. No genuine contradiction was found. |
+| **Rationale** | The owner's explicit request to perform this gate now that the decision docket is closed. Master Plan §9 and the resolved decisions were cross-checked directly (not assumed) against the spec's text before approval, per the standing instruction not to rubber-stamp. |
+| **Source document / section** | `docs/saas/PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md` (full document); `docs/saas/PHASE-3-DECISION-DOCKET.md`; D6, D4, G-13, P3-D1, P3-D2 records (this file); Master Plan §8–§9; `PHASE-2B-IMPLEMENTATION-REPORT.md`. |
+| **Scope approved** | Everything in spec §1 ("Exact Phase 3 scope"): `TenantContext` (3 resolution paths), the tenant-scoped Prisma client, object-level authorization helpers, the ratified permission catalogue + `PermissionsGuard` + `@RequirePermission`, the mechanical guard swap (removing `RolesGuard`), `tenant-isolation.e2e-spec.ts` and all named negative tests, the per-module advisory/enforced rollout (env-var based, per P3-D1), and the RLS-enabling migration on the six named tenancy tables (per D4/P3-D2). |
+| **Explicit exclusions (binding, per spec §15)** | No column on any of the ~20 existing commerce tables; no FK re-pointing; no `User.role` drop or data change; no deactivation of shopper `User` rows; no RLS enforcement on business/commerce tables; no per-tenant revenue/row-count reconciliation baseline; no customer-auth routes/`CustomerRefreshToken` (P2-D7, Phase 9/12); no platform-console routes (Phase 5); no frontend Domain→Store→Tenant runtime resolution beyond the query-key-namespacing groundwork (full sweep is Phase 12). |
+| **Consequences** | **Phase 3 implementation is now authorized to begin**, following the commit boundaries and implementation order in spec §17/§19. **This approval does NOT authorize Phase 4 work** — Phase 4 has its own separate, still-open gates (D7, D9–D15 remain `OPEN`) and its own start-gate process, not triggered by this record. |
+| **Affected phase(s)** | **Phase 3 (defining — implementation may now begin).** |
+| **Reversibility** | A spec revision can be re-approved via a recorded change, the same as G-4/G-11 for prior phases. |
+| **Explicit approval wording (recorded)** | Owner's request to "perform the formal Phase 3 specification approval gate (G-20)" with the specification found internally consistent as verified above (project owner, 2026-09-07). |
+| **Not to be implemented until this record is `APPROVED`** | ~~Any Phase 3 source file, `TenantContext`, scoped Prisma client, `PermissionsGuard`, `@RequirePermission` decorator, RLS migration, or `@Roles` removal.~~ **CLEARED 2026-09-07 — implementation authorized. No implementation has been performed under this record; that is separate, future work.** |
+
+### G-20 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-07 | Project & Architecture Owner (Atharva) | **APPROVED** | Request to perform the G-20 gate; specification verified internally consistent (one non-blocking operational-verification caveat noted, §"Verification performed" above) | `PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md`; D6, D4, G-13, P3-D1, P3-D2 records |
+
+---
+
 ## Summary Table
 
 | ID | Topic | Owner | Status | Blocks |
@@ -883,7 +1003,8 @@ counts in Document Control. Do not overwrite history — append.
 | **D2** | Does the deployed DB hold real production data? | Ops owner | **RESOLVED — OPTION A (real production data)** | Phase 2b execution — complete (D8 + G-16 both satisfied); Phase 4 execution remains gated on Phase 4's own separate gates |
 | **D3** | Existing deployment → Tenant #1 (A) vs not adopted (B) | Business owner | **RESOLVED — OPTION A** | ~~Phase 1~~ *(cleared)* + **Phase 4 (defining; gated on D2)** + **Phase 2b backfill** |
 | **D5** | Customer identity: separate `Customer` (a) vs global `User` + profile (b) | Product + architecture owner | **RESOLVED — OPTION (a)** *(narrative corrected via G-18)* | ~~Phase 1~~ *(cleared)* + **Phase 2 (`Customer` model)** + **Phase 4 (`customerId` columns)** |
-| **D6** | Tenant-context derivation for merchant console | Architecture owner + product | **DEFERRED — Phase 3 (re-scope approved, G-17)** | **Phase 3** |
+| **D4** | Tenant isolation mechanism (app-layer / RLS / both) | Architecture + Ops owner | **RESOLVED — BOTH, app-layer primary** (2026-09-07, per P3-D2) | Phase 3 (RLS-enabling migration + scoped-client design) |
+| **D6** | Tenant-context derivation for merchant console | Architecture owner + product | **RESOLVED — BOTH mechanisms, header cross-validated** (2026-09-07) | Phase 3 (`TenantContext` merchant path) |
 | **D8** | Verified production backup/restore drill | Ops owner | **RESOLVED** (2026-09-07, evidence `D8-20260907-02`) | Phase 2b execution precondition — cleared, backfill executed; Phase 4's own D8 precondition also cleared (Phase 4's other gates unaffected) |
 | **G-4** | Approve Phase 1 spec §B.2–B.8 | Architecture owner | **APPROVED** | ~~Phase 1~~ *(cleared)* |
 | **G-5** | Ratify Phase 1 enum value sets | Architecture owner | **APPROVED** | ~~Phase 1 migration `CREATE TYPE`s~~ *(cleared)* |
@@ -904,18 +1025,28 @@ counts in Document Control. Do not overwrite history — append.
 | **P2-D13** | Customer token signing secret | Security owner + ops | **RESOLVED — distinct secret (design); provisioning Phase 9/12** | Phase 9/12 |
 | **G-11** | Approve Phase 2 specification | Architecture owner | **APPROVED** | Phase 2a START |
 | **G-12** | Ratify `PlatformRole` | Architecture owner | **APPROVED** | Phase 2a START |
-| **G-13** | Ratify permission catalogue | Architecture + security owner | **NOT REQUIRED FOR PHASE 2** (→ Phase 3) | Phase 3 START |
+| **G-13** | Ratify permission catalogue | Architecture + security owner | **APPROVED — RATIFIED** (2026-09-07, 13-permission catalogue + role map) | Phase 3 (catalogue authoring + swap) |
 | **G-14** | Customer-auth store-resolution mechanism | Architecture + product owner | **NOT REQUIRED FOR PHASE 2** (P2-D7 re-scope) | Phase 9/12 |
 | **G-15** | Customer token signing secret | Security owner + ops | **APPROVED (design)**; provisioning Phase 9/12 | Phase 9/12 |
 | **G-16** | Phase 2b backfill authorization | Ops owner | **APPROVED — AUTHORIZED (2026-09-07)** | **Phase 2b START** (unblocked); Phase 2 completion pending backfill reconciliation |
 | **G-17** | D6 resolution / Phase 2 re-scope | Architecture + product owner | **APPROVED — RE-SCOPE** (3-checkpoint gate) | Phase 2a START |
 | **G-18** | D5 narrative-wording correction | Architecture owner | **APPROVED — applied** | (governance hygiene) |
 | **G-19** | G-10 guard for additive `ADD COLUMN` | Architecture owner | **APPROVED (no weakening)** | Phase 2a START |
+| **P3-D1** | Rollout/advisory-flag location | Architecture + Ops owner | **RESOLVED — environment variable via `ConfigService`** | Phase 3 module-migration PRs |
+| **P3-D2** | RLS DB-role and pooler compatibility (fact-finding) | Ops owner | **RESOLVED — facts found, favorable to RLS** (2026-09-07) | Feeds D4 |
+| **G-20** | Approve Phase 3 specification | Project & Architecture Owner | **APPROVED** (2026-09-07) | Phase 3 implementation START |
 
 **Phase 2a START GATE: `READY`** (see `docs/saas/PHASE-2-START-GATE-RESULT.md`).
 **Phase 2b START GATE: `CLEARED`** — D2 **RESOLVED**, D8 **RESOLVED** (evidence `D8-20260907-02`), **G-16 APPROVED — AUTHORIZED (2026-09-07)**.
 **Phase 2b: EXECUTED** (2026-09-07) — see `docs/saas/PHASE-2B-IMPLEMENTATION-REPORT.md` for the full backfill/reconciliation evidence.
 **Phase 2 COMPLETION: `COMPLETE`** (2026-09-07) — Phase 2a (additive schema) + Phase 2b (identity backfill, reconciled) both done.
+
+**Phase 3 decision docket: `RESOLVED`** (2026-09-07) — D6, D4, G-13, P3-D1, P3-D2 all recorded
+above. **G-20 (Phase 3 specification approval): `APPROVED`** (2026-09-07). **Phase 3 START
+GATE: `READY`** — implementation is authorized to begin per the G-20 record's scope and
+exclusions. **No Phase 3 implementation has occurred** — no source file, schema, or migration
+has been touched under any record in this section; this approval does **not** extend to
+Phase 4, which retains its own separate, still-open gates (D7, D9–D15).
 
 ---
 
@@ -926,7 +1057,6 @@ supplied** for these, so they remain `OPEN`:
 
 | ID | Topic | Status | Note |
 |---|---|:-:|---|
-| **D4** | Isolation mechanism (app-layer / RLS / both) | **OPEN** | Doc-level classification "both"; **not owner-ratified**. Gates Phase 3. |
 | **D7** | `WebhookEvent` split | **OPEN** | Gates Phase 7/8. |
 | **D9** | Merchant payment-credential storage | **OPEN** | Gates Phase 8. |
 | **D10** | Per-tenant order/invoice numbering + statutory format | **OPEN** | `REQUIRES LEGAL DECISION`. Gates Phase 4 (W4). |
@@ -936,13 +1066,17 @@ supplied** for these, so they remain `OPEN`:
 | **D14** | SaaS billing provider | **OPEN** | `REQUIRES PROVIDER DECISION`. Gates Phase 7. |
 | **D15** | Queue technology | **OPEN** | Gates Phase 11 (governed by D1). |
 
-*(D6 has moved OUT of this table — it now has a full record above, status DEFERRED — Phase 3.)*
+*(D6 has moved OUT of this table — it now has a full record above, status RESOLVED — BOTH
+mechanisms, header cross-validated, 2026-09-07.)*
 
 *(D2 has moved OUT of this table — it now has a full record above, status RESOLVED — OPTION A,
 2026-09-07.)*
 
 *(D8 has moved OUT of this table — it now has a full record above, status RESOLVED, 2026-09-07,
 evidence `D8-20260907-02`.)*
+
+*(D4 has moved OUT of this table — it now has a full record above, status RESOLVED — BOTH,
+app-layer primary, 2026-09-07, per P3-D2's favorable findings.)*
 
 When owners record decisions for any of these, add a full record above using the same template.
 
@@ -988,3 +1122,27 @@ verified unchanged before/after. One anomaly was recorded, not auto-resolved: 4 
 users have prior order history ("admin-who-also-shopped") — expected per spec, no `User` row
 touched. Full evidence: `docs/saas/PHASE-2B-IMPLEMENTATION-REPORT.md`. **Phase 2b START GATE:
 `CLEARED`. Phase 2 COMPLETION: `COMPLETE`.***
+
+*Updated 2026-09-07 (Phase 3 decision docket): **D6 RESOLVED** — both tenant-resolution
+mechanisms (host/subdomain + `X-Active-Tenant` header, header always cross-validated against
+the caller's `ACTIVE` memberships, never trusted alone); final Domain→Store→Tenant runtime
+resolution for the merchant console completes in Phase 9. **D4 RESOLVED** — both app-layer
+scoping (primary) and Postgres RLS (defense-in-depth) on the Phase 1/2a tenancy tables, made
+possible by **P3-D2's** favorable fact-finding: safe, read-only inspection of production found
+the application role (`printforge_db_user`) is non-superuser and non-`BYPASSRLS`, and an
+empirical probe (stable `pg_backend_pid()` across transactions within one connection; a
+`SET LOCAL` value correctly transaction-scoped and not visible from a second, independent
+connection) found no evidence of transaction-mode connection pooling. No production
+configuration was changed, no role was altered, no RLS was enabled, and no data was written in
+the course of this inspection. **G-13 APPROVED — RATIFIED** — a 13-permission catalogue and
+`TenantRole → Set<Permission>` map, grounded in the actual current `admin.controller.ts` /
+`products.controller.ts` / `categories.controller.ts` routes (not invented), with `OWNER` and
+`ADMIN` differing only by two reserved, ownership-adjacent permissions
+(`members:manage`, `payment-account:manage`), and `SUPER_ADMIN` deliberately holding no entry
+in the map at all (frozen invariant 4 preserved). **P3-D1 RESOLVED** — the advisory/enforced
+rollout flag is an environment variable per module, read via the existing `ConfigService`
+pattern, defaulting to `advisory` when unset. **The Phase 3 decision docket is now closed.**
+**No Phase 3 implementation has occurred** — no source file, `schema.prisma` change, migration,
+or production write was made under any of these five records; a `G-20`-equivalent formal
+"approve the Phase 3 specification" gate has not yet been recorded, so the **Phase 3 START GATE
+is `NOT YET FORMALLY OPENED`** even though its decision prerequisites are now satisfied.*

@@ -10,8 +10,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../common/enums/role.enum';
+import { RequirePermission } from '../auth/permissions/require-permission.decorator';
 import { OrdersService } from '../orders/orders.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { UpdateReviewStatusDto } from '../reviews/dto/update-review-status.dto';
@@ -46,10 +45,17 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
  * AdminService's own logic, per the admin.module.ts dependency-graph note.
  *
  * Route guards are UX-only on the frontend — every route here independently
- * enforces the role check server-side via RolesGuard (§18).
+ * enforces its own permission check server-side via `PermissionsGuard`
+ * (Phase 3; decisions P2-D9, G-13, G-20, docs/saas/DECISIONS.md). Prior to
+ * Phase 3 this whole controller carried one controller-level
+ * `@Roles(Role.ADMIN)`; the ratified permission catalogue (G-13)
+ * distinguishes actions this controller previously treated identically
+ * (e.g. viewing the dashboard vs. writing a coupon), so the single
+ * decorator is replaced by one `@RequirePermission(...)` per route below —
+ * an intentional, ratified granularity increase, not a functional change
+ * to what an `OWNER`/`ADMIN` membership can already do.
  */
 @Controller('admin')
-@Roles(Role.ADMIN)
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
@@ -60,11 +66,13 @@ export class AdminController {
     private readonly invoicesService: InvoicesService,
   ) {}
 
+  @RequirePermission('orders:read')
   @Get('orders')
   async listOrders(@Query() query: ListAdminOrdersQueryDto) {
     return this.ordersService.adminListOrders(query);
   }
 
+  @RequirePermission('orders:read')
   @Get('orders/:id')
   async orderDetail(@Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.adminGetOrderDetail(id);
@@ -72,6 +80,7 @@ export class AdminController {
 
   /** Admin view of any order's invoice (idempotent lazy creation for a
    * paid order). Phase 13.4. */
+  @RequirePermission('orders:read')
   @Get('orders/:id/invoice')
   async orderInvoice(
     @CurrentUser() admin: AuthenticatedUser,
@@ -83,6 +92,7 @@ export class AdminController {
     });
   }
 
+  @RequirePermission('orders:transition')
   @Patch('orders/:id/status')
   async updateOrderStatus(
     @CurrentUser() admin: AuthenticatedUser,
@@ -92,21 +102,25 @@ export class AdminController {
     return this.ordersService.adminTransitionStatus(admin.id, id, dto);
   }
 
+  @RequirePermission('dashboard:read')
   @Get('dashboard')
   async dashboard() {
     return this.adminService.getDashboard();
   }
 
+  @RequirePermission('customers:read')
   @Get('customers')
   async listCustomers(@Query() query: ListAdminCustomersQueryDto) {
     return this.adminService.listCustomers(query);
   }
 
+  @RequirePermission('customers:read')
   @Get('customers/:id')
   async customerDetail(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.getCustomerDetail(id);
   }
 
+  @RequirePermission('reviews:moderate')
   @Patch('reviews/:id/status')
   async updateReviewStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -115,16 +129,19 @@ export class AdminController {
     return this.reviewsService.adminUpdateStatus(id, dto);
   }
 
+  @RequirePermission('coupons:read')
   @Get('coupons')
   async listCoupons(@Query() query: ListAdminCouponsQueryDto) {
     return this.couponsService.listCoupons(query);
   }
 
+  @RequirePermission('coupons:read')
   @Get('coupons/:id')
   async couponDetail(@Param('id', ParseUUIDPipe) id: string) {
     return this.couponsService.getCoupon(id);
   }
 
+  @RequirePermission('coupons:write')
   @Post('coupons')
   async createCoupon(
     @CurrentUser() admin: AuthenticatedUser,
@@ -133,6 +150,7 @@ export class AdminController {
     return this.couponsService.createCoupon(admin.id, dto);
   }
 
+  @RequirePermission('coupons:write')
   @Patch('coupons/:id')
   async updateCoupon(
     @Param('id', ParseUUIDPipe) id: string,
@@ -148,11 +166,13 @@ export class AdminController {
   // ParseUUIDPipe here; the service rejects any key outside its
   // definition list with a 400.
 
+  @RequirePermission('settings:read')
   @Get('settings')
   async listSettings() {
     return this.appSettingService.listConfigurable();
   }
 
+  @RequirePermission('settings:write')
   @Patch('settings/:key')
   async updateSetting(
     @Param('key') key: string,
