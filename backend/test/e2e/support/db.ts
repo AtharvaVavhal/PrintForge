@@ -38,6 +38,9 @@ const ALL_TABLES = [
   'tenant_memberships',
   'tenants',
   'plans',
+  // SaaS Identity (Phase 2a) — additive (Customer). No customer auth runtime
+  // yet; only the tenancy-foundation / platform-guard specs write here.
+  'customers',
 ];
 
 /**

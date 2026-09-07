@@ -247,6 +247,37 @@ export async function createCoupon(
   return { id: coupon.id, code: coupon.code };
 }
 
+/**
+ * Direct-via-Prisma store-scoped Customer fixture (SaaS Phase 2a; spec §C.1
+ * item 10 — "dev/test seed/fixture able to create a Customer under Tenant #1's
+ * primary store"). There is NO customer auth API in Phase 2a (decision P2-D7:
+ * customer auth is Phase 9/12), so tests build Customer rows directly. The
+ * caller supplies an existing store + tenant (e.g. from a bootstrapped
+ * Tenant #1 or an ad-hoc tenancy fixture).
+ */
+export async function createCustomer(
+  prisma: PrismaService,
+  args: {
+    storeId: string;
+    tenantId: string;
+    email?: string;
+    isActive?: boolean;
+  },
+): Promise<{ id: string; email: string }> {
+  const email = args.email ?? uniqueEmail('customer');
+  const customer = await prisma.customer.create({
+    data: {
+      storeId: args.storeId,
+      tenantId: args.tenantId,
+      email,
+      // A non-usable hash — Phase 2a has no login path for a Customer.
+      passwordHash: `disabled-${randomUUID()}`,
+      isActive: args.isActive ?? true,
+    },
+  });
+  return { id: customer.id, email: customer.email };
+}
+
 export function shippingFields(): Record<string, string> {
   return {
     shippingRecipientName: 'Test Recipient',

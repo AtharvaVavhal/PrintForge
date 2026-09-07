@@ -6,11 +6,19 @@ import { AppConfig } from '../../common/config/configuration';
 import { PrismaService } from '../../common/database/prisma.service';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
+/**
+ * Access-token payload. Phase 2a (decision P2-D4) makes newly-issued merchant
+ * tokens **thin** — only `sub` + `tokenVersion`. `email` / `role` are marked
+ * optional because pre-Phase-2a tokens still carry them for one refresh-TTL
+ * window (backward compatibility); validate() ignores those fields and reloads
+ * everything from the DB, so a thin token and an old fat token authorize
+ * identically.
+ */
 interface AccessTokenPayload {
   sub: string;
-  email: string;
-  role: string;
   tokenVersion: number;
+  email?: string;
+  role?: string;
 }
 
 /**
@@ -20,6 +28,11 @@ interface AccessTokenPayload {
  * validate() additionally re-checks users.tokenVersion so a password
  * change / logout-all revokes already-issued access tokens almost
  * instantly despite them being stateless (§23).
+ *
+ * Phase 2a (SaaS Master Plan §8; decisions P2-D4, P2-D1): validate() also
+ * loads the user's `platformRole` and ACTIVE tenant memberships as identity
+ * facts. It does NOT derive an active tenant and does NOT make a tenant
+ * authorization decision — that is Phase 3 (P2-D9; D6 deferred).
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -41,12 +54,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
+      include: {
+        tenantMemberships: {
+          where: { status: 'ACTIVE' },
+          select: { tenantId: true, role: true },
+        },
+      },
     });
 
     if (!user || !user.isActive || user.tokenVersion !== payload.tokenVersion) {
       throw new UnauthorizedException();
     }
 
-    return { id: user.id, email: user.email, role: user.role };
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      platformRole: user.platformRole,
+      memberships: user.tenantMemberships.map((m) => ({
+        tenantId: m.tenantId,
+        role: m.role,
+      })),
+    };
   }
 }

@@ -374,10 +374,14 @@ export class AuthService {
   // ─── Helpers ─────────────────────────────────────────────────────────
 
   private signAccessToken(user: User): string {
+    // Thin token (decision P2-D4 / Master Plan §8): only `sub` + `tokenVersion`.
+    // email / role / platformRole / memberships are resolved fresh from the DB
+    // in JwtStrategy.validate() on every request — never trusted from the
+    // token. Pre-Phase-2a tokens that still carry `email`/`role` stay valid for
+    // one refresh-TTL window (validate() ignores those fields). tokenVersion is
+    // NOT bumped by this change — existing sessions are not invalidated.
     return this.jwtService.sign({
       sub: user.id,
-      email: user.email,
-      role: user.role,
       tokenVersion: user.tokenVersion,
     });
   }

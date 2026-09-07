@@ -10,6 +10,7 @@ import { PrismaModule } from './common/database/prisma.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { HealthModule } from './common/health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PlatformGuard } from './common/guards/platform.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
@@ -46,6 +47,11 @@ import { UsersModule } from './users/users.module';
  * JwtAuthGuard + RolesGuard + ThrottlerGuard are global (§17/§23): every
  * route is protected and IP-throttled by default; routes opt out
  * individually with @Public().
+ *
+ * PlatformGuard (Phase 2a; decision P2-D1/G-11) is also global but a no-op
+ * for every current route — it only acts on @PlatformOnly() routes, of which
+ * there are none until the Phase 5 platform console. It is registered here so
+ * the mechanism is live and separate from RolesGuard (frozen SaaS invariant 4).
  */
 @Module({
   imports: [
@@ -93,6 +99,7 @@ import { UsersModule } from './users/users.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PlatformGuard },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],

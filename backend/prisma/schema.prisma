@@ -9,6 +9,11 @@
 // expand -> migrate -> contract discipline. Phase 1 appends the SaaS Foundation
 // block at the end of this file (Tenant / Store / StoreDomain / TenantMembership
 // + Plan / Subscription shells) additively — no existing model is changed.
+// Phase 2a (docs/saas/PHASE-2-DECISION-RESOLUTION-AND-SPEC.md §C; DECISIONS.md
+// v1.2) appends the SaaS Identity block (Customer) + the PlatformRole enum, and
+// adds exactly one nullable column to `users` (platformRole) — no existing
+// commerce table is changed, no customerId column is added anywhere (Phase 4),
+// and no customer auth runtime exists (Phase 9/12).
 
 generator client {
   provider = "prisma-client-js"
@@ -24,6 +29,16 @@ datasource db {
 enum Role {
   CUSTOMER
   ADMIN
+}
+
+// Platform super-admin axis (SaaS Master Plan §8; decision P2-D1, ratified by
+// G-12 — docs/saas/DECISIONS.md v1.2). A nullable `User.platformRole` field, not
+// a boolean, so it stays extensible. Completely separate from `Role` and from
+// TenantMembership (frozen SaaS invariant 4). Phase 2a adds the enum + column +
+// PlatformGuard mechanism only — no route is platform-scoped until the Phase 5
+// platform console. `Role { CUSTOMER, ADMIN }` above is unchanged.
+enum PlatformRole {
+  SUPER_ADMIN
 }
 
 enum CustomizationFieldType {
@@ -100,6 +115,12 @@ model User {
   passwordHash String
 
   role      Role     @default(CUSTOMER)
+  // SaaS Identity (Phase 2a) — platform super-admin axis. Nullable, NO default:
+  // null = not a platform admin. Checked only by PlatformGuard on
+  // @PlatformOnly() routes (none exist yet — Phase 5). Independent of `role`
+  // and of any TenantMembership (frozen SaaS invariant 4; Master Plan §8;
+  // decision P2-D1/P2-D2). This is the ONLY column Phase 2a adds to `users`.
+  platformRole PlatformRole?
   tokenVersion Int   @default(0)
 
   failedLoginAttempts    Int       @default(0)
@@ -905,6 +926,10 @@ model Tenant {
   memberships  TenantMembership[]
   storeDomains StoreDomain[]
   subscription Subscription?
+  // SaaS Identity (Phase 2a) — back-relation only; adds NO column to `tenants`.
+  // `Customer.tenantId` is denormalized (isolation defence-in-depth); the
+  // same-store composite FK is Phase 4 hardening (decision P2-D12).
+  customers    Customer[]
 
   @@index([status])
   @@map("tenants")
@@ -935,8 +960,12 @@ model Store {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  domains StoreDomain[]
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  domains   StoreDomain[]
+  // SaaS Identity (Phase 2a) — back-relation only; adds NO column to `stores`.
+  // The FK column `storeId` lives on `customers`. Customer = store-scoped
+  // storefront identity (decision D5-a).
+  customers Customer[]
 
   @@unique([tenantId, slug])
   @@index([tenantId])
@@ -1041,4 +1070,67 @@ model Subscription {
 
   @@index([planId])
   @@map("subscriptions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SaaS Identity — Phase 2a
+//   Master Plan §8 · docs/saas/PHASE-2-DECISION-RESOLUTION-AND-SPEC.md §C
+//   Decisions P2-D1/P2-D2 (PlatformRole, above), P2-D11 (isActive-only lifecycle),
+//   P2-D12 (tenantId plain column now), G-11/G-12 — docs/saas/DECISIONS.md v1.2.
+//
+// ADDITIVE. Phase 2a adds the store-scoped storefront-identity root only.
+// DEFERRED, NOT here: customer authentication runtime, CustomerRefreshToken
+// table, /storefront/auth/* — all Phase 9/12 (decision P2-D7 deferred customer
+// auth entirely; there is no pre-Phase-9 store-resolution mechanism). NOT here:
+// any `customerId` column on an existing commerce table, any FK re-pointing —
+// Phase 4. Customer ROWS are created in Phase 2a only by the dev/test fixture;
+// the production role='CUSTOMER' -> Customer backfill is Phase 2b (gated on
+// D2 + D8 + G-16).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Store-scoped storefront shopper identity (decision D5-a). Keyed by
+// (storeId, email): the same email at two stores is two distinct Customers
+// (frozen SaaS — "customer identity is store-scoped"). A Customer NEVER holds
+// a TenantMembership — there is no FK path from Customer to User or to a
+// membership, so merchant and customer identity are structurally separate
+// (frozen SaaS §5/§13; Master Plan §8 KEY RISKS). `tenantId` is denormalized
+// for isolation defence-in-depth and FK-enforced; the same-store composite FK
+// ((storeId, tenantId) must agree) is Phase 4 hardening (decision P2-D12) —
+// Phase 2a stores it as a plain FK column, exactly as Phase 1 did for
+// Store/StoreDomain. The auth fields mirror `User` but are inert until the
+// Phase 9/12 customer auth runtime. `isActive` is the only lifecycle field —
+// no CustomerStatus enum (decision P2-D11).
+model Customer {
+  id       String @id @default(uuid())
+  storeId  String
+  tenantId String
+  email    String
+
+  passwordHash String
+
+  tokenVersion           Int       @default(0)
+  failedLoginAttempts    Int       @default(0)
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+
+  isActive Boolean @default(true)
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String?
+  phone        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([storeId, email])
+  @@index([storeId])
+  @@index([tenantId])
+  @@map("customers")
 }

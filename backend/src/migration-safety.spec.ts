@@ -4,30 +4,38 @@ import { join } from 'path';
 /**
  * G-10 — Additive-only migration safety guard (SaaS Master Plan Phase 1;
  * docs/saas/PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md §B.12 / AC-10;
- * approved in docs/saas/DECISIONS.md).
+ * approved in docs/saas/DECISIONS.md). Extended by **G-19** for Phase 2a
+ * (docs/saas/DECISIONS.md v1.2; docs/saas/PHASE-2-DECISION-RESOLUTION-AND-SPEC.md
+ * §B.11.3 / §C.4).
  *
  * From Phase 1 onward, every new Prisma migration must be **additive-only**.
  * Allowed:
  *   - `CREATE TABLE` / `CREATE TYPE` / `CREATE INDEX` / `CREATE UNIQUE INDEX`
- *   - `ALTER TABLE <t> ...` **only when `<t>` is CREATEd in the same migration
- *     file** (this is how Prisma always emits FK creation), and even then not
+ *   - `ALTER TABLE <t> ...` when `<t>` is CREATEd in the same migration file
+ *     (this is how Prisma always emits FK creation), and even then not
  *     `SET NOT NULL`.
- * Forbidden anywhere:
+ *   - **(G-19)** a *single, purely-additive nullable* `ALTER TABLE <existing>
+ *     ADD COLUMN "<c>" <type>` on a table an earlier migration created — and
+ *     ONLY that: no `NOT NULL`, no `DEFAULT`, no second action in the same
+ *     statement. This is what Phase 2a's `ALTER TABLE "users" ADD COLUMN
+ *     "platformRole" "PlatformRole"` needs, and what Phase 4's expand steps
+ *     will need. It stays safe because a nullable column with no default is an
+ *     instant metadata-only change that back-fills nothing and locks nothing.
+ * Forbidden anywhere (unchanged — G-19 does NOT weaken these):
  *   - DROP (table / column / index / constraint / type / schema / view / sequence)
  *   - DELETE / TRUNCATE / UPDATE of rows
- *   - `ALTER TABLE` on any table NOT created in the same file (covers adding a
- *     column, changing a type, dropping a default, etc. on a table an earlier
- *     migration created — Phase 4's expand->contract work will need explicit
- *     review, which is the point: Phase 1 risk P1-R6, scope creep)
  *   - SET NOT NULL
+ *   - `ALTER TABLE` on a table NOT created in the same file for ANYTHING other
+ *     than the one narrow nullable-ADD-COLUMN case above — a type change, a
+ *     DEFAULT, a NOT NULL, an ADD CONSTRAINT, a RENAME, a multi-action ALTER,
+ *     etc. are all still rejected (Phase 4's contract work still needs explicit
+ *     review; Phase 1 risk P1-R6, scope creep).
  *
  * The detector validates **each migration file as self-contained** — it does not
  * model the cumulative schema across earlier migrations (per audit finding P2-4:
- * option A, "keep it simple"). Consequence: a later phase that legitimately
- * needs an additive `ALTER TABLE <earlier-table> ADD COLUMN` must either split
- * it so the change ships in the migration that created the table, or add that
- * migration to LEGACY_MIGRATIONS **with a written justification in the
- * migration's own comment and in docs/saas/DECISIONS.md**.
+ * option A, "keep it simple"). A migration that needs a non-additive change to
+ * an earlier-migration table must still go to LEGACY_MIGRATIONS **with a written
+ * justification in the migration's own comment and in docs/saas/DECISIONS.md**.
  *
  * This runs inside the existing `npm run test` job (same as
  * scheduler-registration.spec.ts), so CI enforces it with no new workflow.
@@ -116,8 +124,24 @@ export function findAdditiveOnlyViolations(rawSql: string): string[] {
     if (alter) {
       const target = alter[1];
       if (!newInThisFile.has(target)) {
+        // G-19 (docs/saas/DECISIONS.md v1.2): the ONE permitted change to an
+        // earlier-migration table is a single, purely-additive *nullable*
+        // ADD COLUMN — no NOT NULL, no DEFAULT, no second action. Everything
+        // else on a pre-existing table (type change, DEFAULT, NOT NULL, ADD
+        // CONSTRAINT, RENAME, multi-action) is still rejected.
+        const addColumnOnly =
+          /^ALTER\s+TABLE\s+(?:ONLY\s+)?"[^"]+"\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"[^"]+"\s+\S/i.test(
+            stmt,
+          );
+        const singleAction = !/,\s*(?:ADD|DROP|ALTER|RENAME)\b/i.test(upper);
+        const hasNotNull = /\bNOT\s+NULL\b/.test(upper);
+        const hasDefault = /\bDEFAULT\b/.test(upper);
+        if (addColumnOnly && singleAction && !hasNotNull && !hasDefault) {
+          continue; // approved additive nullable ADD COLUMN (G-19)
+        }
         violations.push(
-          `ALTER TABLE on a table not created in this migration ("${target}") is not allowed in an additive migration: ${stmt.slice(0, 120)}`,
+          `ALTER TABLE on a table not created in this migration ("${target}") is not allowed in an additive migration ` +
+            `(G-19 permits ONLY a single nullable ADD COLUMN with no DEFAULT / NOT NULL): ${stmt.slice(0, 120)}`,
         );
         continue;
       }
@@ -178,23 +202,43 @@ describe('migration safety — additive-only guard (G-10)', () => {
       ).not.toHaveLength(0);
     });
 
-    it('rejects ALTER TABLE on a table not created in the same migration', () => {
+    it('rejects a NON-additive ALTER TABLE on a table not created in the same migration', () => {
       const v = findAdditiveOnlyViolations(
-        'ALTER TABLE "orders" ADD COLUMN "note" TEXT;',
+        'ALTER TABLE "orders" ADD COLUMN "note" TEXT NOT NULL;',
       );
       expect(v.join(' ')).toMatch(
         /ALTER TABLE on a table not created in this migration \("orders"\)/,
       );
     });
 
-    it('rejects an additive ALTER on an earlier-migration table too (self-contained rule)', () => {
-      // `tenants` is created by a *different* migration file, so an ALTER here
-      // must be flagged even though ADD COLUMN is itself additive.
-      const v = findAdditiveOnlyViolations(
-        'CREATE TABLE "customers" ("id" TEXT NOT NULL); ALTER TABLE "tenants" ADD COLUMN "x" TEXT;',
-      );
-      expect(v).toHaveLength(1);
-      expect(v[0]).toMatch(/\("tenants"\)/);
+    // G-19 (docs/saas/DECISIONS.md v1.2): a single, purely-additive *nullable*
+    // ADD COLUMN on an earlier-migration table is now permitted — and ONLY that.
+    it('G-19: permits a single nullable ADD COLUMN on an earlier-migration table', () => {
+      expect(
+        findAdditiveOnlyViolations(
+          'ALTER TABLE "users" ADD COLUMN "platformRole" "PlatformRole";',
+        ),
+      ).toEqual([]);
+      expect(
+        findAdditiveOnlyViolations(
+          'CREATE TABLE "customers" ("id" TEXT NOT NULL); ALTER TABLE "tenants" ADD COLUMN "x" TEXT;',
+        ),
+      ).toEqual([]);
+    });
+
+    it('G-19: still rejects everything else on an earlier-migration table', () => {
+      const cases = [
+        'ALTER TABLE "users" ADD COLUMN "x" TEXT NOT NULL;', // NOT NULL
+        `ALTER TABLE "users" ADD COLUMN "x" TEXT DEFAULT 'y';`, // DEFAULT
+        'ALTER TABLE "users" ADD COLUMN "x" TEXT, ADD COLUMN "z" TEXT;', // multi-action
+        'ALTER TABLE "users" ADD COLUMN "x" TEXT, DROP COLUMN "y";', // multi-action w/ drop
+        'ALTER TABLE "users" ALTER COLUMN "email" TYPE TEXT;', // type change
+        'ALTER TABLE "orders" ADD CONSTRAINT "c" FOREIGN KEY ("x") REFERENCES "y"("id");', // add constraint
+        'ALTER TABLE "users" RENAME COLUMN "email" TO "mail";', // rename
+      ];
+      for (const sql of cases) {
+        expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+      }
     });
 
     it('rejects DELETE / TRUNCATE / UPDATE of existing rows', () => {
