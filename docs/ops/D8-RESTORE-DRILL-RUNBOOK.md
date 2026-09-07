@@ -56,7 +56,8 @@ D1–D3 and G-16 in `docs/saas/DECISIONS.md`.
 Date:              2026-09-07
 Authorized by:     Atharva — Project Owner / Ops Owner
 Authorized operator: Atharva
-Approved access mechanism: owner's own Render account
+Approved access mechanism: authorized Render service account
+Authorized Render account: claudeuservit@gmail.com
 Scope confirmed:   D8 production PostgreSQL read-only access, specifically:
                    (1) the §2 read-only identity check and migration-state
                        inspection;
