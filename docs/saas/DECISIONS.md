@@ -21,9 +21,9 @@
 | Document | PrintForge SaaS — Canonical Decision Register (`docs/saas/DECISIONS.md`) |
 | Version | 1.2 |
 | Created | 2026-09-06 |
-| Last updated | 2026-09-07 — recorded explicit owner decision for **D2** (RESOLVED — OPTION A: deployed Render database holds real merchant/customer production data); D8 and G-16 remain OPEN — PENDING. *(2026-09-06 — recorded explicit owner decisions for **P2-D1…P2-D13**, **G-11, G-12, G-15, G-17, G-18, G-19** (APPROVED), **G-13 / G-14** (NOT REQUIRED for Phase 2), **G-16** (OPEN — gated on D2/D8), **D6** (DEFERRED — Phase 3 re-scope); applied the **G-18** correction to the D5 narrative fields.)* |
+| Last updated | 2026-09-07 (later same day) — **D8 RESOLVED** (evidence `D8-20260907-02`); **G-16 APPROVED — AUTHORIZED**; **Phase 2b EXECUTED and reconciled**; **Phase 2 COMPLETION = `COMPLETE`**. *(Earlier the same day: recorded explicit owner decision for **D2** (RESOLVED — OPTION A). 2026-09-06 — recorded explicit owner decisions for **P2-D1…P2-D13**, **G-11, G-12, G-15, G-17, G-18, G-19** (APPROVED), **G-13 / G-14** (NOT REQUIRED for Phase 2), **D6** (DEFERRED — Phase 3 re-scope); applied the **G-18** correction to the D5 narrative fields.)* |
 | Repository | `AtharvaVavhal/PrintForge`, branch `main`, HEAD `5609fa8` |
-| Records held | 31 — D1, D2, D3, D5, D6, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11…G-19 |
+| Records held | 32 — D1, D2, D3, D5, D6, D8, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11…G-19 |
 | Records `RESOLVED` / `APPROVED` | **27** (D1, D2, D3, D5, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11, G-12, G-15, G-17, G-18, G-19) |
 | Records `NOT REQUIRED` (for their phase) | **2** (G-13, G-14 — see records) |
 | Records `OPEN` / `DEFERRED` | **G-16** OPEN (gated on D8; D2 resolved 2026-09-07); **D6** DEFERRED (Phase 3, re-scope approved); **D4, D7–D15** OPEN (bottom table) |
@@ -86,12 +86,12 @@ counts in Document Control. Do not overwrite history — append.
 | **Decision (approved option)** | **Option A** — the currently-deployed Render database **contains real merchant/customer production data**. |
 | **Rationale** | The owner has explicitly confirmed that the deployed database holds live production data, not test/demo scaffolding. This resolves the question originally framed in `PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md §A.1` and referenced as a hard blocker throughout the D3, Phase 2b, and Phase 4 records. |
 | **Source document / section** | `PHASE-0-DECISION-RESOLUTION-AND-PHASE-1-SPEC.md §A.1` (original D2 framing); D3 record (Dependency row, unchanged); G-16 record (unchanged); Master Plan §8 (Phase 2b gating). |
-| **Consequences** | Planning for **Phase 2b** (identity backfill) and **Phase 4** (data-ownership migration) may now proceed on the assumption of a real, live production dataset — the anomaly classes named in the Phase 2b contract (duplicate emails, admin-who-also-shopped, inactive users, partial addresses, etc.) must be treated as live possibilities requiring owner review, not hypotheticals. **This decision, by itself, authorizes no production access, no backup, no restore, and no backfill execution.** Phase 2b **execution** additionally requires **D8** (a verified restore artifact) and **G-16** (ops backfill authorization) — both remain **OPEN — PENDING**, unchanged by this record. No production credentials, production database, or production rows were accessed, read, or modified in the course of recording this decision; the answer was supplied directly by the project owner. |
-| **Affected phase(s)** | **Phase 2b** (backfill planning may proceed; execution remains blocked on D8 + G-16); **Phase 4** (data-ownership migration planning; execution remains blocked on D8 and its own gates). |
+| **Consequences** | Planning for **Phase 2b** (identity backfill) and **Phase 4** (data-ownership migration) proceeded on the assumption of a real, live production dataset — the anomaly classes named in the Phase 2b contract (duplicate emails, admin-who-also-shopped, inactive users, partial addresses, etc.) were treated as live possibilities requiring owner review, not hypotheticals (see the recorded dry-run/anomaly results in `PHASE-2B-IMPLEMENTATION-REPORT.md`). **This decision, by itself, authorized no production access, no backup, no restore, and no backfill execution** — those required **D8** (RESOLVED 2026-09-07) and **G-16** (APPROVED — AUTHORIZED 2026-09-07), both since satisfied; Phase 2b has since **executed and reconciled**. No production credentials, production database, or production rows were accessed, read, or modified in the course of recording this decision itself; the answer was supplied directly by the project owner. |
+| **Affected phase(s)** | **Phase 2b** (backfill planning and execution — complete); **Phase 4** (data-ownership migration planning; execution remains blocked on Phase 4's own separate, still-open gates: D4, D10, D11, D12). |
 | **Reversibility** | This is a factual record of the deployed environment's data status, not a design choice — not reversible in the ordinary sense. It would only be re-opened if the deployed database were replaced or its contents materially changed. |
-| **Dependency (still open)** | **D8** (verified restore artifact — staging + restore drill) and **G-16** (Phase 2b backfill authorization) remain **OPEN — PENDING**, independently of this record. **D2 = A does not resolve D8 or G-16, and does not itself authorize Phase 2b execution.** |
+| **Dependency (still open)** | **D8** (verified restore artifact) is **RESOLVED** as of 2026-09-07 (see D8 record below). **G-16** (Phase 2b backfill authorization) remains **OPEN — PENDING**, independently of this record. **D2 = A does not resolve G-16, and does not itself authorize Phase 2b execution.** |
 | **Explicit approval wording (recorded)** | `"D2: A — The currently deployed Render database contains real merchant/customer production data."` (project owner, 2026-09-07). |
-| **Not to be implemented until this record is `RESOLVED`** | ~~Any Phase 2b or Phase 4 planning that assumes a specific production-data shape.~~ **CLEARED 2026-09-07 — planning may proceed on the assumption of real production data.** Phase 2b/Phase 4 **execution** (backup, restore, backfill, migration) remains gated on **D8 + G-16** (and Phase 4's own gates) and is **not** cleared by this record. |
+| **Not to be implemented until this record is `RESOLVED`** | ~~Any Phase 2b or Phase 4 planning that assumes a specific production-data shape.~~ **CLEARED 2026-09-07.** Phase 2b **execution** (backfill) was subsequently cleared the same day (D8 + G-16 both satisfied) and has executed — see G-16 record and `PHASE-2B-IMPLEMENTATION-REPORT.md`. Phase 4 **execution** remains gated on Phase 4's own separate gates (D4, D10, D11, D12) and is **not** cleared by this record. |
 
 ### D2 — Decision Log
 
@@ -116,9 +116,9 @@ counts in Document Control. Do not overwrite history — append.
 | **Consequences** | **Phase 1:** the bootstrap seed / test fixture is framed as "Tenant #1 = the existing merchant" (dev/test only; no production data touched). **Phase 4:** existing catalog / orders / invoices / payments / settings are backfilled to Tenant #1 with verified restore, maintenance window, and pre/post revenue-sum + count reconciliation (Master Plan §25 waves W3–W7). **Phase 2b:** the existing `role=ADMIN` user is migrated to an `OWNER` `TenantMembership` of Tenant #1 (from the D2 live inventory, not before). The chosen tenant display name / slug is to be supplied by the business (see Decision Log "name/slug" note) and is not `default_tenant`. |
 | **Affected phase(s)** | Phase 1 (seed framing — now decided), **Phase 4 (defining)**, Phase 15 (production-migration validation); **Phase 2b** (`role=ADMIN` → `OWNER` backfill, D2-gated). |
 | **Reversibility** | The *direction* is reversible on paper until Phase 4 executes. After Phase 4 backfills legacy rows and runs the destructive constraint waves, reverting requires a restore from backup (Prisma forward-only). |
-| **Dependency (still open)** | **D2 remains unresolved.** Option A is now the chosen direction, but the *scope and rigor* of the Phase 4 migration — and the Phase 2b backfill — still depend on D2 ("does the deployed DB hold real merchant/customer data?"), which **requires authorized data access**. Recording D3=A does **not** imply any statement about the deployed data. |
-| **Explicit approval wording (recorded)** | `"D3: A — The existing deployment/store becomes Tenant #1."` (project owner, 2026-09-06). |
-| **Not to be implemented until this record is `RESOLVED`** | ~~The Phase 1 bootstrap seed's framing; any Phase 4 backfill; any assignment of a live `role=ADMIN` user to an `OWNER` membership.~~ **The seed framing is decided (Phase 1, dev/test only).** Phase 4 backfill and the **Phase 2b** live `role=ADMIN` → `OWNER` assignment remain gated on **D2 + the verified restore drill (D8) + G-16**. |
+| **Dependency (still open)** | D2 and D8 are now **RESOLVED**. Tenant #1's name/slug were supplied by the business on 2026-09-07 (see Decision Log). **Production creation of the Tenant #1 / primary Store rows is executed under this explicit 2026-09-07 owner authorization**, ahead of the general Phase 4 data-ownership migration — the owner was informed that `backend/prisma/seed-tenant-bootstrap.ts`'s own guard comment places this step in Phase 4, and explicitly chose to proceed now rather than defer. This does **not** pull forward any other Phase 4 work (no `customerId` columns, no FK re-pointing, no `User.role` drop, no isolation/tax/numbering decisions — D4/D10/D11/D12 remain OPEN and ungated by this record). |
+| **Explicit approval wording (recorded)** | `"D3: A — The existing deployment/store becomes Tenant #1."` (project owner, 2026-09-06). Tenant naming: `"Tenant #1: Name: PrintForge, Slug: printforge. Primary Store: Name: PrintForge Store, Slug: printforge."` (project owner, 2026-09-07). |
+| **Not to be implemented until this record is `RESOLVED`** | ~~The Phase 1 bootstrap seed's framing; any Phase 4 backfill; any assignment of a live `role=ADMIN` user to an `OWNER` membership.~~ **The seed framing is decided (Phase 1, dev/test only).** Phase 2b live `role=ADMIN` → `OWNER` assignment and the Tenant #1/Store production creation are **CLEARED 2026-09-07** (D2 + D8 + G-16 satisfied; naming supplied). The broader Phase 4 backfill (existing catalog/orders/invoices/payments/settings ownership migration) remains gated on Phase 4's own separate gates. |
 
 ### D3 — Decision Log
 
@@ -126,6 +126,7 @@ counts in Document Control. Do not overwrite history — append.
 |---|---|---|---|---|
 | 2026-09-06 | Business owner (project owner) | **A** — existing deployment becomes Tenant #1 | `"D3: A"` → *"The existing deployment/store becomes Tenant #1."* | Phase 1 spec §B.3; Master Plan §4.4-D3. Tenant display name / slug: **to be supplied by the business before the Phase 4 backfill** (must not be `default_tenant`). |
 | 2026-09-06 | (cross-reference) | **P2-D7 re-scope preserves D3** | Owner note on P2-D7: *"D3's 'no implicit privileges' rule remains intact. Do NOT use Tenant #1 as an implicit customer-auth context."* | P2-D7 record; `PHASE-2-DECISION-CLOSURE.md §6.4` |
+| 2026-09-07 | Project Owner / Ops Owner (Atharva) | **Tenant #1 naming supplied; production creation authorized now** | `"Tenant #1: Name: PrintForge, Slug: printforge. Primary Store for Tenant #1: Name: PrintForge Store, Slug: printforge."` — explicit written decision accompanying the G-16 authorization. | This entry; G-16 record; `backend/prisma/seed-tenant-bootstrap.ts` (matched idempotent pattern: Free Plan + Tenant + primary Store + Subscription) |
 
 ---
 
@@ -180,6 +181,33 @@ counts in Document Control. Do not overwrite history — append.
 | Date | Owner | Choice | Approval wording (verbatim) | Reference |
 |---|---|---|---|---|
 | 2026-09-06 | Architecture owner + product (project owner) | **DEFER WITH APPROVED RE-SCOPE** | `"D6: DEFER WITH APPROVED RE-SCOPE"`; `"G-17: APPROVE — Phase 2 is explicitly re-scoped so D6-dependent tenant context and customer-auth activation are deferred to Phase 3/9/12 as documented."` | `PHASE-2-DECISION-CLOSURE.md §11`; Master Plan §9; P2-D9 / G-17 records |
+
+---
+
+## D8 — Verified production backup/restore drill
+
+| Field | Content |
+|---|---|
+| **ID** | D8 |
+| **Decision (question)** | Has a verified, evidenced production backup-and-restore cycle been performed — a `pg_dump` of production, checksummed, restored into a disposable scratch instance, and validated against every `D8-RESTORE-DRILL-RUNBOOK.md §6` check — proving the deployed schema is recoverable and matches this repository's committed migrations? |
+| **Owner** | Ops owner (execution-time) |
+| **Date** | 2026-09-07 |
+| **Status** | **RESOLVED** |
+| **Decision (approved option)** | **RESOLVED — all eight `D8-RESTORE-DRILL-RUNBOOK.md §10` conditions met.** A fresh, post-Phase-2a-migration production backup (`printforge_prod_20260907T171225Z.dump`, SHA-256 `dfcd2399f0136ad0ba1d75341135557abca856d6b720eaa6fe9efb73fd91cb48`) was restored into the disposable local scratch instance (`d8_scratch`) and passed every `§6` load-verification check (database-, schema-, commerce-, and SaaS-foundation-level) and every `§7` reconciliation row (production vs. scratch: 33/33 tables, 11/11 migrations, matching latest migration name, `users` 23/23, `orders` 40/40, `customers` 0/0, `tenant_memberships` 0/0 — the last two correctly zero because Phase 2b has not run). |
+| **Rationale** | D8 exists to prove production is recoverable and that a restored copy matches this repo's committed schema before any identity backfill (Phase 2b) is authorized — an analogue of G-9 at execution time, but requiring a full evidenced restore-and-verify cycle rather than a routine snapshot. An earlier attempt (Entry 3, 2026-09-07) correctly **stopped** at the schema-level check because production was then still on the pre-Phase-2a 9-migration schema (missing `20260905191258_add_saas_foundation` and `20260906171709_add_customer_and_platform_role`); that gap was closed by a separately authorized production migration (distinct authorization from D8's own §1 record), after which this fresh drill (Entry 4) was run and passed in full. |
+| **Source document / section** | `docs/ops/D8-RESTORE-DRILL-RUNBOOK.md` (full runbook; Entry 3 — pre-migration STOP; Entry 4 — post-migration full pass, evidence ID `D8-20260907-02`); `docs/ops/D8-OWNER-OPS-HANDOFF.md` (§1 authorization record, 2026-09-07; "Current Gate"); D2 record (this file). |
+| **Consequences** | D8 no longer blocks **G-16** or **Phase 4**'s own D8 precondition. At the time of this drill, **G-16 remained a separate, independent authorization gate** — D8's resolution did not itself authorize the Phase 2b backfill; per `D8-OWNER-OPS-HANDOFF.md` "Critical boundary," the D8 authorization record explicitly does not extend to Phase 2b, `TenantMembership`/`Customer` creation, or any production data modification. No production data was modified in the course of the D8 drill itself — it is read-only against production (backup only) and restore-only against disposable scratch. **G-16 was subsequently authorized separately on 2026-09-07 (see the G-16 record) and Phase 2b has since executed** — see `PHASE-2B-IMPLEMENTATION-REPORT.md`. |
+| **Affected phase(s)** | **Phase 2b** (D8 precondition satisfied; executed — see G-16 record); **Phase 4** (shares this D8 precondition; its own additional gates are unaffected and still apply). |
+| **Reversibility** | This is a factual record of a completed, evidenced verification event, not a design choice — not reversible in the ordinary sense. A future schema change would require its own fresh D8 drill before being relied upon for Phase 4 execution (the artifact is a point-in-time proof, not a standing guarantee). |
+| **Dependency (still open)** | None remaining from this record. **G-16** was the one dependency this record left open; it has since been **APPROVED — AUTHORIZED** (2026-09-07, see the G-16 record), and Phase 2b has executed and reconciled. |
+| **Explicit approval wording (recorded)** | `"I, Atharva — Project Owner / Ops Owner, have reviewed D8 evidence package D8-20260907-02 (Entry 4) and explicitly confirm the result. Owner confirmation for §10 condition 8: MET."` (project owner, 2026-09-07). |
+| **Not to be implemented until this record is `RESOLVED`** | ~~The Phase 2b identity backfill; any restore of production data outside a disposable scratch target.~~ **D8 precondition CLEARED 2026-09-07; G-16 subsequently authorized the same day; Phase 2b has executed** (see G-16 record, `PHASE-2B-IMPLEMENTATION-REPORT.md`). |
+
+### D8 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-07 | Ops owner (project owner) | **RESOLVED — all §10 conditions met** | `"I, Atharva — Project Owner / Ops Owner, have reviewed D8 evidence package D8-20260907-02 (Entry 4) and explicitly confirm the result. Owner confirmation for §10 condition 8: MET."` | `D8-RESTORE-DRILL-RUNBOOK.md` Entry 4, evidence ID `D8-20260907-02`; `D8-OWNER-OPS-HANDOFF.md` §1 authorization record |
 
 ---
 
@@ -633,7 +661,7 @@ counts in Document Control. Do not overwrite history — append.
 | **Decision (approved option)** | **APPROVE** — the Phase 2 specification is the implementation contract, **as re-scoped by P2-D7 / P2-D9 / G-17** (customer-auth runtime → Phase 9/12; permission-guard swap → Phase 3). The contract is delivered in two stages: **Phase 2a** (identity/schema foundation) and **Phase 2b** (D2-gated production identity backfill). |
 | **Rationale** | Owner's explicit approval. Analogue of G-4 for Phase 1. The spec is a faithful decomposition of Master Plan §8 with the re-scope applied. |
 | **Source document / section** | `PHASE-2-DECISION-RESOLUTION-AND-SPEC.md §B`; `PHASE-2-DECISION-CLOSURE.md §16, §18`; `PHASE-2-START-GATE-RESULT.md`. |
-| **Consequences** | The Phase 2a scope, models, enums, migration boundary, backfill boundary, acceptance criteria (`AC-P2-01…27`), and phase deferrals are contractual. The Phase 2a START GATE is **READY** (Phase 2b remains gated on D2/D8/G-16). |
+| **Consequences** | The Phase 2a scope, models, enums, migration boundary, backfill boundary, acceptance criteria (`AC-P2-01…27`), and phase deferrals are contractual. The Phase 2a START GATE is **READY**; Phase 2b (originally gated on D2/D8/G-16) has since executed and reconciled — see `PHASE-2B-IMPLEMENTATION-REPORT.md`. |
 | **Affected phase(s)** | Phase 2 directly. |
 | **Reversibility** | The spec can be re-versioned via a recorded change. |
 | **Explicit approval wording (recorded)** | `"G-11: APPROVE — Phase 2 specification"` (project owner, 2026-09-06). |
@@ -753,21 +781,22 @@ counts in Document Control. Do not overwrite history — append.
 | **ID** | G-16 |
 | **Owner** | Ops owner (execution-time) |
 | **Date** | 2026-09-06 (status recorded) |
-| **Status** | **OPEN — PENDING (gated on D2 + D8)** |
+| **Status** | **APPROVED — AUTHORIZED** (2026-09-07) |
 | **Decision (question)** | Authorize the Phase 2b identity backfill (`role='ADMIN'` → `OWNER` membership; `role='CUSTOMER'` → `Customer` rows), restored-copy-first, with the pre-backfill backup id recorded? |
-| **Decision (recorded)** | **PENDING.** The owner explicitly held this: *"G-16: PENDING — Phase 2b backfill authorization remains gated on D2."* It also remains gated on **D8** (a verified restore artifact — the Phase 14 drill or a proven-restorable `pg_dump` copy). Analogue of G-9, at execution time. |
-| **Rationale** | The backfill writes production-derived data and is the single most invasive identity change in the plan (Master Plan §8 MIGRATION IMPACT). It cannot be planned without D2 (deployed data shape) or executed without a verified backup (D8). |
+| **Decision (recorded)** | **APPROVED.** The owner explicitly authorized: *"I, Atharva — Project Owner / Ops Owner, explicitly authorize G-16 for Phase 2b production execution, subject to the already-approved Phase 2b pre-flight, dry-run, reconciliation, and fresh pre-backfill snapshot requirements."* All named preconditions were verified before execution: D2 RESOLVED, D8 RESOLVED (evidence `D8-20260907-02`), dry-run/reconciliation against the restored scratch copy passed (this session, prior turn), and a fresh pre-backfill production snapshot was taken and checksum-verified immediately before execution (`printforge_prod_prebackfill_20260907T173125Z.dump`, SHA-256 `0847ee3cf68b10990474c156bfc8870e2b100c713a48e8fe2fe17aa56f2ace24`). |
+| **Rationale** | The backfill writes production-derived data and is the single most invasive identity change in the plan (Master Plan §8 MIGRATION IMPACT). It cannot be planned without D2 (deployed data shape) or executed without a verified backup (D8). Both are now satisfied. |
 | **Source document / section** | Master Plan §8 DATABASE/DATA IMPACT ("gated on D2/D3"), ROLLBACK; D2, D3, D8 records; `PHASE-2-DECISION-CLOSURE.md §15, §16`; `PHASE-2-START-GATE-RESULT.md`. |
-| **Consequences** | **Phase 2b does not start** until D2 is answered, a D8 restore artifact is recorded, and G-16 is approved. Phase 2a is unaffected (additive, no data). Phase 2 **completion** is blocked until Phase 2b is done (Master Plan §8 EXIT CRITERION "backfill reconciled"). |
+| **Consequences** | Phase 2b execution (identity backfill) is authorized to proceed against production, restored-copy-first (dry run already run against `d8_scratch`), with the pre-backfill snapshot above as the rollback point. Phase 2a is unaffected (additive, no data). Phase 2 **completion** still requires the backfill's own reconciliation report to pass (Master Plan §8 EXIT CRITERION "backfill reconciled") — see the Phase 2b implementation report for the executed result. |
 | **Affected phase(s)** | Phase 2b; Phase 2 completion. |
-| **Reversibility** | The backfill is additive rows (`DELETE FROM customers WHERE …` + re-run); a corrupted state restores from the D8 backup. |
-| **Explicit approval wording (recorded)** | `"G-16: PENDING — Phase 2b backfill authorization remains gated on D2"` (project owner, 2026-09-06). |
+| **Reversibility** | The backfill is additive rows (`DELETE FROM customers WHERE …` + re-run); a corrupted state restores from the `printforge_prod_prebackfill_20260907T173125Z.dump` backup taken immediately before this execution. |
+| **Explicit approval wording (recorded)** | `"I, Atharva — Project Owner / Ops Owner, explicitly authorize G-16 for Phase 2b production execution, subject to the already-approved Phase 2b pre-flight, dry-run, reconciliation, and fresh pre-backfill snapshot requirements. G-16 authorization date: 2026-09-07. Authorized operator: Atharva."` (project owner, 2026-09-07). |
 
 ### G-16 — Decision Log
 
 | Date | Owner | Choice | Approval wording (verbatim) | Reference |
 |---|---|---|---|---|
 | 2026-09-06 | Ops owner (project owner) | **PENDING (held — gated on D2 + D8)** | `"G-16: PENDING — Phase 2b backfill authorization remains gated on D2"` | D2, D8 records |
+| 2026-09-07 | Ops owner (project owner, Atharva) | **APPROVED — AUTHORIZED** | `"I, Atharva — Project Owner / Ops Owner, explicitly authorize G-16 for Phase 2b production execution, subject to the already-approved Phase 2b pre-flight, dry-run, reconciliation, and fresh pre-backfill snapshot requirements."` | D2, D8 records (both RESOLVED); pre-backfill snapshot `printforge_prod_prebackfill_20260907T173125Z.dump` |
 
 ---
 
@@ -851,10 +880,11 @@ counts in Document Control. Do not overwrite history — append.
 | ID | Topic | Owner | Status | Blocks |
 |---|---|---|:-:|---|
 | **D1** | Supersede `BLUEPRINT-v1.2` via `§38` ACR | Atharva + Harshad | **RESOLVED — APPROVED** | ~~Phase 1~~ *(cleared)* + governance umbrella Phases 2–15 |
-| **D2** | Does the deployed DB hold real production data? | Ops owner | **RESOLVED — OPTION A (real production data)** | Phase 2b/Phase 4 **planning** (unblocked); **execution** still gated on **D8 + G-16** |
+| **D2** | Does the deployed DB hold real production data? | Ops owner | **RESOLVED — OPTION A (real production data)** | Phase 2b execution — complete (D8 + G-16 both satisfied); Phase 4 execution remains gated on Phase 4's own separate gates |
 | **D3** | Existing deployment → Tenant #1 (A) vs not adopted (B) | Business owner | **RESOLVED — OPTION A** | ~~Phase 1~~ *(cleared)* + **Phase 4 (defining; gated on D2)** + **Phase 2b backfill** |
 | **D5** | Customer identity: separate `Customer` (a) vs global `User` + profile (b) | Product + architecture owner | **RESOLVED — OPTION (a)** *(narrative corrected via G-18)* | ~~Phase 1~~ *(cleared)* + **Phase 2 (`Customer` model)** + **Phase 4 (`customerId` columns)** |
 | **D6** | Tenant-context derivation for merchant console | Architecture owner + product | **DEFERRED — Phase 3 (re-scope approved, G-17)** | **Phase 3** |
+| **D8** | Verified production backup/restore drill | Ops owner | **RESOLVED** (2026-09-07, evidence `D8-20260907-02`) | Phase 2b execution precondition — cleared, backfill executed; Phase 4's own D8 precondition also cleared (Phase 4's other gates unaffected) |
 | **G-4** | Approve Phase 1 spec §B.2–B.8 | Architecture owner | **APPROVED** | ~~Phase 1~~ *(cleared)* |
 | **G-5** | Ratify Phase 1 enum value sets | Architecture owner | **APPROVED** | ~~Phase 1 migration `CREATE TYPE`s~~ *(cleared)* |
 | **G-9** | Pre-migration snapshot for shared-env deploys | Ops | **APPROVED** | Applying migrations to staging/production (execution-time) |
@@ -877,14 +907,15 @@ counts in Document Control. Do not overwrite history — append.
 | **G-13** | Ratify permission catalogue | Architecture + security owner | **NOT REQUIRED FOR PHASE 2** (→ Phase 3) | Phase 3 START |
 | **G-14** | Customer-auth store-resolution mechanism | Architecture + product owner | **NOT REQUIRED FOR PHASE 2** (P2-D7 re-scope) | Phase 9/12 |
 | **G-15** | Customer token signing secret | Security owner + ops | **APPROVED (design)**; provisioning Phase 9/12 | Phase 9/12 |
-| **G-16** | Phase 2b backfill authorization | Ops owner | **OPEN — PENDING (gated on D2 + D8)** | **Phase 2b START; Phase 2 completion** |
+| **G-16** | Phase 2b backfill authorization | Ops owner | **APPROVED — AUTHORIZED (2026-09-07)** | **Phase 2b START** (unblocked); Phase 2 completion pending backfill reconciliation |
 | **G-17** | D6 resolution / Phase 2 re-scope | Architecture + product owner | **APPROVED — RE-SCOPE** (3-checkpoint gate) | Phase 2a START |
 | **G-18** | D5 narrative-wording correction | Architecture owner | **APPROVED — applied** | (governance hygiene) |
 | **G-19** | G-10 guard for additive `ADD COLUMN` | Architecture owner | **APPROVED (no weakening)** | Phase 2a START |
 
 **Phase 2a START GATE: `READY`** (see `docs/saas/PHASE-2-START-GATE-RESULT.md`).
-**Phase 2b START GATE: `BLOCKED`** — D2 **RESOLVED (Option A, 2026-09-07)**, D8 PENDING, G-16 PENDING.
-**Phase 2 COMPLETION: `BLOCKED`** — requires Phase 2b.
+**Phase 2b START GATE: `CLEARED`** — D2 **RESOLVED**, D8 **RESOLVED** (evidence `D8-20260907-02`), **G-16 APPROVED — AUTHORIZED (2026-09-07)**.
+**Phase 2b: EXECUTED** (2026-09-07) — see `docs/saas/PHASE-2B-IMPLEMENTATION-REPORT.md` for the full backfill/reconciliation evidence.
+**Phase 2 COMPLETION: `COMPLETE`** (2026-09-07) — Phase 2a (additive schema) + Phase 2b (identity backfill, reconciled) both done.
 
 ---
 
@@ -897,7 +928,6 @@ supplied** for these, so they remain `OPEN`:
 |---|---|:-:|---|
 | **D4** | Isolation mechanism (app-layer / RLS / both) | **OPEN** | Doc-level classification "both"; **not owner-ratified**. Gates Phase 3. |
 | **D7** | `WebhookEvent` split | **OPEN** | Gates Phase 7/8. |
-| **D8** | Hosting / staging / worker topology → staging + **verified restore drill** | **OPEN — `PENDING`** | Owner status 2026-09-06: **PENDING** — the restore drill has not been performed. **Gates Phase 2b** (a verified restore artifact — Phase 14 drill or a proven-restorable `pg_dump` copy — is required before the `Customer` backfill) **and Phase 4.** Provisioning should already be in progress (lead time). |
 | **D9** | Merchant payment-credential storage | **OPEN** | Gates Phase 8. |
 | **D10** | Per-tenant order/invoice numbering + statutory format | **OPEN** | `REQUIRES LEGAL DECISION`. Gates Phase 4 (W4). |
 | **D11** | `AppSetting` per-key ownership classification | **OPEN** | Gates Phase 4 (W4). |
@@ -910,6 +940,9 @@ supplied** for these, so they remain `OPEN`:
 
 *(D2 has moved OUT of this table — it now has a full record above, status RESOLVED — OPTION A,
 2026-09-07.)*
+
+*(D8 has moved OUT of this table — it now has a full record above, status RESOLVED, 2026-09-07,
+evidence `D8-20260907-02`.)*
 
 When owners record decisions for any of these, add a full record above using the same template.
 
@@ -928,3 +961,30 @@ modified. D2's resolution authorizes Phase 2b/Phase 4 **planning** against a rea
 assumption; it does **not** authorize Phase 2b execution, production backfill, backup, or
 restore. D8 and G-16 remain OPEN — PENDING, unchanged. Phase 2b START GATE remains `BLOCKED`
 (gated on D8 + G-16). Phase 2 COMPLETION remains `BLOCKED`.*
+
+*Updated 2026-09-07 (later same day): D8 RESOLVED — a fresh production backup
+(`printforge_prod_20260907T171225Z.dump`, SHA-256 `dfcd2399f0136ad0ba1d75341135557abca856d6b720eaa6fe9efb73fd91cb48`)
+taken after production received the two Phase 2a migrations (a separately authorized production
+migration, distinct from the D8 restore-drill authorization) was restored into the disposable
+scratch instance `d8_scratch` and passed every `D8-RESTORE-DRILL-RUNBOOK.md` §6 check and §7
+reconciliation row (evidence ID `D8-20260907-02`, Entry 4). All eight §10 conditions are met,
+including condition 8 (explicit owner confirmation, recorded in the D8 Decision Log above).
+**G-16 remains OPEN — PENDING** — D8's resolution does not authorize Phase 2b, and no
+`TenantMembership`/`Customer` rows, and no `User` modification, occurred. Phase 2b START GATE
+remains `BLOCKED`, now gated on **G-16 alone**. Phase 2 COMPLETION remains `BLOCKED`.*
+
+*Updated 2026-09-07 (later same day): G-16 APPROVED — AUTHORIZED, and Phase 2b EXECUTED. The
+owner supplied Tenant #1's name/slug (`PrintForge`/`printforge`) and primary Store's name/slug
+(`PrintForge Store`/`printforge`) in writing (D3 Decision Log), and explicitly authorized G-16
+in writing (G-16 Decision Log), subject to the pre-flight/dry-run/reconciliation/fresh-snapshot
+requirements already satisfied. A fresh pre-backfill production snapshot
+(`printforge_prod_prebackfill_20260907T173125Z.dump`, SHA-256
+`0847ee3cf68b10990474c156bfc8870e2b100c713a48e8fe2fe17aa56f2ace24`) was taken immediately before
+execution. The backfill (Free `Plan` + Tenant #1 + primary `Store` + `Subscription`, 5 `OWNER`
+`TenantMembership` rows for all `role='ADMIN'` users, 18 `Customer` rows for all `role='CUSTOMER'`
+users) was executed against production in one transaction, then re-run and confirmed idempotent
+(zero new rows). Every existing commerce/business row count and the orders revenue sum were
+verified unchanged before/after. One anomaly was recorded, not auto-resolved: 4 of 5 `ADMIN`
+users have prior order history ("admin-who-also-shopped") — expected per spec, no `User` row
+touched. Full evidence: `docs/saas/PHASE-2B-IMPLEMENTATION-REPORT.md`. **Phase 2b START GATE:
+`CLEARED`. Phase 2 COMPLETION: `COMPLETE`.***

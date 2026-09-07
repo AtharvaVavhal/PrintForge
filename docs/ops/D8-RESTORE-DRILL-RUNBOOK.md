@@ -489,6 +489,341 @@ Scope:                        Confirms only the §2 identity check
                                occurred.
 ```
 
+**Entry 2 — 2026-09-07 — Execution attempt halted at §2 (STOP, §8)**
+```
+Type:                         CLAUDE CODE EXECUTION ATTEMPT — operator
+                               instructed this session to execute §2–§10
+                               of this runbook directly.
+Operator:                     Atharva (per §1 authorization record)
+Date:                         2026-09-07
+Pre-checks performed:
+  - PostgreSQL 18.6 binaries verified at the specified paths
+    (psql, pg_dump, pg_restore) — OK.
+  - Environment variable presence checked (values never read into any
+    command output or file):
+      PRODUCTION_DATABASE_URL:  NOT SET in this process's environment.
+      SCRATCH_DATABASE_URL:     SET (non-empty).
+STOP condition triggered:      §8 — "Required credentials unavailable
+                               through the authorized mechanism (§1/§2)
+                               — do not fall back to an unauthorized/
+                               ambient credential."
+Action taken:                  Execution halted immediately after the
+                               environment check. No connection to
+                               production or scratch was attempted. No
+                               pg_dump, pg_restore, or psql command was
+                               run against any database. No credential
+                               discovery (.env, shell history, shell
+                               profile, Render CLI, or any ambient
+                               session) was attempted, per the explicit
+                               prohibition in §1.
+Production writes:             NONE (no production access occurred at all)
+Phase 2b:                      NOT EXECUTED
+D8 verdict this attempt:       BLOCKED — not a §10 evidence package;
+                               this entry records only that the attempt
+                               did not proceed past §2 due to missing
+                               credential material in the execution
+                               environment. D8 status is unchanged from
+                               before this attempt.
+Next step (not taken here):    The operator must re-establish
+                               PRODUCTION_DATABASE_URL in the same
+                               process this session's tools execute in,
+                               via the §1-authorized mechanism, before
+                               this runbook can proceed past §2.
+```
+
+**Entry 3 — 2026-09-07 — §4–§7 backup, restore, and load verification (STOP at §6, schema-level)**
+```
+Type:                          CLAUDE CODE EXECUTION — production backup
+                               (artifact + checksum) had already been
+                               produced by the operator via the §1-
+                               authorized mechanism before this entry;
+                               this session verified the checksum,
+                               restored the existing artifact into the
+                               already-provisioned disposable scratch
+                               instance, and ran the §6 checklist. No
+                               production connection was made or
+                               attempted by this session at any point.
+Operator:                      Atharva (per §1 authorization record)
+Date:                          2026-09-07
+
+Backup artifact (pre-existing, produced under §1 authorization):
+  Artifact:                    printforge_prod_20260907T163013Z.dump
+  SHA-256:                     252a17f269549259c4eb8cd9e9764f4521173579073e4bab8a78bd56614fb38e
+  Checksum verify (this entry): shasum -a 256 -c → OK
+  Size:                        127,919 bytes
+  Permissions:                 600 (owner read/write only)
+  Format:                      pg_dump --format=custom (TOC 175 entries)
+  Dumped from:                 PostgreSQL 18.6 (Debian 18.6-1.pgdg12+2) — dbname printforge_db
+  pg_dump version:             18.6 (Homebrew)
+
+Scratch target (pre-existing, provisioned under §1 authorization):
+  Provider:                    local disposable PostgreSQL 18.6 instance
+                                (Homebrew postgresql@18), port 55432 —
+                                separate server process, not the app's
+                                dev/test Postgres instance, no
+                                application DATABASE_URL points at it.
+  Database:                    d8_scratch
+  Identity check:               confirmed non-production (local instance,
+                                distinct host/port from the production
+                                identity recorded in §2/Entry 1).
+
+Restore (this entry — re-run for a fresh, captured log; idempotent
+per §5 note, `--clean --if-exists`):
+  Command:                     pg_restore --no-owner --no-privileges
+                                --clean --if-exists --dbname
+                                <scratch, local, non-production>
+                                printforge_prod_20260907T163013Z.dump
+  Exit code:                   0
+  stderr:                      empty (no warnings, no errors)
+  Production writes:           NONE (restore target was scratch only)
+
+§6 Load verification results:
+  Database-level:               PASS — connects; `select 1` succeeds;
+                                queryable without error.
+  Schema-level:                 FAIL —
+    - Table count:              26 present vs. 32 expected (Phase 2a
+                                model count per PHASE-2A-CHANGE-MAP.md).
+    - _prisma_migrations:       9 rows, latest =
+                                `20260902031308_order_tax_snapshot_and_invoices`.
+                                MISSING: `20260905191258_add_saas_foundation`,
+                                `20260906171709_add_customer_and_platform_role`
+                                (11 migrations exist on disk under
+                                backend/prisma/migrations/).
+    - Enums:                    `PlatformRole`, `TenantRole`,
+                                `MembershipStatus`, `TenantStatus`,
+                                `StoreStatus`, `DomainVerificationStatus`,
+                                `SubscriptionStatus` — ALL ABSENT.
+    - users.platformRole:       ABSENT.
+  Commerce-level:                PASS — orders, carts, reviews,
+                                coupon_usages, idempotency_keys,
+                                uploaded_files, payment_attempts,
+                                invoices, order_status_history,
+                                app_settings all present and queryable;
+                                no `customerId`/`tenantId`/`storeId`
+                                columns present on any of them (correct
+                                — that is Phase 4 scope, not yet applied,
+                                consistent with the source being genuine
+                                unmigrated production).
+  SaaS foundation:               FAIL — `tenants`, `stores`,
+                                `store_domains`, `tenant_memberships`,
+                                `subscriptions`, `customers`, `plans` —
+                                ALL ABSENT.
+
+STOP condition triggered:      §8 — schema-level verification failure.
+                                This is the real, expected consequence of
+                                production being 2 migrations behind the
+                                11 committed in this repository — not a
+                                restore defect. Per §6's own instruction,
+                                the failure is recorded, not "fixed" by
+                                modifying the restored database.
+
+§7 Reconciliation (structural/count only, no PII):
+  Table inventory (public schema):     scratch = 26  (production, same
+                                        dump = 26 by construction)
+  _prisma_migrations row count:        scratch = 9   (production = 9)
+  Latest applied migration:            scratch = production =
+                                        `20260902031308_order_tax_snapshot_and_invoices`
+  users row count:                     23
+  orders row count:                    40
+  customers row count:                 table does not exist (expected —
+                                        pre-Phase-2a-migration production)
+  tenant_memberships row count:        table does not exist (expected)
+  Restore completion status:           SUCCESS, exit code 0, no errors
+  Note:                                the dump IS the production source
+                                        at capture time, so a scratch
+                                        count equal to a fresh live
+                                        production count is guaranteed by
+                                        a clean restore (exit 0, empty
+                                        stderr) and was not re-verified
+                                        by a second live production query
+                                        — no additional production access
+                                        was made or sought for this entry.
+
+Production writes:             NONE
+Phase 2b:                      NOT EXECUTED
+D8 verdict this entry:         BLOCKED (unchanged). §10 requires ALL
+                                eight conditions, including "load
+                                verification succeeded against every
+                                check in §6" (condition 6) — the
+                                schema-level and SaaS-foundation checks
+                                above FAILED, so D8 cannot be marked
+                                RESOLVED from this entry. The backup and
+                                restore mechanics themselves are proven
+                                sound (checksum verified, restore exit 0,
+                                commerce-level data intact); what remains
+                                outstanding is that production has not
+                                yet received the two additive migrations
+                                already committed to this repository.
+Next step (not taken here):    Apply `20260905191258_add_saas_foundation`
+                                and `20260906171709_add_customer_and_platform_role`
+                                to production via `prisma migrate deploy`
+                                — this requires its own explicit
+                                production-migration authorization,
+                                separate from the §1 D8 authorization
+                                record (see D8-OWNER-OPS-HANDOFF.md
+                                "Critical boundary": the existing
+                                authorization explicitly does not extend
+                                to production migrations). Not requested
+                                or performed here. Once applied, this
+                                drill must be re-run against a fresh
+                                post-migration production backup before
+                                D8 can be marked RESOLVED.
+```
+
+**Entry 4 — 2026-09-07 — Fresh post-migration §2–§9 drill (full pass)**
+```
+Context:                       Production received the two additive
+                                migrations named in Entry 3 via an
+                                explicitly authorized, separately scoped
+                                production-migration authorization
+                                (distinct from the §1 D8 authorization),
+                                executed and verified in this session.
+                                Entry 3's artifact (`printforge_prod_
+                                20260907T163013Z.dump`) now represents a
+                                stale, pre-migration snapshot and was not
+                                reused, per instruction.
+Operator:                      Atharva (per §1 authorization record)
+Date:                          2026-09-07
+
+§2 — Identity check (read-only):
+  Production:                  database=printforge_db, host=10.28.26.163
+                                (matches Entry 1/Entry 3 production
+                                identity — same production instance).
+  Scratch:                     database=d8_scratch, host=::1 (localhost),
+                                port=55432 — confirmed distinct from
+                                production before restore.
+
+§4 — Fresh backup artifact:
+  Artifact:                    printforge_prod_20260907T171225Z.dump
+  Created:                     2026-09-07 22:42:25 IST (2026-09-07T17:12:25Z)
+  Size:                        149,660 bytes
+  Permissions:                 600 (chmod applied immediately after dump)
+  Format:                      pg_dump --format=custom --no-owner
+                                --no-privileges (TOC: 231 entries, up from
+                                175 pre-migration — consistent with the
+                                6 new tables + new enums)
+  Dumped from:                 PostgreSQL 18.6 (Debian 18.6-1.pgdg12+2),
+                                dbname printforge_db
+  pg_dump version:             18.6 (Homebrew)
+  SHA-256:                     dfcd2399f0136ad0ba1d75341135557abca856d6b720eaa6fe9efb73fd91cb48
+  Checksum verify:              shasum -a 256 -c → OK
+
+§5 — Restore (into d8_scratch only):
+  Command:                     pg_restore --no-owner --no-privileges
+                                --clean --if-exists --dbname <scratch,
+                                local, non-production> printforge_prod_
+                                20260907T171225Z.dump
+  Exit code:                   0
+  stderr:                      empty (0 lines — no warnings, no errors)
+  Production writes:           NONE (restore target was scratch only;
+                                production was never written to)
+
+§6 — Load verification: ALL CHECKS PASS
+  Database-level:               PASS — connects; `select 1` succeeds;
+                                version PostgreSQL 18.6 confirmed.
+  Schema-level:                 PASS —
+    - Table count:              33 (32 Prisma models + `_prisma_migrations`
+                                — matches Phase 2a's documented 32-model
+                                schema).
+    - _prisma_migrations:       11 rows, latest =
+                                `20260906171709_add_customer_and_platform_role`,
+                                0 rows with null `finished_at` or non-null
+                                `rolled_back_at`.
+    - Enums:                    all present — `PlatformRole`,
+                                `TenantRole`, `TenantStatus`,
+                                `StoreStatus`, `MembershipStatus`,
+                                `DomainVerificationStatus`,
+                                `SubscriptionStatus`, plus all pre-existing
+                                commerce enums (19 total).
+    - users.platformRole:       present — nullable, `PlatformRole` enum.
+    - Key indexes:              `tenant_memberships_userId_tenantId_key`,
+                                `customers_storeId_email_key`,
+                                `stores_tenant_primary_unique` — all
+                                present.
+  Commerce-level:                PASS — all 10 legacy commerce tables
+                                present and queryable; no `customerId` /
+                                `tenantId` / `storeId` column exists on
+                                any of them yet (correct — Phase 4 scope,
+                                not this migration).
+  SaaS foundation:               PASS — `tenants`, `stores`,
+                                `store_domains`, `tenant_memberships`,
+                                `subscriptions`, `customers`, `plans` —
+                                ALL PRESENT.
+
+§7 — Reconciliation (structural/count only, no PII; production values via
+a fresh read-only query, not inferred from the dump):
+  | Evidence                          | Production | Scratch | Match |
+  |------------------------------------|-----------|---------|-------|
+  | Table inventory (public schema)   | 33        | 33      | ✅ |
+  | `_prisma_migrations` row count    | 11        | 11      | ✅ |
+  | Latest applied migration          | `20260906171709_add_customer_and_platform_role` | same | ✅ |
+  | `users` row count                 | 23        | 23      | ✅ |
+  | `orders` row count                | 40        | 40      | ✅ |
+  | `customers` row count             | 0         | 0       | ✅ (table exists, no backfill run — expected, Phase 2b not executed) |
+  | `tenant_memberships` row count    | 0         | 0       | ✅ (same reason) |
+  | Restore completion status         | —         | exit 0, 0 stderr lines | ✅ |
+
+§9 — Evidence package:
+```
+D8 Evidence ID:            D8-20260907-02
+Operator:                  Atharva
+Owner authorization ref:   D8-OWNER-OPS-HANDOFF.md Authorization Record,
+                            2026-09-07 (D8 restore-drill scope; production
+                            migration itself was authorized separately,
+                            not under this record — see the dedicated
+                            production-migration authorization recorded
+                            in this session's conversation log)
+Date/time (UTC):           2026-09-07T17:12:25Z (dump) /
+                            2026-09-07T17:1x (restore+verify, same session)
+Source environment:        production
+Source DB identity:        provider=Render PostgreSQL; database=printforge_db;
+                            host=10.28.26.163   [NO CONNECTION STRING]
+Scratch DB identity:       provider=local Homebrew PostgreSQL 18.6;
+                            instance=localhost:55432; database=d8_scratch
+                            [NO CONNECTION STRING]
+PostgreSQL version:        18.6 (both source and scratch)
+Dump method:                pg_dump --format=custom --no-owner --no-privileges
+Artifact identifier:       printforge_prod_20260907T171225Z.dump
+Artifact checksum:         dfcd2399f0136ad0ba1d75341135557abca856d6b720eaa6fe9efb73fd91cb48
+Artifact storage location: local access-controlled path (600 perms),
+                            /Users/atharva/PrintForge/d8-artifacts/
+                            (outside the git repository; not committed)
+Restore method:             pg_restore --no-owner --no-privileges --clean --if-exists
+Restore result:             SUCCESS (exit 0, 0 stderr lines)
+Verification results:       PASS — all §6 checks (database, schema,
+                            commerce, SaaS foundation)
+Table/schema verification:  33/33 tables, 11/11 migrations, all required
+                            enums and the `platformRole` column present
+Row-count verification:     users/orders match production exactly (23/40);
+                            customers/tenant_memberships correctly 0/0
+                            pre-backfill
+Errors/warnings:            none
+Final D8 verdict:           RESOLVED — conditions 1–7 met by this
+                            evidence; condition 8 satisfied by explicit
+                            owner confirmation (below).
+```
+
+Owner confirmation (condition 8):
+```
+Owner:                      Atharva — Project Owner / Ops Owner
+Date:                        2026-09-07
+Confirmation text:          "I, Atharva — Project Owner / Ops Owner, have
+                             reviewed D8 evidence package D8-20260907-02
+                             (Entry 4) and explicitly confirm the result.
+                             Owner confirmation for §10 condition 8: MET."
+Recorded in:                 DECISIONS.md D8 record (Decision Log),
+                             this session's conversation log
+```
+
+Production writes:             NONE
+Phase 2b:                      NOT EXECUTED
+D8 verdict this entry:         **RESOLVED** — all eight §10 conditions
+                                met (1–7 by this entry's evidence, 8 by
+                                the owner confirmation above). See
+                                `docs/saas/DECISIONS.md` D8 record for the
+                                canonical governance entry.
+```
+
 ---
 
 ## 10. D8 governance update

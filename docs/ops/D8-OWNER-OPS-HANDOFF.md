@@ -14,9 +14,10 @@ own environment and the repository — never by contacting production.
 ## Current Gate
 
 D2: RESOLVED
-D8: BLOCKED
-G-16: PENDING
-Phase 2b: BLOCKED
+D8: RESOLVED (2026-09-07 — evidence D8-20260907-02, D8-RESTORE-DRILL-RUNBOOK.md
+    Entry 4; owner confirmation recorded in docs/saas/DECISIONS.md D8 record)
+G-16: APPROVED — AUTHORIZED (2026-09-07, docs/saas/DECISIONS.md G-16 record)
+Phase 2b: EXECUTED (2026-09-07 — docs/saas/PHASE-2B-IMPLEMENTATION-REPORT.md)
 
 ## Required Before D8 Execution
 
