@@ -181,6 +181,13 @@ model RefreshToken {
 
 // ─── Catalog ────────────────────────────────────────────────────────────
 
+// ─── Phase 4 (W3) — SaaS ownership columns, additive only ─────────────────
+// Nullable tenantId/storeId/customerId-family scalar columns added across the
+// commerce tables below (Master Plan W3: "ADD COLUMN ... NULL"). Plain
+// scalars, no @relation yet — composite FKs are W6, NOT NULL is W7, and
+// backfill is W4 (decision P4-D1, Option B). See
+// docs/saas/PHASE-4-IMPLEMENTATION-REPORT.md.
+
 // Flat, one nesting level (§8). Only active categories appear in the
 // public storefront; isActive mirrors Product's pattern for soft-delete.
 model Category {
@@ -189,6 +196,9 @@ model Category {
   slug            String     @unique
   parentCategoryId String?
   isActive        Boolean    @default(true)
+
+  tenantId        String?
+  storeId         String?
 
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -199,6 +209,8 @@ model Category {
   coupons         Coupon[]
 
   @@index([parentCategoryId])
+  @@index([tenantId])
+  @@index([storeId])
   @@map("categories")
 }
 
@@ -223,6 +235,9 @@ model Product {
   avgRating      Decimal? @db.Decimal(3, 2)
   reviewCount    Int      @default(0)
 
+  tenantId       String?
+  storeId        String?
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -235,6 +250,8 @@ model Product {
   reviews              Review[]
 
   @@index([categoryId])
+  @@index([tenantId])
+  @@index([storeId])
   @@map("products")
 }
 
@@ -254,11 +271,14 @@ model ProductImage {
   sortOrder          Int      @default(0)
   isPrimary          Boolean  @default(false)
 
+  tenantId           String?
+
   createdAt          DateTime @default(now())
 
   product            Product  @relation(fields: [productId], references: [id])
 
   @@index([productId])
+  @@index([tenantId])
   @@map("product_images")
 }
 
@@ -271,6 +291,8 @@ model ProductVariant {
   priceDelta  Decimal  @db.Decimal(10, 2) @default(0)
   isAvailable Boolean  @default(true)
 
+  tenantId    String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -279,6 +301,7 @@ model ProductVariant {
 
   @@unique([productId, label])
   @@index([productId])
+  @@index([tenantId])
   @@map("product_variants")
 }
 
@@ -296,6 +319,8 @@ model CustomizationField {
   surchargeType    SurchargeType          @default(NONE)
   surchargeAmount  Decimal                @db.Decimal(10, 2) @default(0)
 
+  tenantId         String?
+
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
@@ -303,6 +328,7 @@ model CustomizationField {
   cartItemValues   CartItemCustomization[]
 
   @@index([productId])
+  @@index([tenantId])
   @@map("customization_fields")
 }
 
@@ -320,6 +346,9 @@ model UploadedFile {
   resourceType       String
   deliveryType       String
 
+  tenantId              String?
+  uploadedByCustomerId  String?
+
   createdAt          DateTime @default(now())
 
   uploadedBy         User                      @relation(fields: [uploadedByUserId], references: [id])
@@ -327,6 +356,8 @@ model UploadedFile {
   orderItemValues    OrderItemCustomization[]
 
   @@index([uploadedByUserId])
+  @@index([tenantId])
+  @@index([uploadedByCustomerId])
   @@map("uploaded_files")
 }
 
@@ -337,12 +368,19 @@ model Cart {
   id        String   @id @default(uuid())
   userId    String   @unique
 
+  tenantId   String?
+  storeId    String?
+  customerId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user      User       @relation(fields: [userId], references: [id])
   items     CartItem[]
 
+  @@index([tenantId])
+  @@index([storeId])
+  @@index([customerId])
   @@map("carts")
 }
 
@@ -354,6 +392,8 @@ model CartItem {
   variantId String?
   quantity  Int
 
+  tenantId  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -363,6 +403,7 @@ model CartItem {
   customizations  CartItemCustomization[]
 
   @@index([cartId])
+  @@index([tenantId])
   @@map("cart_items")
 }
 
@@ -374,10 +415,13 @@ model CartItemCustomization {
   textValue            String?
   uploadedFileId       String?
 
+  tenantId             String?
+
   cartItem             CartItem            @relation(fields: [cartItemId], references: [id])
   customizationField   CustomizationField  @relation(fields: [customizationFieldId], references: [id], onDelete: Restrict)
   uploadedFile         UploadedFile?       @relation(fields: [uploadedFileId], references: [id])
 
+  @@index([tenantId])
   @@map("cart_item_customizations")
 }
 
@@ -445,6 +489,10 @@ model Order {
   shippingPostalCode     String
   shippingCountry        String
 
+  tenantId        String?
+  storeId         String?
+  customerId      String?
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -465,6 +513,9 @@ model Order {
   @@index([userId])
   @@index([status])
   @@index([couponId])
+  @@index([tenantId])
+  @@index([storeId])
+  @@index([customerId])
   @@map("orders")
 }
 
@@ -500,11 +551,14 @@ model Invoice {
 
   sellerSnapshot  Json
 
+  tenantId        String?
+
   createdAt       DateTime @default(now())
 
   order           Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([issuedAt])
+  @@index([tenantId])
   @@map("invoices")
 }
 
@@ -519,12 +573,15 @@ model OrderItem {
   quantity              Int
   lineTotal             Decimal  @db.Decimal(10, 2)
 
+  tenantId              String?
+
   order          Order                     @relation(fields: [orderId], references: [id])
   product        Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
   customizations OrderItemCustomization[]
   reviews        Review[]
 
   @@index([orderId])
+  @@index([tenantId])
   @@map("order_items")
 }
 
@@ -537,9 +594,12 @@ model OrderItemCustomization {
   textValue          String?
   uploadedFileId     String?
 
+  tenantId           String?
+
   orderItem     OrderItem     @relation(fields: [orderItemId], references: [id])
   uploadedFile  UploadedFile? @relation(fields: [uploadedFileId], references: [id], onDelete: Restrict)
 
+  @@index([tenantId])
   @@map("order_item_customizations")
 }
 
@@ -569,6 +629,8 @@ model PaymentAttempt {
   method            String?
   rawPayload        Json?
 
+  tenantId          String?
+
   createdAt         DateTime             @default(now())
   capturedAt        DateTime?
   updatedAt         DateTime             @updatedAt
@@ -577,6 +639,7 @@ model PaymentAttempt {
   refunds           Refund[]
 
   @@index([orderId])
+  @@index([tenantId])
   @@map("payment_attempts")
 }
 
@@ -606,12 +669,15 @@ model Refund {
   reason           String?
   failureReason    String?
 
+  tenantId         String?
+
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
   paymentAttempt   PaymentAttempt @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
 
   @@index([paymentAttemptId])
+  @@index([tenantId])
   @@map("refunds")
 }
 
@@ -624,12 +690,17 @@ model OrderStatusHistory {
   changedByUserId String?
   note           String?
 
+  tenantId               String?
+  changedByCustomerId    String?
+  changedByMembershipId  String?
+
   createdAt      DateTime     @default(now())
 
   order          Order        @relation(fields: [orderId], references: [id])
   changedBy      User?        @relation(fields: [changedByUserId], references: [id])
 
   @@index([orderId])
+  @@index([tenantId])
   @@map("order_status_history")
 }
 
@@ -667,11 +738,16 @@ model IdempotencyKey {
   resultOrderId String?   @unique
   expiresAt     DateTime
 
+  tenantId      String?
+  customerId    String?
+
   createdAt     DateTime  @default(now())
 
   user          User      @relation(fields: [userId], references: [id])
   resultOrder   Order?    @relation(fields: [resultOrderId], references: [id])
 
+  @@index([tenantId])
+  @@index([customerId])
   @@map("idempotency_keys")
 }
 
@@ -691,9 +767,12 @@ model OutboxEvent {
   lastError     String?
   processedAt   DateTime?
 
+  tenantId      String?
+
   createdAt     DateTime          @default(now())
 
   @@index([status, availableAt])
+  @@index([tenantId])
   @@map("outbox_events")
 }
 
@@ -739,6 +818,10 @@ model Review {
   bodyText    String?
   status      ReviewStatus @default(PUBLISHED)
 
+  tenantId    String?
+  storeId     String?
+  customerId  String?
+
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -749,6 +832,9 @@ model Review {
   @@unique([productId, userId])
   @@index([productId])
   @@index([status])
+  @@index([tenantId])
+  @@index([storeId])
+  @@index([customerId])
   @@map("reviews")
 }
 
@@ -795,6 +881,9 @@ model Coupon {
   description       String?
   createdByAdminId  String
 
+  tenantId  String?
+  storeId   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -804,6 +893,8 @@ model Coupon {
   orders         Order[]
 
   @@index([isActive])
+  @@index([tenantId])
+  @@index([storeId])
   @@map("coupons")
 }
 
@@ -824,6 +915,10 @@ model CouponUsage {
   orderId               String   @unique
   discountAppliedAmount Decimal  @db.Decimal(10, 2)
 
+  tenantId   String?
+  storeId    String?
+  customerId String?
+
   createdAt DateTime @default(now())
 
   coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
@@ -831,6 +926,9 @@ model CouponUsage {
   order  Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([couponId, userId])
+  @@index([tenantId])
+  @@index([storeId])
+  @@index([customerId])
   @@map("coupon_usages")
 }
 
@@ -930,6 +1028,8 @@ model Tenant {
   // `Customer.tenantId` is denormalized (isolation defence-in-depth); the
   // same-store composite FK is Phase 4 hardening (decision P2-D12).
   customers    Customer[]
+  // Phase 4 (W3) — back-relation only; adds NO column to `tenants`.
+  tenantCounters TenantCounter[]
 
   @@index([status])
   @@map("tenants")
@@ -1133,4 +1233,38 @@ model Customer {
   @@index([storeId])
   @@index([tenantId])
   @@map("customers")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 4 (W3) — Sequential per-tenant numbering
+//   Master Plan W3 · docs/saas/PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md
+//   Decision D10 (RESOLVED — BUSINESS DECISION, docs/saas/DECISIONS.md):
+//   sequential tenant-scoped order/invoice numbering; existing numbers are
+//   never rewritten; new numbers use TenantCounter with an atomic per-tenant
+//   counter; no financial-year reset required by the current business
+//   decision.
+//
+// Brand-new, empty table — a real @relation to Tenant is safe here (unlike
+// the plain scalar tenantId/storeId/customerId columns added above to
+// pre-existing commerce tables, which stay relation-less until W6 composite
+// FKs). `key` namespaces the counter per numbering series on a tenant, e.g.
+// "order_number" / "invoice_number" (the counter *consumer* — W7 — decides
+// the exact key set; this table only provides the atomic increment
+// primitive). The atomic claim is `UPDATE ... SET value = value + 1
+// RETURNING value` (or an upsert equivalent), never check-then-increment —
+// same discipline as coupons.usedCount and orders.orderNumber's existing
+// counter pattern.
+// ═══════════════════════════════════════════════════════════════════════════
+model TenantCounter {
+  id        String   @id @default(uuid())
+  tenantId  String
+  key       String
+  value     Int      @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, key])
+  @@map("tenant_counters")
 }

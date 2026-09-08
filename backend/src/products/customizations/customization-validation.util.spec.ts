@@ -20,6 +20,7 @@ function makeField(
     constraints: null,
     surchargeType: SurchargeType.NONE,
     surchargeAmount: new Prisma.Decimal(0),
+    tenantId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

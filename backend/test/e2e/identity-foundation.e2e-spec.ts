@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import { resetDatabase } from './support/db';
 
@@ -275,14 +277,19 @@ describe('SaaS Phase 2a — identity foundation (PlatformRole + Customer)', () =
     expect(rows).toHaveLength(0);
   });
 
-  it('AC-P2-06: no existing commerce table gained a customerId column in Phase 2a', async () => {
-    const rows = await prisma.$queryRawUnsafe<
-      { table_name: string; column_name: string }[]
-    >(
-      `SELECT table_name, column_name FROM information_schema.columns
-        WHERE column_name ILIKE '%customerId%'`,
+  // Live-DB-wide "no table anywhere has a customerId column" was true only
+  // through Phase 2a — Phase 4 (W3, docs/saas/PHASE-4-IMPLEMENTATION-REPORT.md)
+  // is explicitly authorized to add exactly this, so this criterion is now
+  // checked against Phase 2a's OWN migration file (what THAT migration did),
+  // not current DB state.
+  it("AC-P2-06: Phase 2a's own migration did not add a customerId column to any existing commerce table", () => {
+    const sql = readFileSync(
+      join(
+        __dirname,
+        '../../prisma/migrations/20260906171709_add_customer_and_platform_role/migration.sql',
+      ),
+      'utf8',
     );
-    // no table should reference a customer at all in Phase 2a (that is Phase 4)
-    expect(rows).toEqual([]);
+    expect(sql).not.toMatch(/customerId/i);
   });
 });
