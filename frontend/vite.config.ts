@@ -43,6 +43,15 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(import.meta.dirname, './src'),
       },
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: env.VITE_PROXY_TARGET || 'https://printforge-8c9m.onrender.com',
+          changeOrigin: true,
+          secure: true,
+        },
+      },
+    },
     test: {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],

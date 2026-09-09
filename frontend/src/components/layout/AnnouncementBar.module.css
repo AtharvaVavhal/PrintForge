@@ -3,17 +3,22 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--container-padding);
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
-  font-size: var(--text-sm);
+  padding: 0.5rem clamp(1rem, 2.5vw, 2.5rem);
+  background: linear-gradient(90deg, #090d16 0%, #0f172a 40%, #1e293b 100%);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  color: #f8fafc;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-medium);
+  letter-spacing: 0.025em;
   line-height: 1.4;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+  width: 100%;
 }
 
 .text {
   margin: 0;
-  max-width: var(--container-max);
+  width: 100%;
+  max-width: 100%;
   text-align: center;
 }
 

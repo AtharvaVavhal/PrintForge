@@ -100,7 +100,7 @@ export function ProductListPage() {
     : ROUTES.PRODUCTS
   const seoDescription = activeCategory
     ? `Shop ${activeCategory.name} at PrintForge — custom-printed, made to order.`
-    : 'Browse every product in the PrintForge catalogue. Personalise and order custom prints made to order.'
+    : 'Browse every product in the PrintForge catalog. Personalize and order custom prints made to order.'
 
   const productsQuery = useProducts({
     categoryId,

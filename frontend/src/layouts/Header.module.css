@@ -1,9 +1,12 @@
 .header {
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: var(--z-index-header);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .topRow {
@@ -11,12 +14,16 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) var(--container-padding);
-  max-width: var(--container-max);
-  margin: 0 auto;
+  padding: 0.75rem clamp(1rem, 2.5vw, 2.5rem);
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-weight: var(--font-weight-bold);
   font-size: var(--text-lg);
   color: var(--color-text-strong);
@@ -27,8 +34,6 @@
    * fixed-width controls (hamburger, cart) and ellipsis rather than push
    * the row wider than the viewport. */
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -37,12 +42,32 @@
   box-shadow: var(--focus-ring);
 }
 
+.brandIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #090d16 0%, #0f172a 50%, #1e293b 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--color-amber-primary);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%), 0 0 12px rgb(245 158 11 / 15%);
+  flex-shrink: 0;
+}
+
+.brandText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .searchForm {
   position: relative;
   display: flex;
   align-items: center;
   flex: 1;
-  max-width: 480px;
+  max-width: 720px;
   margin: 0 var(--space-4);
 }
 
@@ -55,21 +80,28 @@
 
 .searchInput {
   width: 100%;
-  padding: var(--space-2) var(--space-3);
-  padding-left: calc(var(--space-3) + 20px);
+  padding: 0.5rem var(--space-3);
+  padding-left: calc(var(--space-3) + 22px);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
   color: var(--color-text);
   font-size: var(--text-sm);
   font-family: inherit;
   transition:
     border-color var(--transition-base) ease,
+    background-color var(--transition-base) ease,
     box-shadow var(--transition-base) ease;
+}
+
+.searchInput:hover {
+  background: var(--color-bg);
+  border-color: var(--color-border-strong);
 }
 
 .searchInput:focus-visible {
   outline: none;
+  background: var(--color-bg);
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-accent-ring);
 }
@@ -206,33 +238,37 @@
 
 .cartBadge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -3px;
+  right: -3px;
   min-width: 18px;
   height: 18px;
   padding: 0 4px;
   border-radius: 999px;
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: var(--color-amber-primary);
+  color: #090d16;
   font-size: 10px;
   font-weight: var(--font-weight-bold);
   line-height: 18px;
   text-align: center;
+  box-shadow: 0 2px 6px rgb(245 158 11 / 40%);
 }
 
 .signUpLink {
-  background: var(--color-accent);
-  color: var(--color-accent-contrast);
+  background: var(--color-text-strong);
+  color: #ffffff;
   text-decoration: none;
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  transition: background var(--transition-base);
+  padding: 0.45rem var(--space-4);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-base), transform var(--transition-fast), box-shadow var(--transition-base);
+  box-shadow: 0 2px 6px rgb(15 23 42 / 12%);
 }
 
 .signUpLink:hover {
-  background: var(--color-accent-hover);
+  background: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(29 78 216 / 25%);
 }
 
 .navLink {
@@ -258,12 +294,81 @@
 .navRowDesktop {
   border-top: 1px solid var(--color-border);
   background: var(--color-bg);
+  width: 100%;
 }
 
 .navInnerDesktop {
-  max-width: var(--container-max);
-  margin: 0 auto;
-  padding: var(--space-2) var(--container-padding);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.35rem clamp(1rem, 2.5vw, 2.5rem);
+}
+
+.navCategoriesGroup {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.navDesktopPerks {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.perkLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+  padding: 0.3rem var(--space-2);
+  border-radius: var(--radius-full);
+  transition: color var(--transition-fast) ease, background var(--transition-fast) ease;
+}
+
+.perkLink:hover {
+  color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.perkItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.perkIcon {
+  color: var(--color-text-subtle);
+}
+
+.perkIconAmber {
+  color: var(--color-amber-primary);
+}
+
+.perkDivider {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+}
+
+@media (max-width: 1280px) {
+  .perkItem:last-child,
+  .perkDivider:last-of-type {
+    display: none;
+  }
 }
 
 .navSkeleton {

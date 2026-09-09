@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { ShoppingCart, Menu, X, User } from 'lucide-react'
+import { ShoppingCart, Menu, X, User, Printer, Package, ShieldCheck, Clock } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useCart } from '@/hooks/useCart'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
@@ -50,7 +50,10 @@ export function Header() {
         </button>
 
         <NavLink to={ROUTES.HOME} className={styles.brand} aria-label={`${storeName} home`}>
-          {storeName}
+          <span className={styles.brandIcon} aria-hidden="true">
+            <Printer size={18} strokeWidth={2.2} />
+          </span>
+          <span className={styles.brandText}>{storeName}</span>
         </NavLink>
 
         <HeaderSearch variant="bar" />
@@ -103,11 +106,29 @@ export function Header() {
       {/* Bottom navigation row - Desktop category menu */}
       <nav className={styles.navRowDesktop} aria-label="Product categories">
         <div className={styles.navInnerDesktop}>
-          {treeLoading ? (
-            <div className={styles.navSkeleton} aria-hidden="true" />
-          ) : (
-            <MegaMenuBar categories={categories} />
-          )}
+          <div className={styles.navCategoriesGroup}>
+            {treeLoading ? (
+              <div className={styles.navSkeleton} aria-hidden="true" />
+            ) : (
+              <MegaMenuBar categories={categories} />
+            )}
+          </div>
+          <div className={styles.navDesktopPerks} aria-label="Studio guarantees">
+            <NavLink to={ROUTES.ORDERS} className={styles.perkLink}>
+              <Package size={14} className={styles.perkIcon} aria-hidden="true" />
+              <span>Track Orders</span>
+            </NavLink>
+            <span className={styles.perkDivider} aria-hidden="true" />
+            <div className={styles.perkItem}>
+              <ShieldCheck size={14} className={styles.perkIconAmber} aria-hidden="true" />
+              <span>100% Free Proofs</span>
+            </div>
+            <span className={styles.perkDivider} aria-hidden="true" />
+            <div className={styles.perkItem}>
+              <Clock size={14} className={styles.perkIcon} aria-hidden="true" />
+              <span>48–72h Turnaround</span>
+            </div>
+          </div>
         </div>
       </nav>
 
