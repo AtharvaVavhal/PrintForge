@@ -1,6 +1,11 @@
 import { randomUUID } from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { resetDatabase } from './support/db';
+import {
+  rawInsert,
+  rawSelectById,
+  rawUpdate,
+  resetDatabase,
+} from './support/db';
 import {
   validateTarget,
   runAllSteps,
@@ -23,6 +28,32 @@ import {
  * (prisma/backfill/w4-backfill.ts, reconcile.ts) use, under Jest's control,
  * so the logic has automated regression coverage rather than relying on a
  * one-off manual run.
+ *
+ * Phase 4 W7 (decision P4-D2) test redesign — READ THIS BEFORE EDITING A
+ * FIXTURE HELPER BELOW. This suite's entire point is to construct rows
+ * exactly as they existed BEFORE any Phase 4 backfill ran (no
+ * tenantId/storeId/customerId at all), then prove `runAllSteps` correctly
+ * derives and sets ownership on them. As of W7, `tenantId` is `String`
+ * (not `String?`) on these tables in `schema.prisma`, so Prisma Client's
+ * generated types — and its runtime request/response validation — refuse
+ * to build or deserialize a row that omits it, on ANY database. Every
+ * fixture helper below that used to call `prisma.<model>.create({...})`
+ * without a `tenantId` now calls `rawInsert` instead (raw SQL, bypasses
+ * Prisma Client's own validation only — the underlying `printforge_test`
+ * DATABASE COLUMN is unaffected: this repo's W7 migration has only ever
+ * run against a disposable scratch database, never here). Any read of
+ * such a row THAT MAY STILL HAVE A NULL OWNERSHIP COLUMN AT READ TIME
+ * (i.e. before `runAllSteps` has backfilled it, or inside a rolled-back
+ * transaction) uses `rawSelectById` for the same reason on the read side
+ * — Prisma Client throws `PrismaClientKnownRequestError: Error converting
+ * field "tenantId" of expected non-nullable type "String", found
+ * incompatible value of "null"` even on a pure read, if the actual column
+ * value is null. A read that happens AFTER a successful (non-rolled-back)
+ * `runAllSteps` call needs no change — by then the real column value is
+ * always non-null, exactly what the test is proving. `prisma/backfill/
+ * {w4-backfill,reconcile}.ts` themselves are untouched — verified they
+ * already do all of this via raw SQL internally, never a typed model
+ * read on any of these tables.
  */
 describe('Phase 4 W4/W5 — backfill tooling', () => {
   const prisma = new PrismaClient();
@@ -99,17 +130,17 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
     categoryId: string;
     productId: string;
   }> {
-    const category = await prisma.category.create({
-      data: { name: 'Cat', slug: `cat-${randomUUID()}` },
+    // Legacy-shaped (no tenantId) — see the file header comment.
+    const category = await rawInsert(prisma, 'categories', {
+      name: 'Cat',
+      slug: `cat-${randomUUID()}`,
     });
-    const product = await prisma.product.create({
-      data: {
-        categoryId: category.id,
-        name: 'Prod',
-        slug: `prod-${randomUUID()}`,
-        basePrice: 100,
-        minQuantity: 1,
-      },
+    const product = await rawInsert(prisma, 'products', {
+      categoryId: category.id,
+      name: 'Prod',
+      slug: `prod-${randomUUID()}`,
+      basePrice: 100,
+      minQuantity: 1,
     });
     return { categoryId: category.id, productId: product.id };
   }
@@ -118,22 +149,24 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
     userId: string,
     extra: Partial<Prisma.OrderUncheckedCreateInput> = {},
   ): Promise<string> {
-    const order = await prisma.order.create({
-      data: {
-        orderNumber: `ORD-${randomUUID()}`,
-        userId,
-        subtotal: 100,
-        shippingFee: 0,
-        total: 100,
-        shippingRecipientName: 'Test',
-        shippingPhone: '0000000000',
-        shippingAddressLine1: 'Line 1',
-        shippingCity: 'City',
-        shippingState: 'State',
-        shippingPostalCode: '000000',
-        shippingCountry: 'IN',
-        ...extra,
-      },
+    // Legacy-shaped (no tenantId) — see the file header comment. `extra`
+    // is still typed against Prisma's own (now tenantId-required) create
+    // input so a caller can't silently smuggle an invalid shape through;
+    // no existing caller passes `tenantId` via `extra`.
+    const order = await rawInsert(prisma, 'orders', {
+      orderNumber: `ORD-${randomUUID()}`,
+      userId,
+      subtotal: 100,
+      shippingFee: 0,
+      total: 100,
+      shippingRecipientName: 'Test',
+      shippingPhone: '0000000000',
+      shippingAddressLine1: 'Line 1',
+      shippingCity: 'City',
+      shippingState: 'State',
+      shippingPostalCode: '000000',
+      shippingCountry: 'IN',
+      ...extra,
     });
     return order.id;
   }
@@ -194,23 +227,24 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
       const cust = await makeCustomerWithMatch(storeId, tenantId);
       const { categoryId, productId } = await makeCategoryAndProduct();
 
-      await prisma.productImage.create({
-        data: { productId, cloudinaryPublicId: `pub-${randomUUID()}` },
+      await rawInsert(prisma, 'product_images', {
+        productId,
+        cloudinaryPublicId: `pub-${randomUUID()}`,
       });
 
-      const coupon = await prisma.coupon.create({
-        data: {
-          code: `CODE-${randomUUID()}`,
-          type: 'FLAT_AMOUNT',
-          flatAmountOff: 10,
-          scopeType: 'STORE_WIDE',
-          createdByAdminId: admin,
-        },
+      const coupon = await rawInsert(prisma, 'coupons', {
+        code: `CODE-${randomUUID()}`,
+        type: 'FLAT_AMOUNT',
+        flatAmountOff: 10,
+        scopeType: 'STORE_WIDE',
+        createdByAdminId: admin,
       });
 
-      const cart = await prisma.cart.create({ data: { userId: cust.userId } });
-      await prisma.cartItem.create({
-        data: { cartId: cart.id, productId, quantity: 1 },
+      const cart = await rawInsert(prisma, 'carts', { userId: cust.userId });
+      await rawInsert(prisma, 'cart_items', {
+        cartId: cart.id,
+        productId,
+        quantity: 1,
       });
 
       // Order by a role=CUSTOMER user with a Customer match. Uses the REAL
@@ -223,52 +257,47 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
       const orderId = await makeOrder(cust.userId, {
         orderNumber: 'PF-000001',
       });
-      await prisma.orderItem.create({
-        data: {
-          orderId,
-          productId,
-          productNameSnapshot: 'Prod',
-          unitPriceSnapshot: 100,
-          quantity: 1,
-          lineTotal: 100,
-        },
+      const orderItem = await rawInsert(prisma, 'order_items', {
+        orderId,
+        productId,
+        productNameSnapshot: 'Prod',
+        unitPriceSnapshot: 100,
+        quantity: 1,
+        lineTotal: 100,
       });
-      await prisma.invoice.create({
-        data: {
-          invoiceNumber: 'INV-000001',
-          orderId,
-          currency: 'INR',
-          subtotal: 100,
-          discountAmount: 0,
-          shippingFee: 0,
-          taxableAmount: 100,
-          taxAmount: 0,
-          grandTotal: 100,
-          taxMode: 'INCLUSIVE',
-          sellerSnapshot: {},
-        },
+      await rawInsert(prisma, 'invoices', {
+        invoiceNumber: 'INV-000001',
+        orderId,
+        currency: 'INR',
+        subtotal: 100,
+        discountAmount: 0,
+        shippingFee: 0,
+        taxableAmount: 100,
+        taxAmount: 0,
+        grandTotal: 100,
+        taxMode: 'INCLUSIVE',
+        sellerSnapshot: {},
       });
-      const paymentAttempt = await prisma.paymentAttempt.create({
-        data: {
-          orderId,
-          razorpayOrderId: `rzp_${randomUUID()}`,
-          amountPaise: 10000n,
-          status: 'CAPTURED',
-        },
+      const paymentAttempt = await rawInsert(prisma, 'payment_attempts', {
+        orderId,
+        razorpayOrderId: `rzp_${randomUUID()}`,
+        amountPaise: 10000n,
+        status: 'CAPTURED',
       });
-      await prisma.refund.create({
-        data: { paymentAttemptId: paymentAttempt.id, amountPaise: 1000n },
+      await rawInsert(prisma, 'refunds', {
+        paymentAttemptId: paymentAttempt.id,
+        amountPaise: 1000n,
       });
-      await prisma.orderStatusHistory.create({
-        data: { orderId, toStatus: 'PAID', changedByUserId: cust.userId },
+      await rawInsert(prisma, 'order_status_history', {
+        orderId,
+        toStatus: 'PAID',
+        changedByUserId: cust.userId,
       });
-      await prisma.couponUsage.create({
-        data: {
-          couponId: coupon.id,
-          userId: cust.userId,
-          orderId,
-          discountAppliedAmount: 10,
-        },
+      await rawInsert(prisma, 'coupon_usages', {
+        couponId: coupon.id,
+        userId: cust.userId,
+        orderId,
+        discountAppliedAmount: 10,
       });
 
       // Order by an ADMIN-role user (admin-who-also-shopped anomaly class — expected, not an error).
@@ -278,45 +307,39 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
       const adminOrderId = await makeOrder(admin, { orderNumber: 'PF-000002' });
       void adminOrderId;
 
-      await prisma.idempotencyKey.create({
-        data: {
-          key: `key-${randomUUID()}`,
-          userId: cust.userId,
-          endpoint: '/checkout',
-          resultOrderId: orderId,
-          expiresAt: new Date(Date.now() + 3600_000),
-        },
+      await rawInsert(prisma, 'idempotency_keys', {
+        key: `key-${randomUUID()}`,
+        userId: cust.userId,
+        endpoint: '/checkout',
+        resultOrderId: orderId,
+        expiresAt: new Date(Date.now() + 3600_000),
       });
       // An IdempotencyKey with no resultOrderId (the "direct assign" path).
-      await prisma.idempotencyKey.create({
-        data: {
-          key: `key-${randomUUID()}`,
-          userId: cust.userId,
-          endpoint: '/checkout',
-          expiresAt: new Date(Date.now() + 3600_000),
-        },
+      await rawInsert(prisma, 'idempotency_keys', {
+        key: `key-${randomUUID()}`,
+        userId: cust.userId,
+        endpoint: '/checkout',
+        expiresAt: new Date(Date.now() + 3600_000),
       });
 
-      await prisma.review.create({
-        data: {
-          productId,
-          userId: cust.userId,
-          orderItemId: (
-            await prisma.orderItem.findFirstOrThrow({ where: { orderId } })
-          ).id,
-          rating: 5,
-        },
+      await rawInsert(prisma, 'reviews', {
+        productId,
+        userId: cust.userId,
+        // Reused directly from the rawInsert above — re-querying via
+        // `prisma.orderItem.findFirstOrThrow` would throw here (its
+        // tenantId is still null at this point, pre-backfill; see the
+        // file header comment).
+        orderItemId: orderItem.id,
+        rating: 5,
       });
 
-      const uploadedFile = await prisma.uploadedFile.create({
-        data: {
-          cloudinaryPublicId: `up-${randomUUID()}`,
-          uploadedByUserId: cust.userId,
-          format: 'png',
-          bytes: 10,
-          resourceType: 'image',
-          deliveryType: 'upload',
-        },
+      const uploadedFile = await rawInsert(prisma, 'uploaded_files', {
+        cloudinaryPublicId: `up-${randomUUID()}`,
+        uploadedByUserId: cust.userId,
+        format: 'png',
+        bytes: 10,
+        resourceType: 'image',
+        deliveryType: 'upload',
       });
       void uploadedFile;
       // The orphan-customer (role=CUSTOMER, no Customer match) anomaly path is
@@ -324,15 +347,13 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
       // deliberately NOT mixed into this fixture, which asserts everything
       // reconciles cleanly.
       // An uploaded file by an ADMIN (no customerId expected — not an anomaly).
-      await prisma.uploadedFile.create({
-        data: {
-          cloudinaryPublicId: `up-${randomUUID()}`,
-          uploadedByUserId: admin,
-          format: 'png',
-          bytes: 10,
-          resourceType: 'image',
-          deliveryType: 'upload',
-        },
+      await rawInsert(prisma, 'uploaded_files', {
+        cloudinaryPublicId: `up-${randomUUID()}`,
+        uploadedByUserId: admin,
+        format: 'png',
+        bytes: 10,
+        resourceType: 'image',
+        deliveryType: 'upload',
       });
 
       await prisma.outboxEvent.create({
@@ -684,28 +705,24 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
         orderNumber: 'PF-000042',
         total: 555.5,
       });
-      await prisma.invoice.create({
-        data: {
-          invoiceNumber: 'INV-000042',
-          orderId,
-          currency: 'INR',
-          subtotal: 555.5,
-          discountAmount: 0,
-          shippingFee: 0,
-          taxableAmount: 555.5,
-          taxAmount: 0,
-          grandTotal: 555.5,
-          taxMode: 'INCLUSIVE',
-          sellerSnapshot: {},
-        },
+      await rawInsert(prisma, 'invoices', {
+        invoiceNumber: 'INV-000042',
+        orderId,
+        currency: 'INR',
+        subtotal: 555.5,
+        discountAmount: 0,
+        shippingFee: 0,
+        taxableAmount: 555.5,
+        taxAmount: 0,
+        grandTotal: 555.5,
+        taxMode: 'INCLUSIVE',
+        sellerSnapshot: {},
       });
-      const paymentAttempt = await prisma.paymentAttempt.create({
-        data: {
-          orderId,
-          razorpayOrderId: `rzp_${randomUUID()}`,
-          amountPaise: 55550n,
-          status: 'CAPTURED',
-        },
+      const paymentAttempt = await rawInsert(prisma, 'payment_attempts', {
+        orderId,
+        razorpayOrderId: `rzp_${randomUUID()}`,
+        amountPaise: 55550n,
+        status: 'CAPTURED',
       });
       void paymentAttempt;
 
@@ -736,11 +753,12 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
       const orderId = await makeOrder(cust.userId, { total: 100 });
 
       const before = await captureSnapshot();
-      // Simulate an unexpected mutation the backfill should never itself perform.
-      await prisma.order.update({
-        where: { id: orderId },
-        data: { total: 999 },
-      });
+      // Simulate an unexpected mutation the backfill should never itself
+      // perform. Raw update (see support/db.ts's own comment) — this
+      // order's tenantId is still null (no backfill runs in this test)
+      // and this update doesn't set it, so a typed `prisma.order.update`
+      // would throw on deserializing its own response.
+      await rawUpdate(prisma, 'orders', orderId, { total: 999 });
       const after = await captureSnapshot();
 
       const checks = compareSnapshots(before, after);
@@ -832,10 +850,10 @@ describe('Phase 4 W4/W5 — backfill tooling', () => {
       const totalAffected = capturedResults.reduce((s, r) => s + r.affected, 0);
       expect(totalAffected).toBeGreaterThan(0);
 
-      // ...but nothing persisted.
-      const order = await prisma.order.findUniqueOrThrow({
-        where: { id: orderId },
-      });
+      // ...but nothing persisted. Raw read-back (see support/db.ts) — a
+      // typed `prisma.order.findUniqueOrThrow` throws here since the
+      // rolled-back transaction means tenantId is genuinely still null.
+      const order = await rawSelectById(prisma, 'orders', orderId);
       expect(order.tenantId).toBeNull();
       const counters = await prisma.tenantCounter.findMany({
         where: { tenantId },

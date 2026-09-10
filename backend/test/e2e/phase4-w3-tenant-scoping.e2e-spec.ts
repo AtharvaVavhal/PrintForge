@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
-import { resetDatabase } from './support/db';
+import { rawInsert, rawSelectById, resetDatabase } from './support/db';
 
 /**
  * SaaS Master Plan Phase 4, wave W3 (docs/saas/PHASE-4-IMPLEMENTATION-REPORT.md;
@@ -237,9 +237,18 @@ describe('SaaS Phase 4 (W3) — tenant/store/customer scoping columns', () => {
 
   it('no existing commerce row was touched — every W3 column reads back NULL on an untouched row (no backfill executed)', async () => {
     await resetDatabase(prisma);
-    const category = await prisma.category.create({
-      data: { name: 'Test', slug: `cat-${randomUUID()}` },
+    // Phase 4 W7 (P4-D2) made `tenantId` non-nullable in Prisma Client's
+    // own generated types, so `prisma.category.create({...})` can no
+    // longer omit it — but the point of THIS test is to prove the
+    // pre-backfill DB-column state (still nullable in `printforge_test`;
+    // W7's migration has only ever run against a disposable scratch
+    // database, never here). `rawInsert` bypasses Prisma Client's typed
+    // `.create()` for exactly this reason — see its own doc comment.
+    const { id } = await rawInsert(prisma, 'categories', {
+      name: 'Test',
+      slug: `cat-${randomUUID()}`,
     });
+    const category = await rawSelectById(prisma, 'categories', id);
     expect(category.tenantId).toBeNull();
     expect(category.storeId).toBeNull();
   });
@@ -259,68 +268,70 @@ describe('SaaS Phase 4 (W3) — tenant/store/customer scoping columns', () => {
     const user = await prisma.user.create({
       data: { email: `u-${randomUUID()}@example.test`, passwordHash: 'x' },
     });
-    const coupon = await prisma.coupon.create({
-      data: {
-        code: `CODE-${randomUUID()}`,
-        type: 'FLAT_AMOUNT',
-        flatAmountOff: 10,
-        scopeType: 'STORE_WIDE',
-        createdByAdminId: user.id,
-      },
+    // Legacy-shaped rows (no tenantId) — see rawInsert's doc comment in
+    // support/db.ts for why raw SQL is required here as of W7.
+    const coupon = await rawInsert(prisma, 'coupons', {
+      code: `CODE-${randomUUID()}`,
+      type: 'FLAT_AMOUNT',
+      flatAmountOff: 10,
+      scopeType: 'STORE_WIDE',
+      createdByAdminId: user.id,
     });
-    const order = await prisma.order.create({
-      data: {
-        orderNumber: `ORD-${randomUUID()}`,
-        userId: user.id,
-        subtotal: 100,
-        shippingFee: 0,
-        total: 100,
-        shippingRecipientName: 'Test',
-        shippingPhone: '0000000000',
-        shippingAddressLine1: 'Line 1',
-        shippingCity: 'City',
-        shippingState: 'State',
-        shippingPostalCode: '000000',
-        shippingCountry: 'IN',
-      },
+    const order = await rawInsert(prisma, 'orders', {
+      orderNumber: `ORD-${randomUUID()}`,
+      userId: user.id,
+      subtotal: 100,
+      shippingFee: 0,
+      total: 100,
+      shippingRecipientName: 'Test',
+      shippingPhone: '0000000000',
+      shippingAddressLine1: 'Line 1',
+      shippingCity: 'City',
+      shippingState: 'State',
+      shippingPostalCode: '000000',
+      shippingCountry: 'IN',
     });
-    const usageNoStore = await prisma.couponUsage.create({
-      data: {
-        couponId: coupon.id,
-        userId: user.id,
-        orderId: order.id,
-        discountAppliedAmount: 10,
-      },
+    const usageNoStore = await rawInsert(prisma, 'coupon_usages', {
+      couponId: coupon.id,
+      userId: user.id,
+      orderId: order.id,
+      discountAppliedAmount: 10,
     });
-    expect(usageNoStore.storeId).toBeNull();
+    const readBackNoStore = await rawSelectById(
+      prisma,
+      'coupon_usages',
+      usageNoStore.id,
+    );
+    expect(readBackNoStore.storeId).toBeNull();
 
     // storeId accepts a real value too (still a plain scalar — no FK yet).
-    const order2 = await prisma.order.create({
-      data: {
-        orderNumber: `ORD-${randomUUID()}`,
-        userId: user.id,
-        subtotal: 100,
-        shippingFee: 0,
-        total: 100,
-        shippingRecipientName: 'Test',
-        shippingPhone: '0000000000',
-        shippingAddressLine1: 'Line 1',
-        shippingCity: 'City',
-        shippingState: 'State',
-        shippingPostalCode: '000000',
-        shippingCountry: 'IN',
-      },
+    const order2 = await rawInsert(prisma, 'orders', {
+      orderNumber: `ORD-${randomUUID()}`,
+      userId: user.id,
+      subtotal: 100,
+      shippingFee: 0,
+      total: 100,
+      shippingRecipientName: 'Test',
+      shippingPhone: '0000000000',
+      shippingAddressLine1: 'Line 1',
+      shippingCity: 'City',
+      shippingState: 'State',
+      shippingPostalCode: '000000',
+      shippingCountry: 'IN',
     });
-    const usageWithStore = await prisma.couponUsage.create({
-      data: {
-        couponId: coupon.id,
-        userId: user.id,
-        orderId: order2.id,
-        discountAppliedAmount: 10,
-        storeId: store.id,
-      },
+    const usageWithStore = await rawInsert(prisma, 'coupon_usages', {
+      couponId: coupon.id,
+      userId: user.id,
+      orderId: order2.id,
+      discountAppliedAmount: 10,
+      storeId: store.id,
     });
-    expect(usageWithStore.storeId).toBe(store.id);
+    const readBackWithStore = await rawSelectById(
+      prisma,
+      'coupon_usages',
+      usageWithStore.id,
+    );
+    expect(readBackWithStore.storeId).toBe(store.id);
   });
 
   describe('TenantCounter (decision D10 — sequential per-tenant numbering)', () => {

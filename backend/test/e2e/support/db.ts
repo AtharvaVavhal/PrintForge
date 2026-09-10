@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 /**
@@ -55,7 +56,10 @@ const ALL_TABLES = [
  * so a misconfigured DATABASE_URL can never truncate printforge_dev's real
  * data — see test/e2e/support/README.md.
  */
-export async function resetDatabase(prisma: PrismaClient): Promise<void> {
+export async function resetDatabase(
+  prisma: PrismaClient,
+  options: { seedBaselineTenant?: boolean } = {},
+): Promise<void> {
   const url = process.env.DATABASE_URL ?? '';
   const dbName = url.split('/').pop()?.split('?')[0] ?? '';
   if (!dbName.endsWith('_test')) {
@@ -66,5 +70,203 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   const tableList = ALL_TABLES.map((t) => `"${t}"`).join(', ');
   await prisma.$executeRawUnsafe(
     `TRUNCATE TABLE ${tableList} RESTART IDENTITY CASCADE`,
+  );
+
+  // Phase 4 W7 (decision P4-D2's create-path fix) — real deployed
+  // environments always have at least one `Tenant` row (Phase 1's
+  // bootstrap seed runs before the app ever serves traffic); a freshly
+  // truncated test database does not, unless a test explicitly creates
+  // one (`registerAdmin`, `makeTenantAndStore`, ...). Many existing e2e
+  // tests exercise flows (uploads, cart, checkout) that predate Phase 4
+  // and were never written to set up a tenant, because none was needed.
+  // Seeding one baseline tenant here by default — same as real
+  // production always having one — means `StorefrontTenantResolver`'s
+  // fallback always has a real tenant to resolve to for those tests,
+  // without changing any of them. A test that creates its OWN tenant(s)
+  // (e.g. for cross-tenant isolation assertions) is unaffected: that
+  // tenant simply becomes the most-recently-created one from that point
+  // on. Pass `{ seedBaselineTenant: false }` for the rare test that
+  // asserts an exact tenant count/row set starting from a truly empty
+  // table (e.g. `tenant-bootstrap-seed.e2e-spec.ts`'s own seed-script
+  // smoke test).
+  if (options.seedBaselineTenant ?? true) {
+    await prisma.tenant.create({
+      data: { slug: 'test-baseline-tenant' },
+    });
+  }
+}
+
+/**
+ * Postgres enum columns this helper is ever asked to insert into,
+ * verbatim from schema.prisma's own enum blocks — an unspecified-type
+ * query parameter needs an explicit cast to satisfy Postgres's own enum
+ * type-resolution in an INSERT ... VALUES (…) parameter list. Extend this
+ * map, not the function below, if a new legacy-fixture call needs another
+ * enum column.
+ */
+const ENUM_COLUMNS: Record<string, string> = {
+  'coupons.type': 'CouponType',
+  'coupons.scopeType': 'CouponScopeType',
+  'order_status_history.toStatus': 'OrderStatus',
+  'order_status_history.fromStatus': 'OrderStatus',
+  'payment_attempts.status': 'PaymentAttemptStatus',
+  'outbox_events.eventType': 'OutboxEventType',
+  'outbox_events.status': 'OutboxEventStatus',
+  'refunds.status': 'RefundStatus',
+  'reviews.status': 'ReviewStatus',
+};
+
+function isPlainObjectValue(value: unknown): boolean {
+  return value !== null && typeof value === 'object' && !(value instanceof Date);
+}
+
+/**
+ * Phase 4 W7 test redesign (P4-D2's create-path fix made this necessary) —
+ * raw-SQL row insertion, bypassing Prisma Client's own typed `.create()`
+ * entirely.
+ *
+ * WHY THIS EXISTS: a handful of W3/W4 backfill-tooling e2e tests
+ * deliberately construct commerce rows exactly as they existed BEFORE any
+ * Phase 4 backfill ran — no `tenantId`/`storeId`/`customerId` at all —
+ * specifically to prove the backfill script (`prisma/backfill/
+ * w4-backfill.ts`) correctly derives and sets ownership on such a row.
+ * That is the whole point of those tests, not an oversight to "fix" by
+ * adding tenantId to the fixture. As of Phase 4 W7 (decision P4-D2),
+ * `tenantId` is `String` (not `String?`) on these tables in
+ * `schema.prisma`, so Prisma Client's generated types — and its runtime
+ * request validation — now refuse to build a `.create()` call that omits
+ * it, on ANY database, regardless of what that database's actual columns
+ * allow. Only the TYPE LAYER changed; the underlying `printforge_test`
+ * DATABASE COLUMN is untouched by W7 — this repository's W7 migration has
+ * only ever been applied to a disposable scratch database (see the W7
+ * implementation/audit reports), never to `printforge_test` — so a raw
+ * SQL `INSERT` that bypasses Prisma Client's own validation still
+ * succeeds exactly as it did before Phase 4 touched these tables.
+ *
+ * This does NOT touch, weaken, or bypass any production code path —
+ * `TenantContextGuard`, the tenant-scoped Prisma client, RLS, or any
+ * application service's own server-derived `tenantId` (Phase 4 W7 /
+ * P4-D2's actual fix) are completely unrelated to this helper, which
+ * exists ONLY so a test can construct a fixture row Prisma Client's types
+ * no longer permit constructing directly.
+ *
+ * `id` and `updatedAt` — present as NOT NULL / no-DB-default on every
+ * table this is used against — are auto-supplied unless the caller
+ * overrides them. Every other required column must be supplied
+ * explicitly, exactly mirroring what the original `.create()` call this
+ * replaces already specified. A plain-object value (not a `Date`) is
+ * JSON-serialized and cast `::jsonb`; a column named in `ENUM_COLUMNS` is
+ * cast to its Postgres enum type — both needed because an unspecified-
+ * type raw parameter otherwise defaults to `text`, which Postgres will
+ * not implicitly coerce to `jsonb`/an enum in this context.
+ */
+export async function rawInsert(
+  prisma: PrismaClient,
+  table: string,
+  data: Record<string, unknown>,
+): Promise<Record<string, unknown> & { id: string }> {
+  // Not every table has both columns (e.g. `coupon_usages` has no
+  // `updatedAt` at all) — check what actually exists rather than
+  // hand-maintaining a per-table list that could silently drift.
+  const existingCols = await prisma.$queryRawUnsafe<
+    { column_name: string }[]
+  >(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
+    table,
+  );
+  const colSet = new Set(existingCols.map((c) => c.column_name));
+
+  const row: Record<string, unknown> = { ...data };
+  if (colSet.has('id') && !('id' in row)) {
+    row.id = randomUUID();
+  }
+  if (colSet.has('updatedAt') && !('updatedAt' in row)) {
+    row.updatedAt = new Date();
+  }
+  const keys = Object.keys(row);
+  const columnSql = keys.map((k) => `"${k}"`).join(', ');
+  const placeholderSql = keys
+    .map((k, i) => {
+      const enumType = ENUM_COLUMNS[`${table}.${k}`];
+      if (enumType) {
+        return `$${i + 1}::"${enumType}"`;
+      }
+      return isPlainObjectValue(row[k]) ? `$${i + 1}::jsonb` : `$${i + 1}`;
+    })
+    .join(', ');
+  const values = keys.map((k) =>
+    isPlainObjectValue(row[k]) ? JSON.stringify(row[k]) : row[k],
+  );
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "${table}" (${columnSql}) VALUES (${placeholderSql})`,
+    ...values,
+  );
+
+  return row as Record<string, unknown> & { id: string };
+}
+
+/**
+ * Phase 4 W7 test redesign — reads a row back as a plain, untyped object,
+ * bypassing Prisma Client's typed model accessors (`prisma.category.
+ * findUnique`, etc.) for the READ side of the same problem `rawInsert`
+ * solves for writes: Prisma Client validates a query's RESPONSE against
+ * its generated model type too, not just requests — `findUniqueOrThrow`
+ * on a row whose actual `tenantId` column is `NULL` throws
+ * `PrismaClientKnownRequestError: Error converting field "tenantId" of
+ * expected non-nullable type "String", found incompatible value of
+ * "null"`, even though the row was never written through Prisma Client
+ * at all. Any test asserting a legacy-fixture row's ownership column
+ * (`tenantId`/`customerId`/etc.) reads it back through this instead.
+ */
+export async function rawSelectById(
+  prisma: PrismaClient,
+  table: string,
+  id: string,
+): Promise<Record<string, unknown>> {
+  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+    `SELECT * FROM "${table}" WHERE id = $1`,
+    id,
+  );
+  if (rows.length !== 1) {
+    throw new Error(
+      `rawSelectById: expected exactly 1 row in "${table}" for id=${id}, got ${rows.length}`,
+    );
+  }
+  return rows[0];
+}
+
+/**
+ * Phase 4 W7 test redesign — updates a row via raw SQL, for the same
+ * reason `rawInsert`/`rawSelectById` exist: `prisma.<model>.update(...)`
+ * returns (and therefore validates) the post-update row, which throws
+ * the same non-nullable-field error if a legacy fixture's `tenantId` is
+ * still `NULL` and this particular update doesn't happen to set it. Only
+ * needed when the update does NOT itself assign the ownership column to
+ * a real value — an update that does (e.g. `data: { tenantId: '...' }`)
+ * returns a non-null value and is unaffected, so stays a normal typed
+ * `prisma.<model>.update(...)` call.
+ */
+export async function rawUpdate(
+  prisma: PrismaClient,
+  table: string,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const keys = Object.keys(data);
+  const setSql = keys
+    .map((k, i) => {
+      const enumType = ENUM_COLUMNS[`${table}.${k}`];
+      const placeholder = enumType ? `$${i + 2}::"${enumType}"` : `$${i + 2}`;
+      return `"${k}" = ${isPlainObjectValue(data[k]) ? `${placeholder}::jsonb` : placeholder}`;
+    })
+    .join(', ');
+  const values = keys.map((k) =>
+    isPlainObjectValue(data[k]) ? JSON.stringify(data[k]) : data[k],
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "${table}" SET ${setSql} WHERE id = $1`,
+    id,
+    ...values,
   );
 }
