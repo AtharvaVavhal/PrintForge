@@ -21,12 +21,13 @@
 | Document | PrintForge SaaS — Canonical Decision Register (`docs/saas/DECISIONS.md`) |
 | Version | 1.2 |
 | Created | 2026-09-06 |
-| Last updated | 2026-09-07 (G-20) — **G-20 APPROVED**: the Phase 3 specification (`PHASE-3-START-GATE-AND-IMPLEMENTATION-SPEC.md`) is verified internally consistent with D6/D4/G-13/P3-D1/P3-D2, the Master Plan, Phase 2's completed state, and the frozen invariants (one non-blocking operational-verification caveat noted, not a contradiction). **Phase 3 START GATE = `READY`**; implementation authorized, not yet begun; this approval does **not** extend to Phase 4. *(Earlier the same day, Phase 3 decision docket: **D6, D4, P3-D2 RESOLVED**; **G-13 APPROVED — RATIFIED**; **P3-D1 RESOLVED**. Earlier still: **D8 RESOLVED**, **G-16 APPROVED — AUTHORIZED**, **Phase 2b EXECUTED**, **Phase 2 COMPLETION = `COMPLETE`**; **D2** RESOLVED — OPTION A. 2026-09-06 — **P2-D1…P2-D13**, **G-11, G-12, G-15, G-17, G-18, G-19** (APPROVED), **G-14** (NOT REQUIRED for Phase 2); **G-18** correction to D5.)* |
-| Repository | `AtharvaVavhal/PrintForge`, branch `main`, HEAD `5609fa8` |
-| Records held | 36 — D1, D2, D3, D4, D5, D6, D8, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11…G-19, P3-D1, P3-D2, G-20 |
-| Records `RESOLVED` / `APPROVED` | **35** (D1, D2, D3, D4, D5, D6, D8, G-4, G-5, G-9, G-10, G-13, P2-D1…P2-D13, G-11, G-12, G-15, G-16, G-17, G-18, G-19, P3-D1, P3-D2, G-20) |
+| Last updated | 2026-09-09 (W6 decision docket closure) — **P4-D3 RESOLVED**: migration-safety guard extension for W6 composite ownership FKs, narrow shape-plus-allowlist rule (see record — not yet implemented). **P4-D4 RESOLVED — OPTION A**: add nullable `storeId` to `ProductImage`/`ProductVariant`/`CustomizationField`/`CartItem`/`CartItemCustomization`/`OrderItem`, no `tenantId` substitution (not yet implemented). **W6 START GATE = `NOT READY`** — guard code, `storeId` columns, preflight validation, fresh backup, and a separate W6 implementation authorization all remain outstanding. P4-D2 unaffected, still `OPEN`, still W7-only. *(Same day, earlier: W3 deployed to production; W4/W5 backfill executed against production, reconciled, independently audited — see `PHASE-4-IMPLEMENTATION-REPORT.md` §14–§16. 2026-09-08: D10 RESOLVED — BUSINESS DECISION; D11 RESOLVED; P4-D1 RESOLVED — OPTION B; P4-D2 OPEN — held, W7-only; Phase 4 START GATE = READY. Earlier: 2026-09-07 — G-20 APPROVED; Phase 3 decision docket (D6, D4, P3-D2 RESOLVED; G-13 RATIFIED; P3-D1 RESOLVED); D8 RESOLVED; G-16 APPROVED — AUTHORIZED; Phase 2b EXECUTED; Phase 2 COMPLETION = `COMPLETE`; D2 RESOLVED — OPTION A. 2026-09-06 — P2-D1…P2-D13, G-11/G-12/G-15/G-17/G-18/G-19 (APPROVED), G-14 (NOT REQUIRED for Phase 2); G-18 correction to D5.)* |
+| Repository | `AtharvaVavhal/PrintForge`, branch `main`, HEAD `ddc6284` |
+| Records held | 42 — D1, D2, D3, D4, D5, D6, D8, D10, D11, G-4, G-5, G-9, G-10, P2-D1…P2-D13, G-11…G-19, P3-D1, P3-D2, G-20, P4-D1, P4-D2, P4-D3, P4-D4 |
+| Records `RESOLVED` / `APPROVED` | **40** (D1, D2, D3, D4, D5, D6, D8, D10, D11, G-4, G-5, G-9, G-10, G-13, P2-D1…P2-D13, G-11, G-12, G-15, G-16, G-17, G-18, G-19, P3-D1, P3-D2, G-20, P4-D1, P4-D3, P4-D4) |
 | Records `NOT REQUIRED` (for their phase) | **1** (G-14 — see record; G-13 was ratified 2026-09-07) |
-| Records `OPEN` / `DEFERRED` | None among the 35 records held. **D7, D9–D15** remain OPEN (bottom table, not yet given a full record). |
+| Records `OPEN` / `DEFERRED` (with a full record) | **1** (P4-D2 — held deliberately, required only before Phase 4 wave W7) |
+| Records `OPEN` (stub only, no full record yet) | **D7, D9, D12–D15** remain OPEN (bottom table). |
 | Companion | `docs/saas/PHASE-0.5-DECISION-STATUS.md`; `docs/saas/PHASE-1-START-GATE-RESULT.md`; `docs/saas/PHASE-2-DECISION-CLOSURE.md`; `docs/saas/PHASE-2-START-GATE-RESULT.md`; `docs/saas/PHASE-2-DECISION-RESOLUTION-AND-SPEC.md`; `docs/saas/ACR-001-SUPERSEDE-BLUEPRINT-V1.2.md` |
 
 **Status vocabulary:** `OPEN` (no owner decision yet) · `RESOLVED` (decision made — for D-items)
@@ -263,6 +264,60 @@ counts in Document Control. Do not overwrite history — append.
 | Date | Owner | Choice | Approval wording (verbatim) | Reference |
 |---|---|---|---|---|
 | 2026-09-07 | Ops owner (project owner) | **RESOLVED — all §10 conditions met** | `"I, Atharva — Project Owner / Ops Owner, have reviewed D8 evidence package D8-20260907-02 (Entry 4) and explicitly confirm the result. Owner confirmation for §10 condition 8: MET."` | `D8-RESTORE-DRILL-RUNBOOK.md` Entry 4, evidence ID `D8-20260907-02`; `D8-OWNER-OPS-HANDOFF.md` §1 authorization record |
+
+---
+
+## D10 — Per-tenant order/invoice numbering and statutory format
+
+| Field | Content |
+|---|---|
+| **ID** | D10 |
+| **Owner** | Business/product owner (this record — an explicit business decision, **not** legal/tax advice or statutory confirmation) |
+| **Date** | 2026-09-08 (technical mechanism); **2026-09-08 (later same day) — format decided** |
+| **Status** | **RESOLVED — BUSINESS DECISION.** Both the counter mechanism and the numbering format are now decided. This status is deliberately labeled "business decision," not a plain unqualified `RESOLVED`, to preserve the owner's explicit instruction that this is not to be represented as legal/tax advice or statutory confirmation — see "Residual risk" below. |
+| **Decision (question)** | What is the approved per-tenant order/invoice numbering and statutory-format strategy for Phase 4? |
+| **Decision (approved)** | **Sequential, tenant-scoped order and invoice numbering.** New numbers are claimed from a `TenantCounter` — one atomically-incremented counter per `(tenantId, key)`, replacing today's two single global rows in `app_settings` (`order_number_counter`, `invoice_number_counter`), each initialized from `MAX(existing number) + 1` (a direct carry-forward — one tenant exists today, zero ambiguity), claimed with the identical atomic `INSERT … ON CONFLICT DO UPDATE … RETURNING` pattern already proven in `orders.service.ts`/`invoice-number.service.ts`. **No financial-year reset** — the counter is a flat, ever-incrementing per-tenant sequence, not a `(tenantId, fiscalYear)`-scoped one. **Existing order/invoice numbers are never rewritten.** |
+| **Legal/business decision vs. technical implementation consequence — kept explicitly separate, per the owner's instruction** | **Business decision (this record, non-legal):** sequential numbering, no fiscal-year reset, is the format PrintForge will use. **Technical implementation consequence (already-approved mechanism, unchanged by this record):** the `TenantCounter` structure, `MAX(existing)+1` seeding, and the existing atomic claim pattern are how that business decision is realized in the schema/backend — these were already agreed before this specific format question was answered, and this record does not reopen or re-derive them. |
+| **Explicit non-legal-advice framing (owner's own words, preserved verbatim, not softened or generalized)** | *"This is a business/product decision. Do not represent it as legal/tax advice or statutory confirmation. If legal review later requires a different statutory format, handle that through the architecture-change process before production use."* |
+| **Residual risk (disclosed, not hidden)** | This decision is **not** a statutory/tax-compliance determination — it is the business proceeding on a sequential-numbering format by its own choice, with an explicit, owner-acknowledged possibility that a later legal review could require a different format (e.g. a jurisdiction-mandated financial-year series) before production use. That contingency is **not** treated as blocking Phase 4 today — it is explicitly routed to "the architecture-change process," i.e. a future, separate, formal reopening of this record if and when a legal review actually requires it — not an open item Phase 4 must wait on now. |
+| **Rationale** | The owner supplied a complete, unconditional format decision (sequential, tenant-scoped, no FY reset) — this is no longer a case of "the format is genuinely still required and not yet decided" (the prior 2026-09-08 entry's framing); it is a decided business choice, correctly and explicitly not dressed up as a legal guarantee. |
+| **Source document / section** | `PHASE-4-DECISION-DOCKET.md` §1; `PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §5, §11 (wave W4); Master Plan §10, §25 (W4); `app-setting.constants.ts` (`invoice.numberPrefix` definition — still marked `pendingClientInput: true` in code; the *prefix string itself*, e.g. `INV-`, is a separate, smaller, already-admin-configurable detail this record does not additionally resolve). |
+| **Consequences** | Wave W4's numbering-migration sub-task is **no longer blocked** — the `TenantCounter` structure, seeding, and claim mechanism can be implemented against this exact, decided format. No counter-shape rework is anticipated (no fiscal-year scoping was chosen), removing the specific "may itself need to be revisited" caveat the prior entry carried. |
+| **Affected phase(s)** | **Phase 4** (wave W4 — fully unblocked on numbering). |
+| **Reversibility** | Reversible only via the owner's own named process — "the architecture-change process" — if a future legal review requires a different format; not casually revisable, since by the time that would matter, live numbers may already have been issued under this format (and per this same record, those are never rewritten). |
+| **Explicit approval wording (recorded)** | `"For PrintForge, use sequential tenant-scoped order and invoice numbering. Existing numbers are never rewritten. New numbers use TenantCounter with an atomic per-tenant counter. No financial-year reset is required by the current business decision. This is a business/product decision. Do not represent it as legal/tax advice or statutory confirmation. If legal review later requires a different statutory format, handle that through the architecture-change process before production use."` (project owner, 2026-09-08). |
+
+### D10 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-08 | Ops/architecture owner (project owner, Atharva) | **TECHNICALLY RESOLVED / LEGAL FORMAT PENDING** *(superseded same day — see next row)* | `"Keep the technical recommendation… Record D10 as: TECHNICALLY RESOLVED / LEGAL FORMAT PENDING… Do not claim Phase 4 is fully unblocked if the legal format is genuinely still required for W4."` | `PHASE-4-DECISION-DOCKET.md` §1 |
+| 2026-09-08 (later same day) | Business/product owner (project owner, Atharva) | **RESOLVED — BUSINESS DECISION: sequential, tenant-scoped, no FY reset** | `"For PrintForge, use sequential tenant-scoped order and invoice numbering… This is a business/product decision. Do not represent it as legal/tax advice or statutory confirmation. If legal review later requires a different statutory format, handle that through the architecture-change process before production use."` | This entry supersedes the row above |
+
+---
+
+## D11 — `AppSetting` per-key ownership classification
+
+| Field | Content |
+|---|---|
+| **ID** | D11 |
+| **Owner** | Architecture owner |
+| **Date** | 2026-09-08 |
+| **Status** | **RESOLVED** |
+| **Decision (question)** | How should the existing `AppSetting` records be classified — `PLATFORM`, `TENANT`, `STORE`, or `GLOBAL/SYSTEM`? |
+| **Decision (approved classification)** | Every current key, found by reading the actual write paths in the codebase (`app-setting.constants.ts`, `orders.service.ts`, `invoice-number.service.ts`) — none invented: <br>**STORE** — `storeName`, `storeAdminName`, `shippingFeeFlat`, `announcement_text`, `hero_slides`, `banners`, `showcase_categories` (storefront content / per-storefront commercial policy). <br>**TENANT** — `tax.enabled`, `tax.pricingMode`, `tax.ratePercent`, `invoice.numberPrefix`, `invoice.sellerLegalName`, `invoice.sellerAddress`, `invoice.sellerGstin`, `invoice.sellerState`, `order_number_counter`, `invoice_number_counter` (legal-entity / tax / numbering identity — one GSTIN and one numbering series per tenant, not per store). <br>**No current key is `PLATFORM` or `GLOBAL/SYSTEM`** — no cross-tenant platform-wide configuration exists yet. |
+| **Rationale** | Owner's explicit approval of the docket's classification (`PHASE-4-DECISION-DOCKET.md` §2), reasoned key-by-key: content/commercial-policy settings vary naturally per storefront; legal/tax/numbering facts are properties of the registered business entity (the tenant), not of any one of its storefronts. |
+| **Source document / section** | `PHASE-4-DECISION-DOCKET.md` §2; `PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §6; `backend/src/app-setting/app-setting.constants.ts` (source of the exact key list). |
+| **Consequences** | Confirms Phase 4's settings-split work is genuinely two-way: both a `TenantSetting` structure (for the 10 `TENANT`-classified keys, 2 of which — the counters — specifically become `TenantCounter` rows, not `TenantSetting`) and a `StoreSetting` structure (for the 7 `STORE`-classified keys) are required — neither can be skipped. Every key's existing value (where a row exists in production today) must be copied forward to Tenant #1 / its primary Store — the old `app_settings` rows are not deleted in this wave (expand→contract discipline; dropped later, if ever, not as part of Phase 4's own migration). **No data has been migrated by this record** — it authorizes the classification, not the migration itself. |
+| **Affected phase(s)** | **Phase 4** (wave W4). |
+| **Reversibility** | A classification is a design record, not a schema change — revisable via a further recorded correction (same discipline as G-18's D5 correction) before W4 actually executes; harder to reverse once rows have been physically migrated. |
+| **Explicit approval wording (recorded)** | `"Resolve according to the docket's classification… tenant-level legal/tax/numbering identity moves to Tenant-owned configuration; storefront/content/commercial-policy settings are Store-owned; counters become TenantCounter; existing Tenant #1 / primary Store values must be preserved. D11 STATUS: RESOLVED."` (project owner, 2026-09-08). |
+
+### D11 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-08 | Architecture owner (project owner, Atharva) | **RESOLVED** | `"Resolve according to the docket's classification… D11 STATUS: RESOLVED."` | `PHASE-4-DECISION-DOCKET.md` §2 |
 
 ---
 
@@ -995,6 +1050,125 @@ above. Only genuinely new IDs with no natural prior slot are recorded in this se
 
 ---
 
+# Phase 4 Decision Records (recorded 2026-09-08)
+
+*(D10 and D11 were resolved by adding their full records near D8 above,
+matching the established D-number ordering, rather than re-recording them
+here. The genuinely new IDs — P4-D1, P4-D2, and (added 2026-09-09) P4-D3,
+P4-D4 — are recorded in this section, mirroring how the Phase 3 section
+above only added P3-D1.)*
+
+## P4-D1 — `userId` vs. `Customer` relationship pending Phase 9/12
+
+| Field | Content |
+|---|---|
+| **ID** | P4-D1 |
+| **Owner** | Architecture owner |
+| **Date** | 2026-09-08 |
+| **Status** | **RESOLVED — OPTION B** |
+| **Decision (question)** | How should the Phase 4 migration handle the relationship between existing commerce `userId` references and the `Customer` entity, given customer authentication is deferred to Phase 9/12? |
+| **Decision (approved option)** | **Option B.** `userId` remains the sole **live** ownership path for `Cart`, `Order`, `Review`, `CouponUsage`, `IdempotencyKey` (and the equivalent `uploadedByUserId` / `changedByUserId` actor columns). A nullable `customerId`-family column is added alongside each (`Cart.customerId?`, `Order.customerId?`, `Review.customerId?`, `CouponUsage.customerId?`, `IdempotencyKey.customerId?`, `UploadedFile.uploadedByCustomerId?`, `OrderStatusHistory.changedByCustomerId?`/`changedByMembershipId?`) and backfilled, for every row that already exists, from the same `(storeId,email)` join Phase 2b already used to create the `Customer` rows in the first place. **No constraint moves onto `customerId`** (`carts.userId @unique`, `reviews @@unique([productId,userId])` stay exactly as they are); **no customer-authentication mechanism is built**; **no dual-write of `customerId` for new rows is implemented** — new rows continue to be written with `userId` only until Phase 9/12 ships a live Customer session. |
+| **Rationale** | Owner's explicit approval of the docket's Option B (`PHASE-4-DECISION-DOCKET.md` §3). Option A (full cutover now) would break checkout/cart/review submission immediately, since no live Customer session exists to populate a `NOT NULL` `customerId` for a newly created row. Option C (server-side dual-write derived from the authenticated `User`'s own email match) was noted as technically available but explicitly not adopted now, since building it would piecemeal-construct part of Phase 9/12's own customer-authentication design (P2-D5/P2-D6/P2-D7 territory) out of order. |
+| **Source document / section** | `PHASE-4-DECISION-DOCKET.md` §3; `PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §4; P2-D7 record (customer auth deferred to Phase 9/12); `PHASE-2B-IMPLEMENTATION-REPORT.md` (the `User`→`Customer` join this backfill reuses). |
+| **Consequences** | Phase 4's `customerId`-family columns are backfill-only compatibility columns through the end of Phase 4 — never `NOT NULL`, never the write path, never load-bearing for any constraint. The actual cutover (making `customerId` live, `NOT NULL`, and constraint-bearing) is explicitly deferred to whichever phase ships customer authentication (Phase 9/12), to be decided there with a real Customer session available to reason about. Reconciliation for this backfill checks `COUNT(customerId set)` against `COUNT(userId rows whose User.role='CUSTOMER')`, not universal non-null. |
+| **Affected phase(s)** | **Phase 4** (backfill-only `customerId` columns); **Phase 9/12** (the actual cutover, not decided here). |
+| **Reversibility** | Fully reversible on paper — a nullable, unused-for-writes column can be dropped or repurposed with no application-behavior impact, since nothing depends on it being populated or authoritative during Phase 4. |
+| **Explicit approval wording (recorded)** | `"Resolve to Option B: keep userId as current live path, add nullable customerId-family fields where specified, backfill customerId where safely derivable, no constraint cutover, no customer-auth implementation, no dual-write customer-auth behavior. P4-D1 STATUS: RESOLVED."` (project owner, 2026-09-08). |
+
+### P4-D1 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-08 | Architecture owner (project owner, Atharva) | **RESOLVED — OPTION B** | `"Resolve to Option B… no dual-write customer-auth behavior. P4-D1 STATUS: RESOLVED."` | `PHASE-4-DECISION-DOCKET.md` §3 |
+
+---
+
+## P4-D2 — Extending the migration-safety guard for W7 contract verbs
+
+| Field | Content |
+|---|---|
+| **ID** | P4-D2 |
+| **Owner** | Architecture owner |
+| **Date** | 2026-09-08 |
+| **Status** | **OPEN — not required until wave W7** (explicitly held, not deferred by default) |
+| **Decision (question)** | Should the migration-safety guard (`backend/src/migration-safety.spec.ts`) be extended now to permit the exact W7 contract-step migration verbs (`ADD CONSTRAINT … CHECK … NOT VALID`, `VALIDATE CONSTRAINT`, `ALTER COLUMN … SET NOT NULL`, `DROP CONSTRAINT` on five named legacy uniques)? |
+| **Decision (recorded)** | **Left OPEN, deliberately, per explicit owner instruction.** The guard is **not** modified now. This decision is required only immediately before Phase 4 wave W7 begins — waves W3 through W6 need no change to the guard at all (they are additive `ADD COLUMN`/`CREATE INDEX`/additive-`ADD CONSTRAINT`-for-a-new-composite-unique, already covered as-is). |
+| **Rationale** | Owner's explicit instruction: "Leave OPEN. Record that it is required only immediately before W7. Do not change the migration-safety guard now." The docket (`PHASE-4-DECISION-DOCKET.md` §4) already recorded why this is a materially different, higher-risk extension than the two prior ones (G-19's `ADD COLUMN`, D4/G-20's RLS toggle) — it carves into the guard's core destructive-prevention purpose, not its edges — and recommended, when it is eventually decided, a self-verifying design (a `SET NOT NULL` only permitted when paired with a matching `CHECK…NOT VALID`+`VALIDATE` in the same file; a `DROP CONSTRAINT` only permitted against a named five-constraint allowlist) rather than a bare verb exemption. |
+| **Source document / section** | `PHASE-4-DECISION-DOCKET.md` §4; `PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §8, §12; `backend/src/migration-safety.spec.ts` (current detector, unmodified). |
+| **Consequences** | `backend/src/migration-safety.spec.ts` remains exactly as Phase 3 left it. **Does not block the Phase 4 start gate** — only blocks reaching wave W7, which is sequenced last, after D10 (format), D11, and P4-D1 are settled and W3–W6 are complete. Whoever implements W7 must return to this record, resolve it explicitly (recommended: the self-verifying design above), and only then modify the guard. |
+| **Affected phase(s)** | **Phase 4** (wave W7 only). |
+| **Reversibility** | N/A — no code changed by this record. |
+| **Explicit approval wording (recorded)** | `"Leave OPEN. Record that it is required only immediately before W7. Do not change the migration-safety guard now."` (project owner, 2026-09-08). |
+
+### P4-D2 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-08 | Architecture owner (project owner, Atharva) | **OPEN — held, W7-only** | `"Leave OPEN. Record that it is required only immediately before W7. Do not change the migration-safety guard now."` | `PHASE-4-DECISION-DOCKET.md` §4 |
+
+---
+
+## P4-D3 — Extending the migration-safety guard for W6 composite ownership FKs
+
+| Field | Content |
+|---|---|
+| **ID** | P4-D3 |
+| **Owner** | Architecture owner (Atharva — Project & Architecture Owner) |
+| **Date** | 2026-09-09 |
+| **Status** | **RESOLVED** |
+| **Decision (question)** | How should `backend/src/migration-safety.spec.ts`'s `findAdditiveOnlyViolations` safely permit the exact composite-FK `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY` statements wave W6 requires, given the guard currently rejects all of them (verified directly against the file: an `ALTER TABLE` on a pre-existing table only exempts G-19's single nullable `ADD COLUMN` or D4/G-20's bare RLS toggle — a composite FK matches neither)? |
+| **Decision (approved)** | **The recommended narrow extension, exactly as specified in `PHASE-4-W6-DECISION-DOCKET.md` §2.2 — both conditions required together, neither alone:** (1) **Exact structural shape** — the statement is a single-action `ALTER TABLE` on a pre-existing table containing exactly one `ADD CONSTRAINT ... FOREIGN KEY` action, where the FK is a composite ownership key of the form `("tenantId"\|"storeId", X) REFERENCES ...("tenantId"\|"storeId", X)` with the **same** ownership-scope token appearing on both the local and referenced side (enforced via regex backreference — not merely "some ownership column on each side," but the identical one); no second action may be combined into the same `ALTER TABLE` statement. (2) **The constraint name appears on a fixed, explicit, 19-entry allowlist** — the exact composite FKs enumerated in `PHASE-4-W6-DECISION-DOCKET.md` §4.1, by name. A statement satisfying only one of the two conditions is still rejected. |
+| **Explicitly NOT introduced (per the owner's own enumeration)** | No generic `ADD CONSTRAINT` allowance. No generic composite-FK allowance (any shape, any name). No name-only allowance (shape unchecked). No shape-only allowance (name unchecked). No migration-safety bypass. No weakening of any existing `DROP`, `SET NOT NULL`, or unscoped-`ALTER TABLE` rejection — every currently-rejected shape remains rejected exactly as before. |
+| **Rationale** | Owner's explicit approval of the docket's own recommendation (`PHASE-4-W6-DECISION-DOCKET.md` §2.2), over the docket's own named alternatives (§2.3: allowlist-only — rejected, a reused name could front an unsafe FK shape; shape-only — rejected, this is exactly the generic "any composite ownership FK" the owner declined to authorize; bare `ADD CONSTRAINT` allowance — rejected outright; bypassing the guard for W6 — rejected, reintroduces the unreviewed-schema-change risk G-10 exists to prevent). Structurally identical in kind to the two prior narrow extensions already precedent-setting in this same file (G-19's `ADD COLUMN`, D4/G-20's RLS toggle) — narrows CI tolerance for one exact, reviewed shape, does not widen it generally. |
+| **Security impact** | None negative. The 19 composite FKs this exemption permits *strengthen* cross-tenant/cross-store referential integrity (a row can no longer reference a parent belonging to a different tenant/store); the guard change itself only widens CI's static-text tolerance for that one exact SQL shape under that one exact name list — it touches no runtime authorization path, no `TenantContext`, no RLS. |
+| **Data / migration-safety impact** | The guard remains a static, self-contained, per-migration-file text scanner (per its own existing design principle) — it does **not** verify live schema state (does the referenced `(scope, id)` pair actually exist and carry a unique constraint yet?) or live data safety (would any existing row violate the FK?). Those are explicitly **separate, required** verification steps — the `PHASE-4-W6-DECISION-DOCKET.md` §6/§7 preflight queries — run by the operator immediately before the migration, never by the guard itself. This decision does not authorize skipping those preflight checks. |
+| **Dependency on W6 implementation** | This decision resolves the *mechanism* only. It does **not** itself modify `backend/src/migration-safety.spec.ts`, create any migration, or execute any DDL — implementation is deferred to a separate, later, explicitly-authorized turn, per the owner's own instruction ("Implement the guard extension later exactly according to this decision. For this turn, only record the decision."). W6 additionally remains blocked on P4-D4 (below) for 7 of the 19 FKs, and on its own separate start-gate authorization (`PHASE-4-W6-DECISION-DOCKET.md` §3/§10). |
+| **Explicit statement — does NOT authorize W7** | This decision is scoped to W6's composite-FK verb only. It has no bearing on P4-D2 (still `OPEN`, held for W7's distinct verb set — `CHECK...NOT VALID`, `VALIDATE CONSTRAINT`, `SET NOT NULL`, `DROP CONSTRAINT`) and does not resolve, narrow, or otherwise touch P4-D2. |
+| **Required tests (recorded here for implementation-time reference; not run by this decision)** | Positive: each of the 19 approved FKs alone; all 19 together in one migration file; a same-scope-token backreference check (proves both sides must match, not merely both be *an* ownership column). Negative: an on-shape, off-allowlist constraint name; an on-allowlist name with a hand-edited/unsafe shape; the FK combined with a second action in the same statement; a composite FK not starting with `tenantId`/`storeId`; full regression of every previously-rejected shape (`DROP`, `SET NOT NULL`, unscoped `ALTER TABLE`, etc.). |
+| **Source document / section** | `PHASE-4-W6-DECISION-DOCKET.md` §2 (full analysis), §4.1 (the 19-entry allowlist), §2.8 (the test list reproduced above). |
+| **Consequences** | `backend/src/migration-safety.spec.ts` is **not yet modified** — this record authorizes a specific, exact future change; it does not perform one. Once implemented (a separate turn), W6's composite-FK migration(s) may pass CI for exactly the 19 named constraints and no others. |
+| **Affected phase(s)** | **Phase 4** (wave W6 only). |
+| **Reversibility** | Fully reversible on paper before implementation (no code changed by this record). Once implemented and used, reverting the *guard* exemption has no retroactive effect on already-applied production constraints — those would need their own separate migration to drop, per W6/W7's own additive/contract discipline. |
+| **Explicit approval wording (recorded)** | `"P4-D3: APPROVED. Use the recommended narrow migration-safety extension. The guard may permit a W6 composite FK only when BOTH conditions hold: (1) Exact structural shape: ALTER TABLE on a pre-existing table containing exactly one ADD CONSTRAINT ... FOREIGN KEY action where the FK is a composite ownership key of the form (\"tenantId\"|\"storeId\", X) REFERENCES ...(\"tenantId\"|\"storeId\", X). The same ownership scope token must appear on both sides. No additional action is permitted in the same ALTER TABLE statement. (2) The constraint name is present on the fixed, explicit 19-entry W6 allowlist from the approved W6 docket. Do NOT introduce: generic ADD CONSTRAINT allowance, generic composite-FK allowance, name-only allowance, shape-only allowance, migration-safety bypass, any weakening of existing DROP / SET NOT NULL / unscoped ALTER TABLE protections. Implement the guard extension later exactly according to this decision. For this turn, only record the decision."` (Atharva — Project & Architecture Owner, 2026-09-09). |
+
+### P4-D3 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-09 | Atharva — Project & Architecture Owner | **RESOLVED** | `"P4-D3: APPROVED. Use the recommended narrow migration-safety extension… For this turn, only record the decision."` | `PHASE-4-W6-DECISION-DOCKET.md` §2 |
+
+---
+
+## P4-D4 — `storeId` column-completeness gap for 7 derived-ownership tables (W6 precondition)
+
+| Field | Content |
+|---|---|
+| **ID** | P4-D4 |
+| **Owner** | Architecture owner (Atharva — Project & Architecture Owner) |
+| **Date** | 2026-09-09 |
+| **Status** | **RESOLVED** |
+| **Decision (question)** | `PHASE-4-W6-DECISION-DOCKET.md` §5.1 found that 7 of W6's 19 composite FKs (and 1 of its 6 composite uniques) cannot be created because the source or referenced table is missing a physical `storeId` column — W3 only added `tenantId` to these tables, matching spec's own "SID: derived" marker for them. Should the owner (Option A) add `storeId` as a physical, nullable column to these tables, or (Option B) use `tenantId` instead of `storeId` for exactly these FKs? |
+| **Decision (approved option)** | **Option A.** Add nullable `storeId` columns to the affected derived tables, exactly where the approved W6 ownership model requires direct Store-level scoping. **Affected tables (verbatim from the W6 docket §4.1/§5.1 — no table added or substituted beyond what that docket identified):** `ProductImage`, `ProductVariant`, `CustomizationField`, `CartItem`, `CartItemCustomization`, `OrderItem`, and the `Review → OrderItem` path's referenced side (i.e. `OrderItem` again — the same table, required by the `reviews_storeId_orderItemId_fkey` relationship named in the docket's §4.1 row 19). `tenantId` is **not** substituted for `storeId` on any of these — see Rationale. |
+| **Rationale** | Owner's explicit instruction, verbatim: *"The approved W6 model requires Store-level ownership integrity for these relationships, and substituting tenantId would weaken the intended store-scoped isolation model and constitute an unapproved design deviation."* This matches the docket's own Option A recommendation (§5.1) — Option B was presented as an available alternative but explicitly not adopted, since it would be a permanent weakening of the *guarantee* (store-level to tenant-level isolation for exactly these 7 relationships), not merely a scheduling choice. |
+| **Requirements (all explicit, owner-stated, none inferred)** | `storeId` is **nullable** at this stage — no `NOT NULL`. **No W6 FK is added in this decision-closure turn.** **No composite unique is added in this decision-closure turn.** **No existing ownership path is removed** (every existing plain FK, `tenantId` column, and `userId`/actor column on these tables stays exactly as it is). **Backfill source must use the already-proven parent-ownership relationship** — the identical `copyTenantFromParent`-style pattern `w4-backfill.ts` already uses for these same tables' `tenantId` column (e.g. `product_images.storeId` copied from `products.storeId`, `cart_items.storeId` from `carts.storeId`, `order_items.storeId` from `orders.storeId`), not a new or different derivation. **Production preflight must prove zero unresolved/`NULL` ownership and zero composite-FK violations before the FK itself is ever added** — this decision authorizes the column addition and its backfill; it does not authorize skipping `PHASE-4-W6-DECISION-DOCKET.md` §6/§7's preflight queries before the subsequent FK-creation step. |
+| **Security impact** | None. A nullable column addition, backfilled from an already-verified-complete parent value, carries the same low-risk profile as every W3/W4/W5 column addition already executed this phase. |
+| **Data / migration impact** | Additive only (`ADD COLUMN` — already covered by the existing G-19 exemption, no guard change needed for this part) plus a backfill step at the same risk level as W4/W5's own `tenantId` backfill (already proven, in production, with 100% ownership completeness and zero orphans per `PHASE-4-IMPLEMENTATION-REPORT.md` §16.4). Does not touch any existing column, row count, financial value, or constraint. |
+| **Dependency on W6 implementation** | This decision authorizes the *column addition + backfill* step only — it is itself a small, additive precondition **before** W6's composite-FK step (§4.1's rows 3-8, 10, 19) can proceed. Neither the column addition nor the FK creation is performed by this decision; both remain separate, later, explicitly-authorized implementation turns. |
+| **Explicit statement — does NOT authorize W7** | Unrelated to W7's contract-verb question (P4-D2, still `OPEN`); this decision does not touch, narrow, or resolve P4-D2. |
+| **Source document / section** | `PHASE-4-W6-DECISION-DOCKET.md` §4.1 (rows 3-8, 10, 19 — the affected FKs), §5.1 (the finding and both options), §4.2 (the affected composite unique, `product_variants`). |
+| **Consequences** | Once implemented (a separate turn), 7 of W6's 19 composite FKs and 1 of its 6 composite uniques become physically possible to create — closing the `PHASE-4-W6-DECISION-DOCKET.md` §10 blocker named for this finding. W6 remains additionally blocked on P4-D3's guard implementation and its own separate start-gate authorization. |
+| **Affected phase(s)** | **Phase 4** (wave W6 precondition only). |
+| **Reversibility** | Fully reversible on paper before implementation — a nullable, unbackfilled column carries no application dependency. Once backfilled, reversible via the same rollback posture as every other Phase 4 additive step (image revert; nothing destructive is introduced). |
+| **Explicit approval wording (recorded)** | `"P4-D4: APPROVED. Use the recommended solution: Add nullable storeId columns to the affected derived tables where the approved W6 ownership model requires direct Store scoping. The affected tables identified by the W6 docket are: ProductImage, ProductVariant, CustomizationField, CartItem, CartItemCustomization, OrderItem, the Review → OrderItem-related path explicitly identified in §4.1 where the missing storeId is required by the approved FK design. Do NOT substitute tenantId for storeId merely to avoid these columns. Reason: The approved W6 model requires Store-level ownership integrity for these relationships, and substituting tenantId would weaken the intended store-scoped isolation model and constitute an unapproved design deviation. P4-D4 requirements: storeId is nullable at this stage; no NOT NULL; no W6 FK added in this decision-closure turn; no composite unique added in this decision-closure turn; no existing ownership path removed; backfill source must use the already-proven parent ownership relationship; production preflight must prove zero unresolved/null ownership and zero composite-FK violations before adding the FK."` (Atharva — Project & Architecture Owner, 2026-09-09). |
+
+### P4-D4 — Decision Log
+
+| Date | Owner | Choice | Approval wording (verbatim) | Reference |
+|---|---|---|---|---|
+| 2026-09-09 | Atharva — Project & Architecture Owner | **RESOLVED — OPTION A** | `"P4-D4: APPROVED. Use the recommended solution: Add nullable storeId columns…"` | `PHASE-4-W6-DECISION-DOCKET.md` §5.1 |
+
+---
+
 ## Summary Table
 
 | ID | Topic | Owner | Status | Blocks |
@@ -1006,6 +1180,8 @@ above. Only genuinely new IDs with no natural prior slot are recorded in this se
 | **D4** | Tenant isolation mechanism (app-layer / RLS / both) | Architecture + Ops owner | **RESOLVED — BOTH, app-layer primary** (2026-09-07, per P3-D2) | Phase 3 (RLS-enabling migration + scoped-client design) |
 | **D6** | Tenant-context derivation for merchant console | Architecture owner + product | **RESOLVED — BOTH mechanisms, header cross-validated** (2026-09-07) | Phase 3 (`TenantContext` merchant path) |
 | **D8** | Verified production backup/restore drill | Ops owner | **RESOLVED** (2026-09-07, evidence `D8-20260907-02`) | Phase 2b execution precondition — cleared, backfill executed; Phase 4's own D8 precondition also cleared (Phase 4's other gates unaffected) |
+| **D10** | Per-tenant order/invoice numbering + statutory format | Business/product owner | **RESOLVED — BUSINESS DECISION** (2026-09-08; sequential, tenant-scoped, no FY reset — not a statutory/legal confirmation) | Phase 4 wave W4 — unblocked; residual legal-review risk routed to the architecture-change process, not a current blocker |
+| **D11** | `AppSetting` per-key ownership classification | Architecture owner | **RESOLVED** (2026-09-08 — STORE/TENANT classification) | Phase 4 wave W4 |
 | **G-4** | Approve Phase 1 spec §B.2–B.8 | Architecture owner | **APPROVED** | ~~Phase 1~~ *(cleared)* |
 | **G-5** | Ratify Phase 1 enum value sets | Architecture owner | **APPROVED** | ~~Phase 1 migration `CREATE TYPE`s~~ *(cleared)* |
 | **G-9** | Pre-migration snapshot for shared-env deploys | Ops | **APPROVED** | Applying migrations to staging/production (execution-time) |
@@ -1035,6 +1211,10 @@ above. Only genuinely new IDs with no natural prior slot are recorded in this se
 | **P3-D1** | Rollout/advisory-flag location | Architecture + Ops owner | **RESOLVED — environment variable via `ConfigService`** | Phase 3 module-migration PRs |
 | **P3-D2** | RLS DB-role and pooler compatibility (fact-finding) | Ops owner | **RESOLVED — facts found, favorable to RLS** (2026-09-07) | Feeds D4 |
 | **G-20** | Approve Phase 3 specification | Project & Architecture Owner | **APPROVED** (2026-09-07) | Phase 3 implementation START |
+| **P4-D1** | `userId` vs. `Customer` relationship pending Phase 9/12 | Architecture owner | **RESOLVED — OPTION B** (2026-09-08) | Phase 4 backfill design (W5) |
+| **P4-D2** | Extend migration-safety guard for W7 contract verbs? | Architecture owner | **OPEN — held, required only before W7** (2026-09-08) | Phase 4 wave W7 only — does not block Phase 4 start |
+| **P4-D3** | Extend migration-safety guard for W6 composite ownership FKs | Architecture owner | **RESOLVED** — narrow shape+allowlist rule (2026-09-09) | Phase 4 wave W6 — guard implementation still pending, separate turn |
+| **P4-D4** | `storeId` column-completeness gap (7 derived tables) | Architecture owner | **RESOLVED — OPTION A** — add nullable `storeId`, no `tenantId` substitution (2026-09-09) | Phase 4 wave W6 — column addition + backfill still pending, separate turn |
 
 **Phase 2a START GATE: `READY`** (see `docs/saas/PHASE-2-START-GATE-RESULT.md`).
 **Phase 2b START GATE: `CLEARED`** — D2 **RESOLVED**, D8 **RESOLVED** (evidence `D8-20260907-02`), **G-16 APPROVED — AUTHORIZED (2026-09-07)**.
@@ -1044,9 +1224,25 @@ above. Only genuinely new IDs with no natural prior slot are recorded in this se
 **Phase 3 decision docket: `RESOLVED`** (2026-09-07) — D6, D4, G-13, P3-D1, P3-D2 all recorded
 above. **G-20 (Phase 3 specification approval): `APPROVED`** (2026-09-07). **Phase 3 START
 GATE: `READY`** — implementation is authorized to begin per the G-20 record's scope and
-exclusions. **No Phase 3 implementation has occurred** — no source file, schema, or migration
-has been touched under any record in this section; this approval does **not** extend to
-Phase 4, which retains its own separate, still-open gates (D7, D9–D15).
+exclusions. Phase 3 has since been implemented, audited, and committed (`5523df0`).
+
+**Phase 4 decision docket (2026-09-08):** **D10** `RESOLVED — BUSINESS DECISION`
+(sequential, tenant-scoped numbering, no FY reset — supplied later the same day as an
+explicit business/product decision, not legal/tax advice; superseded the earlier
+`TECHNICALLY RESOLVED / LEGAL FORMAT PENDING` status); **D11** `RESOLVED`; **P4-D1**
+`RESOLVED — OPTION B`; **P4-D2** `OPEN — held, required only before wave W7`. **Phase 4
+START GATE: `READY`** — every Phase 4 hard precondition named in
+`PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §2 (D2, D3, D8/restore-drill-equivalent,
+D10, D11) is now satisfied; P4-D2 remains open but was never a start-gate blocker (W7-only).
+A residual risk is disclosed, not hidden: D10 is a business decision, not a statutory
+confirmation — a future legal review requiring a different format is routed to the
+architecture-change process (per the owner's own words in the D10 record), not treated as
+blocking today. Phase 4's other named gates (D7 — `WebhookEvent` split, D9 — merchant
+payment-credential storage, D12 — per-tenant tax model) remain `OPEN` but do not gate Phase
+4 itself (D7/D9 gate Phase 7/8; D12 gates Phase 12) — see each record. **No Phase 4
+implementation has occurred** — no source file, schema, or migration has been touched under
+any record in this section; `READY` authorizes Phase 4 to *begin*, it is not itself an
+implementation.
 
 ---
 
@@ -1059,8 +1255,6 @@ supplied** for these, so they remain `OPEN`:
 |---|---|:-:|---|
 | **D7** | `WebhookEvent` split | **OPEN** | Gates Phase 7/8. |
 | **D9** | Merchant payment-credential storage | **OPEN** | Gates Phase 8. |
-| **D10** | Per-tenant order/invoice numbering + statutory format | **OPEN** | `REQUIRES LEGAL DECISION`. Gates Phase 4 (W4). |
-| **D11** | `AppSetting` per-key ownership classification | **OPEN** | Gates Phase 4 (W4). |
 | **D12** | Per-tenant tax model | **OPEN** | Gates Phase 12. |
 | **D13** | Object storage provider/interface | **OPEN** | Gates Phase 10. |
 | **D14** | SaaS billing provider | **OPEN** | `REQUIRES PROVIDER DECISION`. Gates Phase 7. |
@@ -1077,6 +1271,14 @@ evidence `D8-20260907-02`.)*
 
 *(D4 has moved OUT of this table — it now has a full record above, status RESOLVED — BOTH,
 app-layer primary, 2026-09-07, per P3-D2's favorable findings.)*
+
+*(D10 has moved OUT of this table — it now has a full record above, status RESOLVED —
+BUSINESS DECISION, 2026-09-08 — sequential tenant-scoped numbering, no FY reset, explicitly
+recorded as a business/product decision rather than legal/tax confirmation.)*
+
+*(D11 has moved OUT of this table — it now has a full record above, status RESOLVED,
+2026-09-08 — every current `AppSetting` key classified STORE or TENANT; none PLATFORM or
+GLOBAL/SYSTEM.)*
 
 When owners record decisions for any of these, add a full record above using the same template.
 
@@ -1146,3 +1348,76 @@ pattern, defaulting to `advisory` when unset. **The Phase 3 decision docket is n
 or production write was made under any of these five records; a `G-20`-equivalent formal
 "approve the Phase 3 specification" gate has not yet been recorded, so the **Phase 3 START GATE
 is `NOT YET FORMALLY OPENED`** even though its decision prerequisites are now satisfied.*
+
+*Updated 2026-09-08 (Phase 4 decision docket, `PHASE-4-DECISION-DOCKET.md`): **D10** recorded
+**TECHNICALLY RESOLVED / LEGAL FORMAT PENDING** — the counter *mechanism* (per-tenant
+`TenantCounter`, `MAX(existing)+1` seeding, existing numbers never rewritten) is decided;
+the *statutory, customer-facing numbering format* is explicitly **not** invented here and
+remains a separate legal/business approval item. **D11 RESOLVED** — every current
+`AppSetting` key (found by reading `app-setting.constants.ts`, `orders.service.ts`,
+`invoice-number.service.ts` directly, none guessed) classified `STORE` (`storeName`,
+`storeAdminName`, `shippingFeeFlat`, `announcement_text`, `hero_slides`, `banners`,
+`showcase_categories`) or `TENANT` (`tax.enabled`, `tax.pricingMode`, `tax.ratePercent`,
+`invoice.numberPrefix`, `invoice.sellerLegalName`, `invoice.sellerAddress`,
+`invoice.sellerGstin`, `invoice.sellerState`, `order_number_counter` →
+`TenantCounter`, `invoice_number_counter` → `TenantCounter`); no key is `PLATFORM` or
+`GLOBAL/SYSTEM` today. **P4-D1 RESOLVED — OPTION B** — `userId` stays the sole live
+ownership path on `Cart`/`Order`/`Review`/`CouponUsage`/`IdempotencyKey` (and the
+`uploadedByUserId`/`changedByUserId` actor columns); `customerId`-family columns are added
+nullable and backfilled for existing rows only, via the same join Phase 2b already used; no
+constraint moves, no customer-auth mechanism is built, no dual-write for new rows — the
+actual cutover is left to Phase 9/12. **P4-D2 left OPEN, deliberately** — the
+migration-safety guard is **not** modified now; this decision is required only immediately
+before Phase 4 wave W7, and does not block Phase 4's start. **The Phase 4 decision docket is
+now closed for these four items; no additional decision was found to be genuinely
+necessary.** **No Phase 4 implementation has occurred** — no source file, schema, or
+migration was touched under any of these four records. **Phase 4 START GATE: `NOT READY`** —
+this record does not claim otherwise: D10's statutory format is a genuine, unresolved
+legal/business input that wave W4 cannot fully complete without.*
+
+*Updated 2026-09-08 (later same day) — D10 closure: the business/product owner supplied the
+numbering format explicitly: **"For PrintForge, use sequential tenant-scoped order and
+invoice numbering. Existing numbers are never rewritten. New numbers use TenantCounter with
+an atomic per-tenant counter. No financial-year reset is required by the current business
+decision."** — with the explicit instruction: **"This is a business/product decision. Do
+not represent it as legal/tax advice or statutory confirmation. If legal review later
+requires a different statutory format, handle that through the architecture-change process
+before production use."** D10 is recorded **RESOLVED — BUSINESS DECISION**, superseding the
+earlier `TECHNICALLY RESOLVED / LEGAL FORMAT PENDING` status — both the mechanism
+(`TenantCounter`, per-tenant, `MAX(existing)+1` seeding, existing atomic claim pattern,
+numbers never rewritten) and the format (sequential, no FY reset) are now decided, with the
+residual legal-review risk explicitly disclosed and routed to the architecture-change
+process rather than treated as a current blocker. **With D10 resolved, every Phase 4 hard
+precondition named in `PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §2 is satisfied (D2,
+D3, D8, D10, D11). Phase 4 START GATE: `READY`.** P4-D2 remains `OPEN` but was never a
+start-gate blocker (required only immediately before wave W7). **No Phase 4 implementation
+has occurred under this record** — `READY` authorizes Phase 4 to begin; it is not itself an
+implementation, and none was performed.*
+
+*Updated 2026-09-09 — W3 and W4/W5 both EXECUTED (see
+`PHASE-4-IMPLEMENTATION-REPORT.md` §14/§15/§16 for full evidence): W3 deployed to production
+(migration `20260908093650_w3_tenant_scoping_columns`); W4/W5 backfill run against
+production with full reconciliation, idempotency proof, and independent audit, all
+`PASS`. **W6 decision docket (`PHASE-4-W6-DECISION-DOCKET.md`) closed for two new items:
+P4-D3 RESOLVED** — the migration-safety guard may permit a W6 composite ownership FK only
+when its statement matches an exact structural shape (single-action `ALTER TABLE ... ADD
+CONSTRAINT ... FOREIGN KEY` on a pre-existing table, composite key of the form
+`("tenantId"|"storeId", X) REFERENCES ...("tenantId"|"storeId", X)` with the *same* scope
+token on both sides) **and** the constraint name is on the fixed, named 19-entry W6
+allowlist — both required together, no generic `ADD CONSTRAINT`/composite-FK/bypass
+allowance introduced. **P4-D4 RESOLVED — OPTION A** — nullable `storeId` columns are to be
+added to `ProductImage`, `ProductVariant`, `CustomizationField`, `CartItem`,
+`CartItemCustomization`, and `OrderItem` (the tables W3 left with `tenantId` only,
+matching their "derived" `SID` classification), backfilled from the same already-proven
+parent-ownership relationship each table's `tenantId` already uses — `tenantId` is
+explicitly **not** substituted for `storeId` on any of them, per the owner's own stated
+reasoning that doing so would weaken the intended store-scoped isolation guarantee. **Neither
+P4-D3 nor P4-D4 has been implemented** — no source file, `schema.prisma` change, or
+migration was touched by either record; both authorize a specific, exact future change,
+they do not perform one. **P4-D2 remains `OPEN`, unaffected, held for wave W7 only.** **W6
+START GATE: `NOT READY`** — W6 still requires, in addition to what P4-D3/P4-D4 resolved:
+the actual guard-code implementation, the actual `storeId` column addition + backfill, the
+composite-FK and composite-unique preflight validations (`PHASE-4-W6-DECISION-DOCKET.md`
+§6/§7), a fresh production backup immediately before W6, and its own separate, explicit W6
+implementation authorization. **No implementation, schema change, or migration was
+performed by this record.***

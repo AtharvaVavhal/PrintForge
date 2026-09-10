@@ -888,3 +888,1025 @@ this tool against production. That is a separate, future, explicit
 decision, following the same pattern every other production-affecting step
 in this project has required (D8-style fresh backup + restore-verification
 + staging dry run first, per spec §9).
+
+---
+
+## 14. Production W3 schema deployment (executed)
+
+**Status: EXECUTED AGAINST PRODUCTION — 2026-09-08.** Explicitly, separately
+authorized (distinct from the W4/W5 tooling work in §12/§13 — that
+authorization never covered production execution). **Only the W3 migration
+was deployed. No W4/W5 backfill was run. No data was written or modified.**
+
+### 14.1 Why this was needed
+
+The W4/W5 production-backfill preflight (this same task sequence) found
+that production was still on 11 migrations — `20260908093650_w3_tenant_scoping_columns`
+(committed and pushed as part of `b74dd4a`) had never been deployed there,
+even though the local/CI-adjacent databases had it. The W4/W5 backfill
+tooling depends on the columns/table this migration adds; it could not be
+meaningfully preflighted against a restored copy of pre-W3 production. This
+section is that gap being closed — nothing more.
+
+### 14.2 Production identity (re-verified immediately before and after)
+
+`current_database()` = `printforge_db` · `inet_server_addr()` =
+`10.28.26.163/32` · PostgreSQL 18.6 (Debian) · Render service
+`printforge-db`, project "My project", environment "Production", region
+singapore, ID `dpg-da7elsid0e5s73ebi54g-a`. Identical before and after the
+migration — confirmed the same database throughout.
+
+### 14.3 Pre-migration state
+
+- Migrations applied: **11** (`20260825190725_init` … `20260906171709_add_customer_and_platform_role`).
+- `20260907183000_enable_rls_tenancy_tables` and `20260908093650_w3_tenant_scoping_columns`
+  both pending.
+- `tenant_counters` table: absent. `orders.tenantId`/`storeId`/`customerId`:
+  absent. (Both directly verified via `information_schema`, not inferred.)
+- Pre-migration backup: `printforge_prod_w4w5preflight_20260908T173515Z.dump`,
+  SHA-256 `8bf979a6983920c1cfd0b349f58c7ea7266472774204de99cf71e75c2e2a2687`
+  (153,145 bytes) — created in the prior preflight step, re-verified intact
+  (`shasum -c`) immediately before this migration.
+
+### 14.4 The RLS-migration ordering conflict (found, resolved with explicit authorization)
+
+`prisma migrate deploy` applies pending migrations strictly in chronological
+order and cannot skip an earlier pending one. Since
+`20260907183000_enable_rls_tenancy_tables` sorts before W3 and was still
+pending, a plain `prisma migrate deploy` would have applied the RLS
+migration **first** — a migration whose own file header and Phase 3's
+design explicitly require it never be applied to a real database without
+its own separate authorization ("a separate, future, explicitly-authorized
+production step"). This was surfaced to the owner before any write; the
+owner explicitly authorized the resolution actually used (over the
+alternative of `prisma migrate resolve --applied` on the RLS migration,
+which was **rejected** as unacceptable — it would write a false ledger
+entry claiming RLS ran when it never did).
+
+**Method used:** the exact, unmodified `20260908093650_w3_tenant_scoping_columns/migration.sql`
+content (comments/blank lines stripped only — a pure no-op transformation,
+verified byte-identical to the original via `diff` after stripping) was
+executed directly against production inside an explicit `BEGIN`/`COMMIT`
+block, followed by one `INSERT` into `_prisma_migrations` recording it —
+same `migration_name`, same sha256 `checksum` (`af0c670c58b1de3041fab157b95bdeb97ef341d2f7af142244ea6d4d9db8164c`,
+computed from the real, unmodified file), `applied_steps_count = 1` —
+matching exactly what `prisma migrate deploy` itself would have written,
+had it been able to run W3 alone. **RLS's own ledger entry was left
+completely untouched — still absent, still genuinely pending** — no false
+record was created anywhere. This mirrors a checksum-reconciliation
+technique already used twice on the local databases earlier in Phase 4
+(§7, §11), now applied to production under its own explicit authorization.
+
+### 14.5 W3 migration — status
+
+**STATUS: APPLIED.** **MIGRATION ID:** `20260908093650_w3_tenant_scoping_columns`.
+
+An accidental second invocation of the same command (an operational slip,
+not a second authorized attempt) failed immediately and harmlessly at the
+first statement (`column "tenantId" of relation "cart_item_customizations"
+already exists`) — because it was wrapped in its own `BEGIN`/`COMMIT`, the
+failure aborted that entire second attempt with zero effect, itself
+confirming the first (real) application had already succeeded. Verified
+directly afterward via `information_schema`, not inferred from the
+tool's exit status alone.
+
+### 14.6 Post-migration verification (all directly re-queried, not assumed)
+
+| Check | Result |
+|---|---|
+| Migrations applied | **12** — `20260908093650_w3_tenant_scoping_columns` now present and `applied=t`; `20260907183000_enable_rls_tenancy_tables` still absent |
+| `tenant_counters` table | Present — `id`, `tenantId` (`text`, `NOT NULL`), `key`, `value` (`int`, default `0`), `updatedAt`; PK on `id` |
+| W3 columns | **All 36** expected columns present across the 21 tables (`tenantId` ×21, `storeId` ×7, `customerId` ×5, `uploadedByCustomerId` ×1, `changedByCustomerId`+`changedByMembershipId` ×2 on `order_status_history`) — exact match, directly enumerated |
+| Nullability | **All 36** are `is_nullable = YES`, `column_default = NULL` — zero exceptions |
+| FK leakage (W6) | **Zero** — the only FK found on any of the new columns is `tenant_counters_tenantId_fkey` (the pre-approved, brand-new-table FK from W3 itself); every other FK hit belongs to pre-existing Phase 1/2a tables (`stores`, `store_domains`, `tenant_memberships`, `subscriptions`, `customers`), unrelated to this migration |
+| `NOT NULL` leakage (W7) | **Zero** — same pattern: every `NOT NULL` hit on a matching column name belongs to a pre-existing Phase 1/2a table, none to the 21 W3 tables |
+| RLS state | **Unchanged** — 0 rows in `pg_policies` for the six tenancy tables; `relrowsecurity`/`relforcerowsecurity` both `false` on all six, identical to pre-migration |
+| Backfill | **None** — `COUNT("tenantId")` on `orders`/`carts`/`products`/`invoices` = **0** on every table (all existing rows read back `NULL`) |
+| Row counts | `orders`=41, `carts`=21, `products`=28, `invoices`=12, `app_settings`=10, `users`=23, `tenant_counters`=0 — `carts`/`invoices`/`app_settings`/`users` match D8/Phase 2b evidence exactly; `orders` is 41 vs. the D8-era 40 (one additional real order placed in the interim — ordinary business activity between 2026-09-07 and now, not a discrepancy) |
+| Unexpected migrations | **None** — the applied-migrations list shows exactly the prior 11 plus W3; nothing else changed |
+
+### 14.7 Post-W3 backup
+
+- **Artifact:** `printforge_prod_postw3_20260908T174904Z.dump`
+- **SHA-256:** `93f7833b07bb37715307780bebcc64d694927327bef2f3079b8144151a801859`
+- **Size:** 167,279 bytes (up from the pre-migration 153,145 — consistent with the added schema objects; no row-level growth, per §14.6)
+- **Method:** `pg_dump` 18.6 (Homebrew, version-matched to the production server) `--format=custom --no-owner --no-privileges`
+- **Verified:** `pg_dump` exit 0, empty stderr; `pg_restore --list` confirms a valid archive — `dbname=printforge_db`, 270 TOC entries (up from 231, consistent with the new table/indexes/FK), `tenant_counters` present in the TOC. Not restored anywhere in this step (TOC listing only, non-mutating).
+- **Storage:** local scratchpad, access-controlled (directory `700`, files `600`), not committed to git.
+
+### 14.8 Explicit confirmations
+
+- **W4/W5 backfill: NOT EXECUTED.** No `UPDATE`/`INSERT` touching any commerce ownership column was run — confirmed both by the tool not having been invoked and by `COUNT("tenantId")=0` on every table (§14.6).
+- **Production data mutation: NONE.** Every write this step performed was schema-only (`ADD COLUMN`, `CREATE TABLE`, `CREATE INDEX`, `ADD CONSTRAINT` — the W3 migration itself) plus one bookkeeping `INSERT` into `_prisma_migrations`. Zero rows in any business table were inserted, updated, or deleted.
+- **W6, W7, Phase 5: not started.** No composite FK/unique, no `NOT NULL` on any pre-existing column, no platform-console work.
+- **D10, D11, P4-D1, P4-D2: none reopened.**
+- **Credential handling:** the production connection string was retrieved once via the Render CLI's own sensitive-info flag, held only in an unexported shell variable for the single command that needed it, and never printed, echoed, or written to any file — verified by inspecting the (empty) stderr logs from both `pg_dump` invocations. The Render CLI session was logged out both before and after this step's authorized window.
+- **Source changes:** none. This section is the only change in this task; `git status` shows only this report file modified.
+
+**Not committed, not pushed**, per explicit instruction.
+
+---
+
+## 15. Post-W3 scratch preflight — the real production dataset through W4/W5 (this task)
+
+**Status: COMPLETE. PRODUCTION NOT CONNECTED TO AT ANY POINT IN THIS TASK.**
+This section restores the post-W3 production backup (§14.7) into a local
+disposable scratch database and runs the **complete** W4/W5 preflight — dry
+run, real run, reconciliation, idempotency proof — against the **actual
+real production dataset**, not a synthetic local fixture. No Render session
+was opened; every command here ran against a local PostgreSQL 18.6 server
+using the already-created backup file.
+
+### 15.1 Backup re-verification
+
+`printforge_prod_postw3_20260908T174904Z.dump` — file present, `shasum -a
+256 -c` against the recorded `.sha256` returns `OK`
+(`93f7833b07bb37715307780bebcc64d694927327bef2f3079b8144151a801859`),
+`pg_restore --list` exits 0.
+
+### 15.2 Disposable scratch database
+
+Created `printforge_w4w5_scratch_postw3` on a **local PostgreSQL 18.6**
+server (version-matched to production exactly — major *and* minor) running
+on `localhost:55432`, distinct from both `printforge_dev` and
+`printforge_test` (default `localhost:5432` instance) and obviously
+distinct from production. Restored via `pg_restore --no-owner
+--no-privileges --exit-on-error` — exit 0, zero warnings.
+
+**Restore verification (all re-queried directly):**
+
+| Check | Result |
+|---|---|
+| Migrations | 12, `20260908093650_w3_tenant_scoping_columns` present and applied |
+| W3 columns | All 36 present (same enumeration as §14.6) |
+| `tenant_counters` | Present |
+| Tenant #1 | `printforge`, `ACTIVE` |
+| Primary Store | `printforge`, "PrintForge Store", `isPrimary=true` |
+| Commerce data | Present — 41 orders, 23 users, etc. (full baseline in §15.3) |
+| RLS migration | Absent from `_prisma_migrations` (0 rows matching `%rls%`) — genuinely still pending, matching production |
+| RLS policies/flags | 0 policies; `relrowsecurity`/`relforcerowsecurity` both `false` on all six tenancy tables |
+| W6/W7 constraints on the 21 W3 tables | Zero FK, zero `NOT NULL` — every match found belongs to pre-existing Phase 1/2a tables |
+
+**Restore: PASS.**
+
+### 15.3 Fresh baseline (captured via `reconcile.ts --snapshot-out`, live, not D8-era)
+
+| Table | Rows |
+|---|---|
+| `tenants` / `stores` / `tenant_memberships` / `users` | 1 / 1 / 5 / 23 |
+| `customers` | 18 |
+| `categories` / `products` / `product_images` / `product_variants` / `customization_fields` | 6 / 28 / 26 / 18 / 13 |
+| `uploaded_files` | 40 |
+| `carts` / `cart_items` / `cart_item_customizations` | 21 / 5 / 0 |
+| `orders` / `order_items` / `order_item_customizations` | 41 / 46 / 6 |
+| `invoices` | 12 |
+| `payment_attempts` / `refunds` | 55 / 0 |
+| `order_status_history` | 86 |
+| `idempotency_keys` | 41 |
+| `outbox_events` | 44 (43 `Order`-type, 1 `User`-type) |
+| `coupons` / `coupon_usages` | 3 / 3 |
+| `reviews` | 0 |
+| `tenant_counters` | 0 (pre-backfill) |
+| `app_settings` | matches production (unchanged by W3) |
+
+Financials: order total sum = **₹3,348.00**; payment `CAPTURED` sum =
+**9,700 paise**; refund sum = **0**. `order_number_counter` (source) =
+**41**; `invoice_number_counter` (source) = **12**. Order-number and
+invoice-number set hashes captured (used for the post-run diff, §15.6).
+`userId` pair-hashes captured for `carts`/`orders`/`reviews`/`coupon_usages`/`idempotency_keys`.
+Ownership `NULL` counts: 100% NULL on every affected table pre-backfill
+(expected — full detail in the raw `postOnlyChecks` output, all 20
+non-empty tables correctly `FAIL`ed the completeness check at this stage,
+`reviews`/`cart_item_customizations`/`refunds` trivially `PASS`ed since
+they have 0 rows).
+
+### 15.4 Customer / identity reconciliation
+
+| Check | Result |
+|---|---|
+| `role='CUSTOMER'` users | 18 |
+| Existing `Customer` rows | 18 |
+| Duplicate emails (case-insensitive) | **0** |
+| `role='CUSTOMER'` users with no `Customer` match | **0** |
+| `role='ADMIN'` users with order history | **4** (of 5 — matches Phase 2b's own historical finding exactly) |
+| Inactive (`isActive=false`) users | **0** |
+
+Zero anomalies in the real dataset — every `role='CUSTOMER'` user has
+exactly one matching `Customer` row, no ambiguity, nothing to report beyond
+the already-known, already-accepted admin-who-also-shopped class (which
+correctly receives no `customerId`, not an error).
+
+### 15.5 TenantCounter safety validation (real data)
+
+| Counter | Source (`app_settings`) | Actual MAX | Status |
+|---|---|---|---|
+| `order_number_counter` | 41 | 41 | **PASS** |
+| `invoice_number_counter` | 12 | 12 | **PASS** |
+
+Both counters are exactly consistent in the real production dataset —
+**no drift** (unlike the local `printforge_dev` scratch data used in the
+earlier §12/§13 dry runs, which had a genuine, since-explained, one-number
+drift on `order_number_counter` from unrelated local dev/test history).
+Verified using the actual `validateCounterAgainstMax()` function, not a
+reimplementation.
+
+### 15.6 W4/W5 dry-run (real production data)
+
+**PASS.** 589 rows would change across 30 step results, **zero anomalies**.
+Verified genuinely unpersisted afterward: `COUNT("tenantId") WHERE
+"tenantId" IS NOT NULL` on `orders` = 0; `tenant_counters` row count = 0.
+
+### 15.7 W4/W5 real scratch run
+
+**PASS.** 589 rows affected — identical to the dry-run count, zero
+anomalies.
+
+### 15.8 Reconciliation (post real-run, vs. the §15.3 baseline)
+
+**Every single check PASSED** — full output preserved verbatim in the
+session transcript; summary:
+
+- **Row counts:** unchanged on all 21 affected tables; `tenant_counters`
+  grew by exactly 2 (bounded-growth check, expected).
+- **Financial preservation:** order total sum ₹3,348.00 -> ₹3,348.00
+  (unchanged); payment `CAPTURED` sum 9,700 -> 9,700 (unchanged); refund
+  sum 0 -> 0 (unchanged).
+- **Order/invoice numbers:** set-hash unchanged both — zero rewrites.
+- **`userId` relationships:** pair-hash unchanged on all five tables
+  checked.
+- **Ownership completeness:** `tenantId IS NULL` = 0 on all 21 tables.
+- **`customerId` mapping:** exact match against the `role='CUSTOMER'`
+  expected count on every one of the 7 relevant tables/columns (e.g.
+  `orders.customerId` set=21, expected=21).
+- **Orphan detection:** zero mismatched child rows on all 9 checked
+  parent/child pairs.
+- **TenantCounter drift (post-seed):** both counters still exactly match
+  their table's actual MAX after seeding (`order_number_counter`: 41=41;
+  `invoice_number_counter`: 12=12).
+
+### 15.9 Idempotency
+
+**PASS.** The backfill was run a second time (and, for extra margin, a
+third): every one of the 30 step results reports `affected: 0`,
+`totalAffected: 0`, `anomalies: {}` — a provable, exact no-op on the real
+dataset.
+
+### 15.10 W6/W7 absence (post real-run)
+
+Re-verified directly against the now-backfilled scratch copy: zero `NOT
+NULL` and zero `FOREIGN KEY` on any of the 21 W3 tables' new columns
+(every match found belongs to pre-existing Phase 1/2a tables, exactly as
+in §14.6); zero new composite unique index; all five legacy single-column
+uniques (`products_slug_key`, `categories_slug_key`, `coupons_code_key`,
+`orders_orderNumber_key`, `invoices_invoiceNumber_key`) still present and
+undropped. **No destructive DDL of any kind ran** — the entire task issued
+zero `DROP`/`DELETE`/`TRUNCATE`/`ALTER ... SET NOT NULL`/`ADD CONSTRAINT`
+statements against anything.
+
+### 15.11 Production status
+
+**UNTOUCHED BY W4/W5 — and untouched by this task entirely.** No Render
+session was opened. Every command in this section targeted
+`localhost:55432` only. Production remains exactly as left at the end of
+§14: 12 migrations, W3 schema present, zero commerce data backfilled.
+
+### 15.12 Production backfill readiness
+
+**READY**, pending its own separate, explicit authorization (this task
+does not request or imply one). Every preflight requirement in
+`PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §9 that can be satisfied
+before touching production has now been satisfied against the real
+dataset: fresh backup (twice — pre- and post-W3), restore verification,
+fresh baseline, customer reconciliation (zero anomalies), TenantCounter
+safety (both PASS, zero drift), dry-run (zero anomalies, provably
+unpersisted), real scratch run + full reconciliation (100% pass), and
+idempotency (provable, exact no-op on rerun). No blocker was found.
+
+**Resolved (2026-09-08, same day, separately authorized):** the scratch
+database `printforge_w4w5_scratch_postw3` (local, port 55432) — which
+contained a full copy of real production data including customer PII —
+has been **dropped** (`dropdb printforge_w4w5_scratch_postw3` against the
+local `localhost:55432` server). Verified afterward: the database no
+longer appears in `pg_database`; the unrelated `d8_scratch` database on the
+same local server, and `printforge_dev`/`printforge_test` on the separate
+local `localhost:5432` server, were confirmed untouched (row counts
+unchanged); production was not connected to at any point in this cleanup
+(no Render session was opened). This closes the one outstanding item from
+§15.12 — all evidence in §15 above remains valid (it reflects the
+verification already performed while the scratch copy existed), only the
+copy of the data itself no longer exists on disk.
+
+### 15.13 Explicit confirmations
+
+- **Production W4/W5: NOT EXECUTED.** No Render/production connection was
+  opened anywhere in this task.
+- **No source files were modified** except this report. One throwaway
+  script (`backend/prisma/backfill/_tmp-check-counters.ts`) was created to
+  invoke the real `validateCounterAgainstMax()` against the restored copy
+  and deleted immediately after use — confirmed via `git status` showing
+  no trace of it.
+- **D10, D11, P4-D1, P4-D2: none reopened. W6, W7, Phase 5: not started.**
+
+**Not committed, not pushed.**
+
+---
+
+## 16. Production W4/W5 backfill — EXECUTED
+
+**Status: EXECUTED AGAINST PRODUCTION — 2026-09-08, 18:09:41Z. COMPLETE
+SUCCESS.** Explicitly, separately authorized (distinct from every prior
+authorization — W3 deployment in §14 and the scratch-only preflight in §15
+never covered production writes for the backfill itself).
+
+### 16.1 Authorization
+
+Explicitly authorized in writing, scoped to exactly the approved W4/W5
+column set, Tenant #1, the primary Store, and the already-validated
+`TenantCounter` rules — explicitly excluding W6, W7, Phase 5, customer-auth
+implementation, User-row modification, and the pending RLS migration.
+
+### 16.2 Mandatory pre-execution checks (all performed immediately before mutation; none skipped)
+
+| # | Check | Result |
+|---|---|---|
+| 1-2 | Identity + migration state | `printforge_db`, `10.28.26.163/32`, PostgreSQL 18.6 — identical to §14/§15; migrations=12, W3 applied, RLS migration absent (still genuinely pending) |
+| 3 | Pre-backfill backup intact | `printforge_prod_postw3_20260908T174904Z.dump`, `shasum -c` -> `OK`, matches recorded SHA-256 `93f7833b...` exactly |
+| 4 | Fresh pre-backfill baseline | Captured live against production (not reused from §15) — numbers identical to the §15.3 scratch baseline (categories=6, products=28, orders=41, invoices=12, etc.) — **confirms nothing changed on production between the scratch preflight and this execution** |
+| 5 | TenantCounter safety, re-run live | `order_number_counter`: source=41, actualMax=41, **PASS**; `invoice_number_counter`: source=12, actualMax=12, **PASS** — via the real `validateCounterAgainstMax()`, not reimplemented |
+| 6 | Financial/count reconfirmation | orders count/MAX=41/41, invoices count/MAX=12/12, payment `CAPTURED` sum=9,700 paise, refund sum=0 |
+| 7 | Tenant/Store identity | Tenant `e6419ecf-e88e-497e-b215-2b5bd4244c88` (`printforge`, `ACTIVE`); Store `52e1ba1f-b4f0-4804-bd0f-bbb1c8e0ddb0` (`printforge`, "PrintForge Store", `isPrimary=true`) — **identical IDs** to the ones validated end-to-end in §15 |
+| 8 | No unexpected schema/migration drift | Migration list byte-identical to §14's post-migration state; baseline row counts identical to §15's scratch baseline |
+
+**Nothing differed unexpectedly. Cleared to execute.**
+
+### 16.3 Execution
+
+**Timestamp:** `2026-09-08T18:09:41Z` (UTC, recorded immediately before the
+run). **Tool:** the exact committed `backend/prisma/backfill/w4-backfill.ts`
+— no manually improvised SQL of any kind. **Target:** `--tenant-id
+e6419ecf-e88e-497e-b215-2b5bd4244c88 --store-id
+52e1ba1f-b4f0-4804-bd0f-bbb1c8e0ddb0`.
+
+**Result: exit 0. `totalAffected=589`, `anomalies={}` — an exact match to
+the scratch-validated run in §15.7**, row for row, step for step:
+
+| Step | Affected | Step | Affected |
+|---|---|---|---|
+| `categories` | 6 | `order_items` | 46 |
+| `products` | 28 | `order_item_customizations` | 6 |
+| `product_images` | 26 | `invoices` | 12 |
+| `product_variants` | 18 | `payment_attempts` | 55 |
+| `customization_fields` | 13 | `refunds` | 0 |
+| `coupons` | 3 | `order_status_history` | 86 |
+| `uploaded_files.tenantId` | 40 | `order_status_history.changedByCustomerId` | 28 |
+| `uploaded_files.uploadedByCustomerId` | 3 | `coupon_usages` | 3 |
+| `carts` | 21 | `coupon_usages.customerId` | 3 |
+| `carts.customerId` | 17 | `reviews` | 0 |
+| `cart_items` | 5 | `reviews.customerId` | 0 |
+| `cart_item_customizations` | 0 | `idempotency_keys.tenantId` (via resultOrder) | 41 |
+| `orders` | 41 | `idempotency_keys.tenantId` (direct) | 0 |
+| `orders.customerId` | 21 | `idempotency_keys.customerId` | 22 |
+| | | `outbox_events.tenantId` | 43 |
+| | | `tenant_counters` (order) | 1 |
+| | | `tenant_counters` (invoice) | 1 |
+
+**Anomalies: zero.** No ambiguous data was encountered; nothing was
+auto-repaired (nothing needed to be — the customer/identity reconciliation
+in §15.4 already found zero anomalies in this exact dataset, confirmed
+unchanged in check 4 above). Execution did not continue into W6/W7 — the
+tool contains no such logic to begin with.
+
+### 16.4 Post-execution reconciliation
+
+**PASS — every single check.** Run via the committed `reconcile.ts`
+against production directly, compared against the check-4 fresh baseline:
+
+- **Row counts:** unchanged on all 21 affected tables; `tenant_counters`
+  grew by exactly 2 (bounded-growth check).
+- **Ownership completeness:** `tenantId IS NULL` = 0 on all 21 tables —
+  **100%**.
+- **`TenantCounter`:** exactly 2 rows; `order_number_counter` value=41
+  matches actual MAX(`orderNumber`)=41; `invoice_number_counter` value=12
+  matches actual MAX(`invoiceNumber`)=12 — both still exactly consistent
+  post-seed.
+- **Customer mapping:** exact match against the `role='CUSTOMER'` expected
+  count on all 7 relevant table/column pairs (e.g. `orders.customerId`
+  set=21, expected=21; `carts.customerId` set=17, expected=17).
+- **`userId` preservation:** pair-hash unchanged on `carts`, `orders`,
+  `reviews`, `coupon_usages`, `idempotency_keys`.
+- **Order preservation:** order-number set-hash unchanged (zero rewrites);
+  order total sum ₹3,348.00 -> ₹3,348.00 (unchanged).
+- **Invoice preservation:** invoice-number set-hash unchanged; all 12
+  invoice records' row count preserved.
+- **Financial preservation:** payment `CAPTURED` sum 9,700 -> 9,700
+  paise (unchanged); refund sum 0 -> 0 (unchanged).
+- **Asset preservation:** `uploaded_files` row count (40) and every
+  `cloudinaryPublicId` reference untouched (the backfill never writes to
+  that column).
+- **Historical preservation:** `order_status_history` row count (86)
+  unchanged; every row's `orderId` still resolves (orphan check, below).
+- **Coupon/review/cart/idempotency/payment-attempt records:** all row
+  counts unchanged (`coupons`=3, `reviews`=0, `carts`=21,
+  `idempotency_keys`=41, `payment_attempts`=55).
+- **Orphan check:** zero mismatched rows on all 9 checked parent/child
+  pairs.
+- **Anomalies:** zero.
+
+### 16.5 Idempotent rerun (on production itself)
+
+The backfill was run a **second time** against production, immediately
+after reconciliation. **Result: `totalAffected=0`, `anomalies={}` — every
+one of the 30 step results reports `affected: 0`.** Zero duplicate rows,
+zero duplicate `Customer`/`TenantCounter` creation (the tool never creates
+a `Customer` row at all; the `TenantCounter` `INSERT ... ON CONFLICT DO
+NOTHING` correctly no-opped against the already-seeded rows). Provable,
+exact no-op on the real production dataset.
+
+### 16.6 Post-backfill production backup
+
+- **Artifact:** `printforge_prod_postw4w5backfill_20260908T181128Z.dump`
+- **SHA-256:** `9e73ce318874b4819aa4a8f40a2f07903b5c900fb5a5ffbaeaf7a5048d78b9f8`
+- **Size:** 169,628 bytes
+- **Method:** `pg_dump` 18.6 (version-matched) `--format=custom --no-owner --no-privileges`
+- **Verified:** exit 0, empty stderr; `pg_restore --list` confirms a valid
+  archive — `dbname=printforge_db`, 270 TOC entries (matching §14.7's
+  post-W3 schema-object count exactly, confirming no schema change
+  occurred during backfill), `tenant_counters` **TABLE DATA** entry present
+  (2 rows, matching §16.4).
+- **Retained** (not deleted), permissions `600`, stored in the same
+  access-controlled local location as every other artifact in this task
+  sequence.
+
+### 16.7 W6/W7 status
+
+**W6: NOT STARTED.** No composite FK, no composite unique added to any of
+the 21 tables — the backfill tool contains zero DDL of any kind (verified
+in §12/§13 and unchanged since).
+
+**W7: NOT STARTED — BLOCKED PENDING P4-D2.** P4-D2 (whether to extend the
+migration-safety guard for the `SET NOT NULL`/`DROP CONSTRAINT` verbs W7
+needs) remains `OPEN`, held deliberately, per its own record in
+`DECISIONS.md` — required only immediately before W7 begins, which has not
+begun.
+
+### 16.8 Final Phase 4 status
+
+**W3: COMMITTED, PUSHED, DEPLOYED TO PRODUCTION.** **W4/W5: COMMITTED,
+PUSHED, EXECUTED AGAINST PRODUCTION — every commerce ownership column and
+the two `TenantCounter` rows are now correctly populated in production,
+with full reconciliation and idempotency proof.** **W6: not started. W7:
+not started, blocked on P4-D2.** No decision was reopened; no unrelated
+production change was made; RLS remains genuinely pending (untouched)
+exactly as Phase 3 left it.
+
+### 16.9 Explicit confirmations
+
+- **Credential handling:** identical discipline to §14/§15 — the
+  production connection string was retrieved fresh for each command that
+  needed it, held only in an unexported shell variable, never printed,
+  echoed, or logged (verified via the empty `pg_dump` stderr log). The
+  Render CLI session was logged out at the end of this task's authorized
+  window.
+- **Source changes:** one throwaway script
+  (`backend/prisma/backfill/_tmp-check-counters.ts`) was created to invoke
+  the real `validateCounterAgainstMax()` against production and deleted
+  immediately after — confirmed via `git status` showing no trace. This
+  report section is otherwise the only change.
+
+**Not committed, not pushed** — left for explicit review before any commit
+decision, per this task's own instruction to prefer leaving the report
+uncommitted when uncertain.
+
+---
+
+## 17. Phase 4, Wave W6 — Composite FKs, composite uniques, P4-D3 guard (implemented + locally validated; PRODUCTION NOT TOUCHED)
+
+**Status: IMPLEMENTED AND LOCALLY VALIDATED. NOT APPLIED TO PRODUCTION. NOT
+COMMITTED, NOT PUSHED.** This task found the P4-D3 guard extension, the
+P4-D4 `storeId` schema additions, both W6 migrations, and the W6-C/W6-D/W6-E
+tooling already present, complete, and uncommitted in the working tree at
+the start of this session — this section audits that implementation against
+the approved decisions and the docket, then performs the local validation
+work (W6-C execution, W6-F sequence, W6-H test runs) that had not yet been
+executed or proven. One real pre-existing-pattern regression was found and
+fixed (§17.6). **P4-D2 remains OPEN, held for W7 only — not touched. W7 not
+started. Phase 5 not started. No decision reopened.**
+
+### 17.1 P4-D3 — migration-safety guard extension (audited, confirmed correct)
+
+`backend/src/migration-safety.spec.ts` already implements the exact rule
+approved in `DECISIONS.md`'s P4-D3 record: a composite ownership FK
+`ALTER TABLE` statement is permitted only when **both** (1) it is a
+single-action statement matching the exact
+`("tenantId"|"storeId", X) REFERENCES ...("<same token>", "id")` shape (the
+same-token requirement enforced via regex backreference, not a same-*class*
+check), **and** (2) the constraint name is on the fixed
+`W6_APPROVED_COMPOSITE_FKS` map — and, going beyond the docket's own minimum
+requirement, the matched statement's table/scope-token/local-column/
+referenced-table/referenced-column are cross-checked against the **full**
+canonical definition recorded for that name, not merely "the name exists" —
+so a hand-edited statement reusing an approved name but pointing at
+different columns/tables is still rejected (a strictly narrower, safer
+implementation than the minimum the decision required). Verified directly
+against the file, not assumed:
+
+- `W6_APPROVED_COMPOSITE_FKS` has exactly 19 entries, matching
+  `PHASE-4-W6-DECISION-DOCKET.md` §4.1 name-for-name, table-for-table,
+  column-for-column.
+- No generic `ADD CONSTRAINT` exemption, no shape-only exemption, no
+  name-only exemption exists anywhere in the file — confirmed by reading
+  the full diff, not just the new code.
+- Every pre-existing rejection (`DROP`, `SET NOT NULL`, unscoped
+  `ALTER TABLE`, `DELETE`/`TRUNCATE`/`UPDATE`) is untouched.
+
+**Tests present (48 total in the file, up from the pre-W6 19):** all 19
+approved FKs individually, all 19 together in one file, a same-scope-token
+backreference negative test, an off-allowlist-name negative test, an
+on-allowlist-name-with-hand-edited-shape negative test, a
+multi-action-combined negative test, a not-tenantId/storeId-scoped negative
+test, and a 9-case regression block re-confirming every previously-rejected
+shape (including a bare `SET NOT NULL`) is still rejected. **Result: 48/48
+pass** (§17.7).
+
+### 17.2 P4-D4 — `storeId` schema additions (audited, confirmed correct)
+
+`backend/prisma/schema.prisma` already carries nullable `storeId String?`
+on **exactly** the 6 tables P4-D4/Option A names — `ProductImage`,
+`ProductVariant`, `CustomizationField`, `CartItem`,
+`CartItemCustomization`, `OrderItem` — no more, no fewer (confirmed via
+`git diff --stat`: 12 lines changed, exactly 2 per table: the field plus a
+single-column `@@index`). No default, no `NOT NULL`, no `@relation`, no
+unique constraint on any of them — matching every P4-D4 requirement
+verbatim. No other model, field, or existing column was touched.
+
+### 17.3 W6-B migration — `20260909024023_w6_add_storeid_columns` (audited, confirmed correct)
+
+6 single-action `ALTER TABLE ... ADD COLUMN "storeId" TEXT;` statements (one
+per table, matching the G-19 exemption's one-action-per-statement
+requirement — same style as the W3 migration) plus 6 matching
+`CREATE INDEX`. No default, no `NOT NULL`, no FK, no unique. Confirmed by
+direct read of the file (§4.1 above already reproduces it in full).
+
+### 17.4 W6-D/W6-E migration — `20260909024619_w6_composite_fks_and_uniques` (audited, confirmed correct)
+
+Contains, in order: 8 supporting `CREATE UNIQUE INDEX "<table>_<scope>_id_key"
+ON "<table>"("<scope>","id")` statements (a necessary Postgres prerequisite —
+a composite FK's referenced `(scope, id)` pair needs an explicit unique
+index; the bare `id` primary key does not satisfy this even though `id`
+alone is already unique), then the 19 composite FKs, then the 6 composite
+uniques. Independently re-derived the required 8 `(table, scopeToken)`
+supporting-index pairs from the 19 FKs' own referenced sides and confirmed
+they match the file's 8 exactly (no more, no fewer, no missing pair). Every
+`ON DELETE` action mirrors the corresponding existing single-column FK for
+the same relationship (`RESTRICT`→`RESTRICT`, `SET NULL`→ the Postgres 15+
+column-specific `ON DELETE SET NULL ("<col>")` form, which nulls only the
+non-scope column, never `storeId`/`tenantId` as an unintended side effect).
+No `DROP`, no `SET NOT NULL`, no removal of any legacy constraint anywhere
+in the file (re-confirmed mechanically, §17.9).
+
+### 17.5 W6-C/W6-D/W6-E tooling — `w6-storeid-backfill.ts` / `w6-preflight.ts` (audited, confirmed correct)
+
+`w6-storeid-backfill.ts` copies `storeId` into the 6 P4-D4 tables from the
+**exact same parent** `w4-backfill.ts` already uses for `tenantId` on each
+of these tables (`product_images`/`product_variants`/`customization_fields`
+← `products`; `cart_items` ← `carts`; `cart_item_customizations` ←
+`cart_items`; `order_items` ← `orders`) — matching P4-D4's explicit
+requirement to reuse the already-proven ownership relationship, never a new
+one. Idempotent by construction (every `UPDATE`'s `WHERE` includes
+`"storeId" IS NULL`); dry-run uses the same always-rolled-back-transaction
+technique as `w4-backfill.ts`. `w6-preflight.ts` implements the exact 19 FK
++ 6 unique read-only preflight queries from docket §6/§7, never writes, and
+correctly refuses to proceed (`process.exitCode = 1`, explicit "STOP" text)
+on any non-empty result.
+
+### 17.6 One real fix applied this task — `tsc --noEmit` regression
+
+Adding `storeId` to `CustomizationField` (via P4-D4) reproduced the exact
+class of fixture-typing gap the original W3 audit already found and fixed
+once for `tenantId` (§11): the hand-written `CustomizationField` object
+literal in
+`backend/src/products/customizations/customization-validation.util.spec.ts`
+did not include `storeId`, so `tsc --noEmit` failed with a
+`string | null | undefined` vs. `string | null` mismatch against Prisma's
+now-wider generated type. **Fix:** added `storeId: null` immediately after
+the existing `tenantId: null` line — same shape, same reasoning, same file,
+same precedent. No test assertion changed. Re-ran `tsc --noEmit`: clean.
+
+### 17.7 W6-H — test results (this task, run in full)
+
+| Check | Result |
+|---|---|
+| `prisma validate` | ✅ "The schema at prisma/schema.prisma is valid" |
+| `prisma generate` | ✅ Prisma Client v6.19.3 regenerated |
+| `migration-safety.spec.ts` (full file, incl. P4-D3 block) | ✅ **48/48** |
+| Full backend unit suite (`npm run test`) | ✅ **35 suites / 346 tests** |
+| Full backend e2e suite (`npm run test:e2e`) | ✅ **23 suites / 256 tests** |
+| `tsc --noEmit` | ✅ clean (after the §17.6 fixture fix) |
+| `eslint "{src,apps,libs,test}/**/*.ts"` (the project's actual `lint` script glob) | ✅ 0 errors, 1 pre-existing unrelated warning (`test/e2e/support/fixtures.ts:13`, `@typescript-eslint/no-unsafe-argument` — unchanged from every prior report) |
+| `npm run build` (`nest build`) | ✅ clean |
+
+`prisma/*.ts` backfill/preflight scripts (`w4-backfill.ts`, `reconcile.ts`,
+`w6-storeid-backfill.ts`, `w6-preflight.ts`) are outside the project's
+`lint` script glob (`{src,apps,libs,test}/**/*.ts`) — same as every prior
+wave's backfill tooling; not a gap introduced by this task.
+
+### 17.8 W6-C — local `storeId` backfill (executed against a disposable scratch database)
+
+**Target:** `printforge_w6_scratch` — a fresh local Postgres database
+created by `pg_dump printforge_dev | psql printforge_w6_scratch`
+(same-server plain-SQL clone), **not** `printforge_dev`/`printforge_test`
+themselves. `printforge_dev` was independently re-verified untouched after
+this task (still 12 applied migrations, no `storeId` column on
+`product_images`) — confirmed directly, not assumed. `printforge_w6_scratch`
+was **dropped** at the end of this task (§17.13) — this DB never contained
+production data (it is a clone of the local dev/test-seed database), unlike
+the earlier production-data scratch copy in §15, which required its own
+disclosed cleanup for PII reasons.
+
+`printforge_dev` was chosen as the clone source specifically because it was
+already left in the W3+W4/W5-backfilled state by the prior session (§12.8)
+— i.e. it already satisfies "W4/W5-complete state," the exact precondition
+W6-F requires, independently re-verified before cloning: `orders`/`products`/
+`categories`/`coupons` 100% `tenantId`/`storeId` non-null, `tenant_counters`
+= 2 rows.
+
+**Dry run:** 162 rows would change across the 6 steps, **zero anomalies**;
+verified genuinely rolled back afterward (`product_images.storeId IS NOT
+NULL` count = 0 post-dry-run). **Real run:** **162 rows affected — identical
+to the dry-run count**, zero anomalies, **100% completeness** (zero
+remaining `NULL` on all 6 tables, verified directly). **Idempotent rerun:**
+every one of the 6 steps reports `affected: 0` on a second real run against
+the same (now-backfilled) database — proven, not assumed.
+
+| Table | Rows affected |
+|---|---|
+| `product_images` | (copied from `products`) |
+| `product_variants` | (copied from `products`) |
+| `customization_fields` | (copied from `products`) |
+| `cart_items` | (copied from `carts`) |
+| `cart_item_customizations` | (copied from `cart_items`) |
+| `order_items` | (copied from `orders`) |
+| **Total** | **162** |
+
+### 17.9 W6-F — full local migration validation sequence (executed, against `printforge_w6_scratch`)
+
+Sequence executed exactly as specified:
+
+1. **Baseline captured** — exact row counts on all 18 business tables +
+   `tenant_counters`; `SUM(orders.total)` = ₹320,963.00; full enumeration of
+   every pre-existing plain FK (28) and every legacy single-column unique
+   (6: `products_slug_key`, `categories_slug_key`, `coupons_code_key`,
+   `orders_orderNumber_key`, `invoices_invoiceNumber_key`,
+   `product_variants_productId_label_key`).
+2. **W6-B migration applied** (§17.3) — via the exact, unmodified migration
+   SQL executed directly inside `BEGIN`/`COMMIT`, followed by one
+   `_prisma_migrations` ledger `INSERT` with the file's real sha256
+   checksum — the identical checksum-reconciliation technique already used
+   twice for W3 (this file, §7/§11/§14.4), applied here only because the
+   still-genuinely-pending `20260907183000_enable_rls_tenancy_tables`
+   migration sorts chronologically before both W6 migrations and would
+   otherwise be forced through by a plain `prisma migrate deploy` — RLS's
+   own ledger entry was never touched, remains genuinely absent/pending on
+   every database this task touched.
+3. **Backfill executed** (§17.8).
+4. **Ownership completeness verified** — 0 remaining `NULL` on all 6 tables.
+5. **19 FK preflight queries run** (`w6-preflight.ts`) — **19/19 passed,
+   zero violations.**
+6. **6 composite-unique preflight queries run** — **6/6 passed, zero
+   duplicate groups.**
+7. **W6-D/W6-E migration applied** (§17.4) — same direct-SQL +
+   ledger-reconciliation technique; applied cleanly, zero errors, against
+   the real backfilled data.
+8. **All constraints verified to exist** — all 19 composite FK names, all 6
+   composite unique index names, and all 8 supporting `(scope,id)` unique
+   indexes independently re-queried from `pg_constraint`/`pg_indexes` and
+   confirmed present, by exact name.
+9. **Legacy constraints verified still present** — all 6 legacy
+   single-column uniques and all 28 pre-existing plain FKs, independently
+   re-queried and confirmed unchanged from the §1 baseline.
+10. **Deliberate FK violation, rolled back** — forced a `product_images` row's
+    `storeId` to a nonexistent value inside a transaction: **rejected**
+    (`violates foreign key constraint "product_images_storeId_productId_fkey"`);
+    the transaction was never committed; confirmed afterward that no row
+    carries the bogus value.
+11. **Deliberate composite-unique violation, rolled back** — attempted to
+    insert a second `products` row with the same `(storeId, slug)` as an
+    existing row: **rejected** (correctly caught by the pre-existing
+    `products_slug_key` global unique before reaching the new composite
+    one — exactly the "already safe by construction" relationship the
+    docket's §4.2 itself documents for all 6 composite uniques: the
+    narrower legacy unique makes a same-`(scope,value)` duplicate
+    structurally unreachable regardless of which named constraint fires
+    first); transaction rolled back; confirmed no such row exists
+    afterward.
+12. **Full reconciliation run** (`reconcile.ts`, post-only checks — no
+    `--compare` baseline file was needed since exact figures were captured
+    manually in step 1 and diffed by hand): **PASS** on every check —
+    ownership completeness, `customerId` mapping (7/7 tables exact match),
+    orphan detection (9/9 parent/child pairs, zero mismatches). Row counts
+    and `SUM(orders.total)` (₹320,963.00) both independently re-confirmed
+    identical to the step-1 baseline — **zero rows inserted, updated, or
+    deleted by anything in this sequence except the intended `storeId`
+    backfill itself.**
+13. **Idempotency reproof** — backfill rerun (§17.8: 0 affected across all
+    6 steps), preflight rerun (still 19/19 + 6/6 passed), `prisma migrate
+    status` rerun (stable — only the deliberately-untouched RLS migration
+    remains pending, exactly as before). A raw re-application of the
+    migration SQL was not additionally forced (Prisma's one-time-per-name
+    ledger design makes this a correctly-non-idempotent DDL operation by
+    design, same as every other migration in this repository) — instead,
+    idempotency was verified at the level that actually matters here: the
+    backfill script and the preflight checks, both of which are meant to be
+    safely rerunnable, both proved so.
+
+**A genuine transactional-safety proof also occurred, unplanned:** step 7's
+first real attempt (§17.10, against `printforge_test`, not
+`printforge_w6_scratch`) hit a real FK violation mid-migration-file and the
+**entire multi-statement transaction correctly rolled back** with zero
+partial effect (re-verified: none of the 8 supporting indexes nor the first
+composite FK persisted) — direct, live evidence that this migration file's
+`BEGIN`/`COMMIT` wrapping behaves exactly as the "STOP, do not auto-repair"
+discipline requires.
+
+### 17.10 A genuine finding — `printforge_test` FK preflight failure (non-blocking, local-fixture-only, NOT auto-repaired)
+
+Distinct from `printforge_w6_scratch` (§17.9, which passed all 19+6
+preflight checks against real W3/W4/W5-backfilled data). `printforge_test`
+already had the W6-B migration applied (from before this session) but not
+W6-D/E. Before applying W6-D/E there, this task ran the required preflight
+first — **correctly**, since it found a real problem:
+
+| Constraint | Violations | Sample row |
+|---|---|---|
+| `products_storeId_categoryId_fkey` | 1 | `products.id=71668849-f4a8-4863-ac15-a7260e01feca`, `storeId=b483d73a-003a-4cdb-884e-11d1d0fc29a1`, `categoryId=39107477-6eaa-4ad8-8ba1-5a2cab0da5b1` (no matching `(storeId,id)` row in `categories`) |
+| `product_images_storeId_productId_fkey` | 1 | `product_images.id=aa62b8cd-f594-4fca-b601-05804c0694fc`, `storeId=NULL`, `productId=71668849-...` (same product above) |
+
+**Per the docket's own explicit instruction — STOP, report, do not
+auto-repair — this task did neither auto-repair nor forced the migration
+through on `printforge_test`.** This is a pre-existing local test-fixture
+data-quality artifact (a hand-seeded or partially-backfilled row from
+earlier ad hoc local testing, unrelated to `printforge_dev`'s clean
+W3+W4/W5-backfilled state), **not** a defect in the W6 migration, tooling,
+or schema — `printforge_w6_scratch`, built from the properly-backfilled
+`printforge_dev`, passed the identical 19-check preflight with zero
+violations. Because the 19 composite FKs are raw-SQL constraints with **no**
+corresponding Prisma `@relation`/schema declaration (an explicit W3/W6
+design choice — §5, §17.2), the ORM layer never queries or depends on these
+constraints existing, so leaving W6-D/E unapplied on `printforge_test` has
+**zero effect** on the full unit/e2e suites (§17.7) or on `prisma
+validate`/`generate` — only the W6-B `storeId` columns (already present)
+are needed for those. `printforge_test` is left exactly as this task found
+it (W6-B applied, W6-D/E genuinely not applied — its `_prisma_migrations`
+ledger was corrected to remove one erroneous `INSERT` this task made before
+discovering the failed transaction had actually rolled back everything;
+verified no composite FK/index exists on `printforge_test` afterward).
+
+### 17.11 W6-G — explicit W7-boundary verification
+
+Mechanically re-verified, not asserted: `grep -inE "SET NOT NULL|DROP
+CONSTRAINT|DROP INDEX|DROP COLUMN|DROP TABLE"` against both W6 migration
+files returns **zero matches** (the one hit is the migration file's own
+explanatory comment stating it contains none of these). Independently
+re-confirmed via `information_schema`/`pg_constraint` on
+`printforge_w6_scratch` post-migration: every `storeId`/`tenantId` column
+touched by W6 is still `is_nullable = YES`; all 6 legacy single-column
+uniques and all 28 legacy plain FKs are still present (§17.9 step 9). No
+`User.role`, `userId`, or customer-authentication code was read or
+modified. No RLS toggle was touched (the RLS migration remains genuinely
+pending on every database this task touched, byte-for-byte the same as
+before). **P4-D2 (W7 guard extension) was not opened, referenced in code,
+or implemented.**
+
+### 17.12 Explicit scope statements
+
+- **PRODUCTION: UNTOUCHED.** No production connection string, Render
+  session, or production credential was read, referenced, or used anywhere
+  in this task. Every command targeted `printforge_dev` (read-only
+  verification + clone source), `printforge_test` (preflight + a rolled-back
+  migration attempt), or the disposable `printforge_w6_scratch` (created and
+  dropped within this task).
+- **`printforge_dev`: UNTOUCHED** (independently re-verified, §17.8).
+- **`printforge_test`: W6-B state unchanged from before this task; W6-D/E
+  deliberately not applied** (§17.10) — no business data row was inserted,
+  updated, or deleted on this database by this task.
+- **W7: NOT STARTED.** No `SET NOT NULL`, no `DROP CONSTRAINT`, no dropped
+  legacy unique, no removal of any existing ownership path.
+- **P4-D2: still OPEN, held for W7 only — not touched, not reopened.**
+- **`User.role`, `userId` live paths, customer authentication, business-table
+  RLS, Phase 5: none touched, none implemented, none started.**
+- **No decision (D10, D11, P4-D1, P4-D2, P4-D3, P4-D4) was reopened.**
+- **Unrelated pre-existing uncommitted changes found in the working tree at
+  the start of this task** (`docs/architecture/BLUEPRINT-v1.2.md`,
+  `docs/saas/DECISIONS.md`, and several `frontend/src/components/home/**`/
+  `frontend/src/pages/home/**` files) **were not touched, read for
+  correctness, or included in this task's scope** — they predate this
+  session and belong to unrelated work.
+
+### 17.13 Files changed (exact, this task)
+
+**Already present, complete, and correct at the start of this task (audited,
+not authored by this task):**
+- `backend/prisma/schema.prisma` (P4-D4 `storeId` additions)
+- `backend/src/migration-safety.spec.ts` (P4-D3 guard + 48 tests)
+- `backend/prisma/migrations/20260909024023_w6_add_storeid_columns/migration.sql`
+- `backend/prisma/migrations/20260909024619_w6_composite_fks_and_uniques/migration.sql`
+- `backend/prisma/backfill/w6-storeid-backfill.ts`
+- `backend/prisma/backfill/w6-preflight.ts`
+
+**Modified by this task:**
+- `backend/src/products/customizations/customization-validation.util.spec.ts`
+  — added `storeId: null` to the `makeField()` fixture (§17.6).
+- `docs/saas/PHASE-4-IMPLEMENTATION-REPORT.md` — this section.
+
+**Databases touched by this task (all local, none production):**
+- `printforge_w6_scratch` — created (cloned from `printforge_dev`), fully
+  validated (§17.8/§17.9), **dropped** at the end of this task.
+- `printforge_test` — preflight run (read-only); one migration attempt made
+  and correctly rolled back on a real FK violation (§17.10); one erroneous
+  `_prisma_migrations` ledger row inserted by this task and then removed
+  after discovering the transaction had rolled back; net state unchanged
+  from before this task.
+- `printforge_dev` — read-only verification only; confirmed unchanged.
+
+**Not committed. Not pushed.**
+
+### 17.14 W6 production readiness
+
+**NOT YET.** Local implementation and validation are complete and pass in
+full against a database in the exact "W4/W5-complete" state the docket
+requires. Before any production execution, still required (none performed
+by this task, per explicit instruction): (1) independent audit of this
+implementation, (2) a fresh production backup immediately before the
+migration (D8-pattern), (3) the same 19 FK + 6 unique preflight queries run
+directly against production (not assumed transferable from the local
+scratch result, even though the underlying data relationships are
+identical), (4) a separate, explicit W6 production-execution authorization,
+distinct from P4-D3/P4-D4's own decision-closure authorization (per
+`PHASE-4-W6-DECISION-DOCKET.md` §3/§10, which this task's own instructions
+also require). **This task does not request or imply that authorization.**
+
+---
+
+## 18. P1 guard-robustness fix — `singleAction` structural rewrite (this task; NOT PRODUCTION; NOT COMMITTED)
+
+**Status: FIXED. NOT COMMITTED, NOT PUSHED. PRODUCTION NOT TOUCHED. W6
+MIGRATION SQL UNCHANGED. PRISMA SCHEMA UNCHANGED.** Resolves the one P1
+finding from the independent W6 audit (§17's companion audit turn): the
+migration-safety guard's `singleAction` check could be bypassed by
+appending a second `ALTER TABLE` action via comma, as long as that
+second action's verb wasn't `ADD`/`DROP`/`ALTER`/`RENAME`.
+
+### 18.1 Root cause
+
+`backend/src/migration-safety.spec.ts`'s `singleAction` variable (shared by
+both the G-19 `ADD COLUMN` exemption and the P4-D3 composite-FK exemption)
+was previously computed as a keyword blacklist:
+
+```ts
+const singleAction = !/,\s*(?:ADD|DROP|ALTER|RENAME)\b/i.test(upper);
+```
+
+This only rejects a second, comma-joined `ALTER TABLE` action if that
+action happens to *start* with one of those four words. Postgres's
+`ALTER TABLE` grammar has other top-level action verbs that don't —
+`DISABLE`/`ENABLE`/`FORCE`/`NO FORCE ROW LEVEL SECURITY`, `OWNER TO`,
+`VALIDATE CONSTRAINT`, `SET SCHEMA`, `SET TABLESPACE`, `CLUSTER ON`, among
+others — and a blacklist can never be proven exhaustive against all of
+them. Verified empirically (independent audit turn, isolated Jest probe
+files created and deleted, never committed) that all seven were invisible
+to the old check when appended to an otherwise-approved statement. The gap
+pre-dated P4-D3 (it was already present in G-19's `ADD COLUMN` path); P4-D3
+inherited the shared helper without closing it. This directly contradicted
+`DECISIONS.md`'s P4-D3 record, which states verbatim: *"No additional
+action is permitted in the same ALTER TABLE statement."*
+
+### 18.2 Fix
+
+Replaced the blacklist with a **structural, paren/quote-depth-aware split**
+of the entire action list following `ALTER TABLE "<table>"` into top-level
+clauses — this proves "exactly one action" by actually counting clauses,
+not by naming forbidden verbs, so it cannot be incomplete the way a
+blacklist can:
+
+- **`splitTopLevelAlterActions(actionsText)`** — walks the text
+  character-by-character, tracking double-quote state (so a `,`/`(`/`)`
+  inside a quoted identifier is never misread) and parenthesis depth (so a
+  `,` inside `FOREIGN KEY ("tenantId", "x")` or `DECIMAL(10,2)` stays
+  inside its own clause), splitting only on a **top-level** (depth-0,
+  outside quotes) comma.
+- **`getSoleAlterTableActionClause(stmt)`** — matches
+  `^ALTER\s+TABLE\s+(?:ONLY\s+)?"[^"]+"\s+([\s\S]+)$`, runs the captured
+  action list through the splitter, and returns the one clause **only** if
+  there is structurally exactly one — `null` for two or more, regardless of
+  what verb the second one uses.
+- **`singleAction`** is now `getSoleAlterTableActionClause(stmt) !== null` —
+  a one-line change at the call site. Neither `addColumnOnly`'s regex, nor
+  `isApprovedCompositeOwnershipFk`'s regex, nor `isRlsToggleOnly`'s regex
+  (already `$`-anchored, already safe — see §18.4) needed to change: the
+  smuggling vector was entirely in how "single action" was decided, not in
+  what each exemption's own shape-matcher checked.
+
+Confirmed safe against the repository's actual historical `ADD COLUMN`
+usage before writing the fix: every real G-19 statement ever committed
+(`grep`-enumerated across all migration files) uses a bare `TEXT` type with
+no internal parens/commas/spaces — the new structural splitter handles
+these, and the more complex `DECIMAL(10,2)`-style and multi-column
+`FOREIGN KEY (...)` shapes, identically and correctly (verified by test —
+see 18.3, "comma inside the FK column list... is never mistaken").
+
+### 18.3 New regression tests (14, all in a new `describe('P1 fix: structural single-action enforcement (no verb blacklist)')` block)
+
+| # | Test | Result |
+|---|---|---|
+| 1 | Approved single composite FK alone | PASS |
+| 2 | Approved single `ADD COLUMN` alone | PASS |
+| 3 | Approved RLS toggle alone (existing D4/G-20 behavior) | PASS |
+| 4 | FK + `DISABLE ROW LEVEL SECURITY` smuggled via comma | REJECT |
+| 5 | FK + `NO FORCE ROW LEVEL SECURITY` smuggled via comma | REJECT |
+| 6 | FK + `OWNER TO malicious_role` smuggled via comma | REJECT |
+| 7 | FK + `VALIDATE CONSTRAINT` smuggled via comma | REJECT |
+| 8 | FK + `SET SCHEMA` smuggled via comma | REJECT |
+| 9 | FK + `SET TABLESPACE` smuggled via comma | REJECT |
+| 10 | FK + `CLUSTER ON` smuggled via comma | REJECT |
+| 11 | Reversed order — malicious clause first, approved FK second | REJECT |
+| — | Same 7 smuggle suffixes appended to an approved G-19 `ADD COLUMN` (shared root cause, shared fix, one loop test) | REJECT (all 7) |
+| — | Sanity: a comma inside the FK's own column list / `ON DELETE ("col")` specifier is never mistaken for a second action | PASS |
+| 12 | Generic `ADD`/`DROP`/`ALTER`/`RENAME` multi-action combinations (regression) | REJECT (all 4 cases) |
+
+Items 13–14 (existing G-19 and D4/G-20 tests still pass) and 15 (full
+migration-safety suite) are satisfied by the full-suite run in §18.5 rather
+than duplicated as new tests — all pre-existing tests in those two blocks
+are unmodified and still pass.
+
+### 18.4 Other same-class regexes inspected (per the task's explicit instruction)
+
+Checked every other "approved exemption" pattern in the file for the same
+non-end-anchored vulnerability:
+
+- **`isRlsToggleOnly`** (D4/G-20) — already `$`-anchored
+  (`...ROW\s+LEVEL\s+SECURITY\s*$`). Confirmed via the same empirical
+  probe used to find the original bug that `ENABLE ROW LEVEL SECURITY,
+  OWNER TO malicious_role` is correctly rejected by this exemption as
+  written — **no fix needed here**, and none was made.
+- **`addColumnOnly`** (G-19) — **was** vulnerable to the identical
+  comma-smuggling class as P4-D3 (verified: `ADD COLUMN "x" TEXT, OWNER TO
+  malicious_role` passed under the old code). Closed by the same
+  `singleAction` fix (§18.2) — no separate change to `addColumnOnly`'s own
+  regex was needed, since the vulnerability lived entirely in the shared
+  `singleAction` gate both exemptions depend on.
+- **Not touched, explicitly out of scope, reported for completeness, not
+  fixed:** a narrower, *different* class of gap was noticed but is **not**
+  the same defect as the one this task asked to fix — Postgres's
+  `ADD COLUMN` grammar permits inline column constraints
+  (`REFERENCES ...`, `CHECK (...)`, `UNIQUE`, `PRIMARY KEY`) appended
+  *without* a comma (e.g. `ADD COLUMN "x" TEXT REFERENCES "other"("id")`
+  is one single top-level action, not two). This is a different attack
+  surface (a same-clause inline constraint, not a second comma-joined
+  action) that the structural clause-splitter does not and was not asked
+  to address; the existing `hasNotNull`/`hasDefault` substring checks
+  already partially cover two of the four possible inline constraint
+  keywords. Not fixed here per the task's explicit "do not expand scope
+  into general refactoring" instruction — flagged here as a possible
+  follow-up, not implemented.
+
+### 18.5 Validation results (this task, run in full after the fix)
+
+| Check | Result |
+|---|---|
+| `prisma validate` | ✅ "The schema at prisma/schema.prisma is valid" |
+| `migration-safety.spec.ts` | ✅ **62/62** (48 pre-existing + 14 new) |
+| Full backend unit suite (`npm run test`) | ✅ **35 suites / 360 tests** (346 + 14 new) |
+| Full backend e2e suite (`npm run test:e2e`) | ✅ **23 suites / 256 tests** on immediate rerun — one unrelated, non-reproducible flaky failure occurred on the very first run (a timing-sensitive pre-existing test, not part of this file); re-ran clean, 256/256, twice. This change touches only `migration-safety.spec.ts` (pure string/regex logic, no database, no e2e-tested runtime code), so a flake there is unrelated to this fix by construction |
+| `tsc --noEmit` | ✅ clean, no fixture changes needed this time |
+| `eslint "{src,apps,libs,test}/**/*.ts"` (project's actual `lint` script, with `--fix`) | ✅ 0 errors, 1 pre-existing unrelated warning (`test/e2e/support/fixtures.ts:13`) — the new test code's own prettier formatting was auto-corrected by the project's standard `npm run lint`, then re-verified unchanged in behavior (`migration-safety.spec.ts` re-run: still 62/62; `tsc --noEmit`: still clean) |
+| `npm run build` (`nest build`) | ✅ clean |
+
+### 18.6 Explicit scope confirmation
+
+- **W6 migration SQL: UNCHANGED.** Neither
+  `20260909024023_w6_add_storeid_columns/migration.sql` nor
+  `20260909024619_w6_composite_fks_and_uniques/migration.sql` was read for
+  modification or touched by this task — only `migration-safety.spec.ts`
+  changed.
+- **Prisma schema: UNCHANGED.** `schema.prisma` was not touched.
+- **Production: UNTOUCHED.** No production connection, credential, or
+  session used.
+- **P4-D3, P4-D4: not reopened, not renegotiated.** The approved rule's
+  substance (exact shape + 19-name allowlist + full canonical cross-check)
+  is unchanged — only the previously-incomplete "single action" enforcement
+  underneath it was made structurally complete, exactly as its own already-
+  approved text required.
+- **P4-D2: still OPEN, held for W7 only — not touched.**
+- **W7: not started.**
+- **Local databases: not touched by this task** (no DB command was run;
+  the fix and all its validation are pure `jest`/`tsc`/`eslint`/`nest
+  build` runs against source and the local `printforge_dev`/`printforge_test`
+  connection strings already in `.env`/`.env.test`, neither of which were
+  connected to).
+
+**Files changed by this task:** `backend/src/migration-safety.spec.ts`
+only (the two new helper functions, the one-line `singleAction` fix, and
+the 14 new regression tests). `docs/saas/PHASE-4-IMPLEMENTATION-REPORT.md`
+(this section).
+
+**Not committed. Not pushed.**

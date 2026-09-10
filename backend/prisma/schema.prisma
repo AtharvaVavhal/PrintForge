@@ -272,6 +272,7 @@ model ProductImage {
   isPrimary          Boolean  @default(false)
 
   tenantId           String?
+  storeId            String?
 
   createdAt          DateTime @default(now())
 
@@ -279,6 +280,7 @@ model ProductImage {
 
   @@index([productId])
   @@index([tenantId])
+  @@index([storeId])
   @@map("product_images")
 }
 
@@ -292,6 +294,7 @@ model ProductVariant {
   isAvailable Boolean  @default(true)
 
   tenantId    String?
+  storeId     String?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -302,6 +305,7 @@ model ProductVariant {
   @@unique([productId, label])
   @@index([productId])
   @@index([tenantId])
+  @@index([storeId])
   @@map("product_variants")
 }
 
@@ -320,6 +324,7 @@ model CustomizationField {
   surchargeAmount  Decimal                @db.Decimal(10, 2) @default(0)
 
   tenantId         String?
+  storeId          String?
 
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
@@ -329,6 +334,7 @@ model CustomizationField {
 
   @@index([productId])
   @@index([tenantId])
+  @@index([storeId])
   @@map("customization_fields")
 }
 
@@ -393,6 +399,7 @@ model CartItem {
   quantity  Int
 
   tenantId  String?
+  storeId   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -404,6 +411,7 @@ model CartItem {
 
   @@index([cartId])
   @@index([tenantId])
+  @@index([storeId])
   @@map("cart_items")
 }
 
@@ -416,12 +424,14 @@ model CartItemCustomization {
   uploadedFileId       String?
 
   tenantId             String?
+  storeId              String?
 
   cartItem             CartItem            @relation(fields: [cartItemId], references: [id])
   customizationField   CustomizationField  @relation(fields: [customizationFieldId], references: [id], onDelete: Restrict)
   uploadedFile         UploadedFile?       @relation(fields: [uploadedFileId], references: [id])
 
   @@index([tenantId])
+  @@index([storeId])
   @@map("cart_item_customizations")
 }
 
@@ -574,6 +584,7 @@ model OrderItem {
   lineTotal             Decimal  @db.Decimal(10, 2)
 
   tenantId              String?
+  storeId               String?
 
   order          Order                     @relation(fields: [orderId], references: [id])
   product        Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
@@ -582,6 +593,7 @@ model OrderItem {
 
   @@index([orderId])
   @@index([tenantId])
+  @@index([storeId])
   @@map("order_items")
 }
 
