@@ -52,7 +52,10 @@ describe('CouponsService', () => {
   ) {
     const { orderCount = 0, usageCount = 0, claimReturnsRow = true } = options;
     return {
-      coupon: { findUnique: jest.fn().mockResolvedValue(coupon) },
+      // `validateCouponCore` now calls `findFirst` (Phase 4 W7 — `code`
+      // is no longer a bare-unique DB column, superseded by the composite
+      // `(storeId, code)` unique added in W6).
+      coupon: { findFirst: jest.fn().mockResolvedValue(coupon) },
       order: { count: jest.fn().mockResolvedValue(orderCount) },
       couponUsage: {
         count: jest.fn().mockResolvedValue(usageCount),

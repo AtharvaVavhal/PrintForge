@@ -37,12 +37,21 @@ export class IdempotencyService {
    */
   async claim(
     tx: Prisma.TransactionClient,
-    params: { key: string; userId: string; endpoint: string },
+    params: {
+      key: string;
+      userId: string;
+      endpoint: string;
+      tenantId: string;
+    },
   ): Promise<{ id: string } | null> {
     const expiresAt = new Date(Date.now() + IDEMPOTENCY_KEY_TTL_MS);
+    // Raw INSERT (§13.G's INSERT...ON CONFLICT DO NOTHING pattern) — not
+    // type-checked by `tsc` the way `.create()` is, so `tenantId` (server-
+    // derived from the cart being checked out, never client-supplied) must
+    // be added explicitly here too (Phase 4 W7 / P4-D2).
     const rows = await tx.$queryRaw<{ id: string }[]>`
-      INSERT INTO idempotency_keys (id, key, "userId", endpoint, "expiresAt", "createdAt")
-      VALUES (${randomUUID()}, ${params.key}, ${params.userId}, ${params.endpoint}, ${expiresAt}, now())
+      INSERT INTO idempotency_keys (id, key, "userId", endpoint, "expiresAt", "createdAt", "tenantId")
+      VALUES (${randomUUID()}, ${params.key}, ${params.userId}, ${params.endpoint}, ${expiresAt}, now(), ${params.tenantId})
       ON CONFLICT (key) DO NOTHING
       RETURNING id
     `;

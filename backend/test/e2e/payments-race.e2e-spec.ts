@@ -75,6 +75,7 @@ async function setupPendingPayment(
       amountPaise,
       currency: 'INR',
       status: 'INITIATED',
+      tenantId: order.tenantId,
     },
   });
 

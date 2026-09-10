@@ -102,6 +102,7 @@ export class CouponsService {
    */
   async createCoupon(
     adminId: string,
+    tenantId: string,
     dto: CreateCouponDto,
   ): Promise<CouponView> {
     this.assertTypeFieldsConsistent(dto);
@@ -127,6 +128,9 @@ export class CouponsService {
           expiresAt: dto.expiresAt,
           description: dto.description,
           createdByAdminId: adminId,
+          // Server-derived from the caller's own resolved tenant context
+          // (never client-supplied) — Phase 4 W7 / P4-D2.
+          tenantId,
         },
       });
       return this.toView(created);
@@ -312,6 +316,7 @@ export class CouponsService {
       userId: string;
       orderId: string;
       discountAppliedAmountPaise: bigint;
+      tenantId: string;
     },
   ): Promise<void> {
     await tx.couponUsage.create({
@@ -322,6 +327,9 @@ export class CouponsService {
         discountAppliedAmount: paiseToDecimalString(
           params.discountAppliedAmountPaise,
         ),
+        // Derived from the order this usage is recorded against — never a
+        // client-supplied value (Phase 4 W7 / P4-D2).
+        tenantId: params.tenantId,
       },
     });
   }
@@ -339,7 +347,10 @@ export class CouponsService {
     params: ValidateCouponParams,
   ): Promise<{ coupon: Coupon; scopedSubtotalPaise: bigint }> {
     const normalizedCode = params.code.trim().toUpperCase();
-    const coupon = await client.coupon.findUnique({
+    // `code` is no longer a bare-unique DB column as of W7 (superseded by
+    // the composite `(storeId, code)` unique added in W6) — `findFirst`,
+    // not `findUnique`, is the correct lookup shape now.
+    const coupon = await client.coupon.findFirst({
       where: { code: normalizedCode },
     });
     if (!coupon) {

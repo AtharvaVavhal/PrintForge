@@ -62,6 +62,7 @@ async function setupPending(
       amountPaise,
       currency: 'INR',
       status: 'INITIATED',
+      tenantId: order.tenantId,
     },
   });
   return { user, orderId, razorpayOrderId, amountPaise };

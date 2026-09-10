@@ -48,6 +48,7 @@ async function pendingOrder(app: INestApplication, prisma: PrismaService) {
       amountPaise,
       currency: 'INR',
       status: 'INITIATED',
+      tenantId: order.tenantId,
     },
   });
   return { orderId, razorpayOrderId, amountPaise };

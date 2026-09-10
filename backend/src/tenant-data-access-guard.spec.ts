@@ -73,6 +73,11 @@ const ALLOWLIST: ReadonlyArray<{ path: string; category: string }> = [
       'tenant-context.guard.ts (resolves a tenant FROM a hostname — no tenant is known yet)',
   },
   {
+    path: 'common/tenant/storefront-tenant.resolver.ts',
+    category:
+      "storefront-tenant.resolver.ts (Phase 4 W7 / P4-D2 — the storefront/customer-path counterpart of tenant-context.guard.ts's own host lookup: resolves a tenant FROM a hostname, or the sole existing tenant, for a caller with no TenantMembership to resolve one from — no tenant is known yet)",
+  },
+  {
     path: 'auth/strategies/jwt.strategy.ts',
     category:
       "jwt.strategy.ts (loads a User's own memberships across every tenant they hold, before any tenant is selected)",
@@ -171,7 +176,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
     }
   });
 
-  it('the two known, currently-existing access sites are exactly jwt.strategy.ts and tenant-context.guard.ts', () => {
+  it('the three known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, and storefront-tenant.resolver.ts', () => {
     const detectedTodayFiles = ALLOWLIST.filter((a) => {
       try {
         const code = stripComments(readFileSync(join(SRC_DIR, a.path), 'utf8'));
@@ -187,6 +192,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
       [
         'auth/strategies/jwt.strategy.ts',
         'common/tenant/tenant-context.guard.ts',
+        'common/tenant/storefront-tenant.resolver.ts',
       ].sort(),
     );
   });

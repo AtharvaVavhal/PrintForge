@@ -134,6 +134,9 @@ export class PaymentsService {
         amountPaise,
         currency: order.currency,
         status: PaymentAttemptStatus.INITIATED,
+        // Derived from the order this attempt belongs to — never a
+        // client-supplied value (Phase 4 W7 / P4-D2).
+        tenantId: order.tenantId,
       },
     });
 
@@ -394,6 +397,9 @@ export class PaymentsService {
         razorpayPaymentId: paymentEntity.id,
         amountPaise: BigInt(paymentEntity.amount),
         status: PaymentAttemptStatus.INITIATED,
+        // Derived from the order this attempt belongs to — never a
+        // client-supplied value (Phase 4 W7 / P4-D2).
+        tenantId: order.tenantId,
       },
     });
   }
@@ -663,6 +669,9 @@ export class PaymentsService {
                 amountPaise: captured.amountPaise,
                 currency: captured.currency,
                 status: PaymentAttemptStatus.INITIATED,
+                // Derived from the order this attempt belongs to — never
+                // a client-supplied value (Phase 4 W7 / P4-D2).
+                tenantId: order.tenantId,
               },
             })
           ).id;
@@ -811,6 +820,9 @@ export class PaymentsService {
         toStatus: to,
         changedByUserId,
         note,
+        // Derived from the order being transitioned — never a
+        // client-supplied value (Phase 4 W7 / P4-D2).
+        tenantId: order.tenantId,
       },
     });
     return { ...order, status: to };

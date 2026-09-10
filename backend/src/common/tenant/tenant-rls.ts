@@ -38,13 +38,17 @@ export async function withTenantRlsContext<T>(
  * Runs `fn` inside a transaction with the RLS bypass GUC set for its
  * duration. Reserved for the small, explicitly named set of legitimately
  * cross-tenant, platform-scoped operations (Master Plan §9) — currently
- * exactly two call sites: `JwtStrategy.validate()` (loading a User's own
+ * exactly three call sites: `JwtStrategy.validate()` (loading a User's own
  * memberships across whichever tenants they hold, before any tenant is
- * selected) and `TenantContextGuard`'s host/domain lookup (resolving a
- * tenant from a hostname, before a tenant is known). Do not add a new
- * caller without updating this comment and the migration's own header —
- * this is the one door around RLS's fail-closed default, and it must stay
- * small and auditable.
+ * selected), `TenantContextGuard`'s host/domain lookup (resolving a
+ * tenant from a hostname, before a tenant is known), and (Phase 4 W7,
+ * decision P4-D2's create-path fix) `StorefrontTenantResolver`'s identical
+ * host/domain lookup for the storefront/customer path, which has no
+ * `TenantMembership` to cross-check against and therefore no other way to
+ * resolve a tenant before one is known. Do not add a new caller without
+ * updating this comment and the migration's own header — this is the one
+ * door around RLS's fail-closed default, and it must stay small and
+ * auditable.
  */
 export async function withPlatformRlsBypass<T>(
   prisma: PrismaService,

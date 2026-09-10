@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
 import { PaginatedResult } from '../common/types/api-response.interface';
+import { assertObjectInTenant } from '../common/tenant/object-auth';
 import { UploadsService } from '../uploads/uploads.service';
 import { CategoryTreeNode } from './dto/category-tree.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -59,12 +60,20 @@ export class ProductsService {
     });
   }
 
-  async createCategory(dto: CreateCategoryDto): Promise<Category> {
+  async createCategory(
+    tenantId: string,
+    dto: CreateCategoryDto,
+  ): Promise<Category> {
     if (dto.parentCategoryId) {
-      await this.getCategoryOrThrow(dto.parentCategoryId);
+      const parent = await this.getCategoryOrThrow(dto.parentCategoryId);
+      // Never let a category be parented to another tenant's category —
+      // Phase 4 W7 / P4-D2 object-level check (`object-auth.ts`).
+      assertObjectInTenant(parent, tenantId);
     }
     try {
-      return await this.prisma.category.create({ data: dto });
+      return await this.prisma.category.create({
+        data: { ...dto, tenantId },
+      });
     } catch (err) {
       this.mapUniqueConstraintError(
         err,
@@ -263,8 +272,12 @@ export class ProductsService {
 
   // ─── Products (admin writes) ─────────────────────────────────────────
 
-  async createProduct(dto: CreateProductDto): Promise<ProductWithRelations> {
-    await this.getCategoryOrThrow(dto.categoryId);
+  async createProduct(
+    tenantId: string,
+    dto: CreateProductDto,
+  ): Promise<ProductWithRelations> {
+    const category = await this.getCategoryOrThrow(dto.categoryId);
+    assertObjectInTenant(category, tenantId);
     try {
       const created = await this.prisma.product.create({
         data: {
@@ -276,6 +289,7 @@ export class ProductsService {
           maxQuantity: dto.maxQuantity,
           specifications: dto.specifications as
             Prisma.InputJsonValue | undefined,
+          tenantId,
         },
       });
       return {
@@ -422,13 +436,15 @@ export class ProductsService {
   // ─── Variants (admin writes) ─────────────────────────────────────────
 
   async createVariant(
+    tenantId: string,
     productId: string,
     dto: CreateVariantDto,
   ): Promise<ProductVariant> {
-    await this.getProductOrThrow(productId);
+    const product = await this.getProductOrThrow(productId);
+    assertObjectInTenant(product, tenantId);
     try {
       return await this.prisma.productVariant.create({
-        data: { productId, ...dto },
+        data: { productId, ...dto, tenantId },
       });
     } catch (err) {
       this.mapUniqueConstraintError(
@@ -481,10 +497,12 @@ export class ProductsService {
   // for Cart (Phase 4) to call — not exposed here.
 
   async createCustomizationField(
+    tenantId: string,
     productId: string,
     dto: CreateCustomizationFieldDto,
   ): Promise<CustomizationField> {
-    await this.getProductOrThrow(productId);
+    const product = await this.getProductOrThrow(productId);
+    assertObjectInTenant(product, tenantId);
     return this.prisma.customizationField.create({
       data: {
         productId,
@@ -496,6 +514,7 @@ export class ProductsService {
         constraints: dto.constraints as Prisma.InputJsonValue | undefined,
         surchargeType: dto.surchargeType,
         surchargeAmount: dto.surchargeAmount,
+        tenantId,
       },
     });
   }
@@ -540,10 +559,12 @@ export class ProductsService {
   // ─── Images (admin writes) ───────────────────────────────────────────
 
   async addImage(
+    tenantId: string,
     productId: string,
     dto: CreateProductImageDto,
   ): Promise<ProductImageWithUrl> {
-    await this.getProductOrThrow(productId);
+    const product = await this.getProductOrThrow(productId);
+    assertObjectInTenant(product, tenantId);
 
     const uploadedFile = await this.uploadsService.findById(dto.uploadedFileId);
     if (!uploadedFile) {
@@ -561,6 +582,7 @@ export class ProductsService {
         deliveryType: uploadedFile.deliveryType,
         sortOrder: dto.sortOrder ?? 0,
         isPrimary: dto.isPrimary ?? false,
+        tenantId,
       },
     });
     return this.withImageUrl(created);

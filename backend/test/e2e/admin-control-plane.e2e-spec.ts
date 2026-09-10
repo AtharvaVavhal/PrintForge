@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { INestApplication } from '@nestjs/common';
 import { resetDatabase } from './support/db';
 import { createTestApp } from './support/test-app';
@@ -323,20 +324,29 @@ describe('Admin control plane (Phase 13.2)', () => {
   // ─── Categories ────────────────────────────────────────────────────────
 
   describe('category activation', () => {
-    async function makeCategory(name: string, isActive = true) {
+    async function makeCategory(
+      name: string,
+      isActive = true,
+      tenantId?: string,
+    ) {
+      const resolvedTenantId =
+        tenantId ??
+        (await prisma.tenant.create({ data: { slug: `t-${randomUUID()}` } }))
+          .id;
       return prisma.category.create({
         data: {
           name,
           slug: `${name.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           isActive,
+          tenantId: resolvedTenantId,
         },
       });
     }
 
     it('admin listing includes inactive categories; public listing/tree does not', async () => {
       const admin = await registerAdmin(app, prisma);
-      const active = await makeCategory('Mugs', true);
-      const inactive = await makeCategory('Retired', false);
+      const active = await makeCategory('Mugs', true, admin.tenantId);
+      const inactive = await makeCategory('Retired', false, admin.tenantId);
 
       const adminRes = await http(app)
         .get(apiPath('/categories/admin'))
@@ -384,7 +394,7 @@ describe('Admin control plane (Phase 13.2)', () => {
 
     it('admin can deactivate then reactivate a category', async () => {
       const admin = await registerAdmin(app, prisma);
-      const cat = await makeCategory('Seasonal');
+      const cat = await makeCategory('Seasonal', true, admin.tenantId);
 
       await http(app)
         .delete(apiPath(`/categories/${cat.id}`))

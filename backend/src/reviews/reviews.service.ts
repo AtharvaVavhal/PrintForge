@@ -58,6 +58,10 @@ export class ReviewsService {
             orderItemId: eligible.id,
             rating: dto.rating,
             bodyText: dto.bodyText ?? null,
+            // Derived from the verified-purchase anchor itself — never a
+            // client-supplied value, and guaranteed consistent with the
+            // OrderItem this review is anchored to (Phase 4 W7 / P4-D2).
+            tenantId: eligible.tenantId,
           },
         });
       } catch (err) {

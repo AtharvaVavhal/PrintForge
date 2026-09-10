@@ -101,6 +101,9 @@ export class InvoicesService {
           data: {
             invoiceNumber,
             orderId: order.id,
+            // Derived from the order this invoice belongs to — never a
+            // client-supplied value (Phase 4 W7 / P4-D2).
+            tenantId: order.tenantId,
             currency: order.currency,
             subtotal: order.subtotal,
             discountAmount: order.discountAmount,

@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { RequirePermission } from '../auth/permissions/require-permission.decorator';
+import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
+import type { TenantContext } from '../common/tenant/tenant-context';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -86,8 +88,11 @@ export class ProductsController {
   @RequirePermission('products:write')
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreateProductDto) {
-    return this.productsService.createProduct(dto);
+  async create(
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: CreateProductDto,
+  ) {
+    return this.productsService.createProduct(tenant.tenantId, dto);
   }
 
   @RequirePermission('products:write')
@@ -127,10 +132,11 @@ export class ProductsController {
   @Post(':id/variants')
   @HttpCode(HttpStatus.CREATED)
   async addVariant(
+    @CurrentTenant() tenant: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateVariantDto,
   ) {
-    return this.productsService.createVariant(id, dto);
+    return this.productsService.createVariant(tenant.tenantId, id, dto);
   }
 
   @RequirePermission('products:write')
@@ -154,10 +160,15 @@ export class ProductsController {
   @Post(':id/customization-fields')
   @HttpCode(HttpStatus.CREATED)
   async addCustomizationField(
+    @CurrentTenant() tenant: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateCustomizationFieldDto,
   ) {
-    return this.productsService.createCustomizationField(id, dto);
+    return this.productsService.createCustomizationField(
+      tenant.tenantId,
+      id,
+      dto,
+    );
   }
 
   @RequirePermission('products:write')
@@ -174,10 +185,11 @@ export class ProductsController {
   @Post(':id/images')
   @HttpCode(HttpStatus.CREATED)
   async addImage(
+    @CurrentTenant() tenant: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateProductImageDto,
   ) {
-    return this.productsService.addImage(id, dto);
+    return this.productsService.addImage(tenant.tenantId, id, dto);
   }
 
   @RequirePermission('products:write')

@@ -30,7 +30,11 @@ describe('tenant-bootstrap seed — CI smoke (AC-14)', () => {
   const prisma = new PrismaClient();
 
   beforeEach(async () => {
-    await resetDatabase(prisma);
+    // This suite asserts an exact row count/set produced by the seed
+    // script itself, starting from a genuinely empty tenants table — the
+    // default baseline-tenant seed (Phase 4 W7 / P4-D2) would make that
+    // assertion false unconditionally, so it's opted out here.
+    await resetDatabase(prisma, { seedBaselineTenant: false });
   });
 
   afterAll(async () => {

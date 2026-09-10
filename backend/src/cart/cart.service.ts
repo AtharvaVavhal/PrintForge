@@ -69,8 +69,8 @@ export class CartService {
     private readonly customizationValidation: CustomizationValidationService,
   ) {}
 
-  async getCart(userId: string): Promise<CartView> {
-    const cart = await this.getOrCreateCart(userId);
+  async getCart(userId: string, tenantId: string): Promise<CartView> {
+    const cart = await this.getOrCreateCart(userId, tenantId);
     const full = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cart.id },
       include: CART_DETAIL_INCLUDE,
@@ -85,13 +85,18 @@ export class CartService {
    */
   async getCartTotals(
     userId: string,
+    tenantId: string,
   ): Promise<{ subtotal: string; itemCount: number }> {
-    const cart = await this.getCart(userId);
+    const cart = await this.getCart(userId, tenantId);
     return { subtotal: cart.subtotal, itemCount: cart.itemCount };
   }
 
-  async addItem(userId: string, dto: AddCartItemDto): Promise<CartItemView> {
-    const cart = await this.getOrCreateCart(userId);
+  async addItem(
+    userId: string,
+    tenantId: string,
+    dto: AddCartItemDto,
+  ): Promise<CartItemView> {
+    const cart = await this.getOrCreateCart(userId, tenantId);
     const product = await this.getActiveProductOrThrow(dto.productId);
     const variant = await this.getActiveVariantOrThrow(product, dto.variantId);
 
@@ -109,6 +114,11 @@ export class CartService {
           productId: product.id,
           variantId: variant?.id,
           quantity: dto.quantity,
+          // Derived from the cart this item belongs to — never a
+          // client-supplied value (Phase 4 W7 / P4-D2); matches the
+          // backfill's own "copy parent Cart.tenantId" convention
+          // (PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md §3.3).
+          tenantId: cart.tenantId,
         },
       });
       if (dto.customizations?.length) {
@@ -118,6 +128,7 @@ export class CartService {
             customizationFieldId: c.fieldId,
             textValue: c.textValue,
             uploadedFileId: c.uploadedFileId,
+            tenantId: item.tenantId,
           })),
         });
       }
@@ -132,10 +143,11 @@ export class CartService {
 
   async updateItem(
     userId: string,
+    tenantId: string,
     itemId: string,
     dto: UpdateCartItemDto,
   ): Promise<CartItemView> {
-    const existing = await this.getOwnedItemOrThrow(userId, itemId);
+    const existing = await this.getOwnedItemOrThrow(userId, tenantId, itemId);
 
     const product = await this.prisma.product.findUniqueOrThrow({
       where: { id: existing.productId },
@@ -166,8 +178,12 @@ export class CartService {
     return this.toItemView(updated);
   }
 
-  async removeItem(userId: string, itemId: string): Promise<void> {
-    await this.getOwnedItemOrThrow(userId, itemId);
+  async removeItem(
+    userId: string,
+    tenantId: string,
+    itemId: string,
+  ): Promise<void> {
+    await this.getOwnedItemOrThrow(userId, tenantId, itemId);
 
     // customization rows RESTRICT-reference the item (§15) — delete them first.
     await this.prisma.$transaction([
@@ -180,16 +196,28 @@ export class CartService {
 
   // ─── Helpers ─────────────────────────────────────────────────────────
 
-  private async getOrCreateCart(userId: string): Promise<Cart> {
+  /**
+   * `tenantId` is only ever used on the `create` branch of this upsert (an
+   * existing cart's tenant never changes) — but Prisma's upsert requires a
+   * complete `create` payload regardless of which branch actually fires,
+   * so every caller must supply it. Server-derived by the controller
+   * (merchant `tenantContext` if present, else `StorefrontTenantResolver`)
+   * — never a client-supplied value (Phase 4 W7 / P4-D2).
+   */
+  private async getOrCreateCart(
+    userId: string,
+    tenantId: string,
+  ): Promise<Cart> {
     return this.prisma.cart.upsert({
       where: { userId },
       update: {},
-      create: { userId },
+      create: { userId, tenantId },
     });
   }
 
   private async getOwnedItemOrThrow(
     userId: string,
+    tenantId: string,
     itemId: string,
   ): Promise<{
     id: string;
@@ -197,7 +225,7 @@ export class CartService {
     productId: string;
     variantId: string | null;
   }> {
-    const cart = await this.getOrCreateCart(userId);
+    const cart = await this.getOrCreateCart(userId, tenantId);
     const item = await this.prisma.cartItem.findUnique({
       where: { id: itemId },
     });

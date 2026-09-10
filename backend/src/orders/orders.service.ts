@@ -126,13 +126,13 @@ export class OrdersService {
     tx: Prisma.TransactionClient,
     userId: string,
     productId: string,
-  ): Promise<{ id: string } | null> {
+  ): Promise<{ id: string; tenantId: string } | null> {
     return tx.orderItem.findFirst({
       where: {
         productId,
         order: { userId, status: OrderStatus.DELIVERED },
       },
-      select: { id: true },
+      select: { id: true, tenantId: true },
     });
   }
 
@@ -300,6 +300,9 @@ export class OrdersService {
             amountPaise: capturedAttempt!.amountPaise,
             status: RefundStatus.PENDING,
             reason: reason ?? null,
+            // Derived from the order being cancelled — never a
+            // client-supplied value (Phase 4 W7 / P4-D2).
+            tenantId: order.tenantId,
           },
         });
       }
@@ -387,6 +390,9 @@ export class OrdersService {
         toStatus: to,
         changedByUserId: actor.actorId,
         note,
+        // Derived from the order being transitioned — never a
+        // client-supplied value (Phase 4 W7 / P4-D2).
+        tenantId: order.tenantId,
       },
     });
 

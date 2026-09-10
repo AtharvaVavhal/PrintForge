@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
+import type { TenantContext } from '../common/tenant/tenant-context';
 import { RequirePermission } from '../auth/permissions/require-permission.decorator';
 import { OrdersService } from '../orders/orders.service';
 import { ReviewsService } from '../reviews/reviews.service';
@@ -145,9 +147,10 @@ export class AdminController {
   @Post('coupons')
   async createCoupon(
     @CurrentUser() admin: AuthenticatedUser,
+    @CurrentTenant() tenant: TenantContext,
     @Body() dto: CreateCouponDto,
   ) {
-    return this.couponsService.createCoupon(admin.id, dto);
+    return this.couponsService.createCoupon(admin.id, tenant.tenantId, dto);
   }
 
   @RequirePermission('coupons:write')

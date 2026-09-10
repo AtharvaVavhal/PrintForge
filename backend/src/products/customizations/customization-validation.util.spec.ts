@@ -21,6 +21,7 @@ function makeField(
     surchargeType: SurchargeType.NONE,
     surchargeAmount: new Prisma.Decimal(0),
     tenantId: null,
+    storeId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ProductsModule } from '../products/products.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { StorefrontTenantResolver } from '../common/tenant/storefront-tenant.resolver';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
 
@@ -12,7 +13,7 @@ import { CartService } from './cart.service';
 @Module({
   imports: [ProductsModule, UploadsModule],
   controllers: [CartController],
-  providers: [CartService],
+  providers: [CartService, StorefrontTenantResolver],
   exports: [CartService],
 })
 export class CartModule {}

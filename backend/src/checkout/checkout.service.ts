@@ -133,14 +133,22 @@ export class CheckoutService {
       // the claim) also means a same-key retry that loses this lock race
       // resumes only after the winner has committed its claim, so the
       // raced-claim lookup below reliably sees the winner's resultOrderId.
-      const [lockedCart] = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM carts WHERE "userId" = ${userId} FOR UPDATE
+      const [lockedCart] = await tx.$queryRaw<
+        { id: string; tenantId: string }[]
+      >`
+        SELECT id, "tenantId" FROM carts WHERE "userId" = ${userId} FOR UPDATE
       `;
+      if (!lockedCart) {
+        throw new BadRequestException('Your cart is empty');
+      }
 
       const claim = await this.idempotencyService.claim(tx, {
         key: idempotencyKey,
         userId,
         endpoint: CHECKOUT_ENDPOINT_ID,
+        // Derived from the cart being checked out — never a
+        // client-supplied value (Phase 4 W7 / P4-D2).
+        tenantId: lockedCart.tenantId,
       });
       if (!claim) {
         // Lost the race: by the time INSERT...ON CONFLICT returns nothing,
@@ -155,10 +163,6 @@ export class CheckoutService {
         throw new ConflictException(
           'A checkout for this idempotency key is already in progress',
         );
-      }
-
-      if (!lockedCart) {
-        throw new BadRequestException('Your cart is empty');
       }
 
       const cart = await tx.cart.findUnique({
@@ -238,6 +242,9 @@ export class CheckoutService {
         data: {
           orderNumber,
           userId,
+          // Derived from the cart being checked out — never a
+          // client-supplied value (Phase 4 W7 / P4-D2).
+          tenantId: cart.tenantId,
           status: OrderStatus.PENDING_PAYMENT,
           subtotal: paiseToDecimalString(subtotalPaise),
           shippingFee: paiseToDecimalString(finalShippingFeePaise),
@@ -270,6 +277,7 @@ export class CheckoutService {
           userId,
           orderId: createdOrder.id,
           discountAppliedAmountPaise: discountPaise,
+          tenantId: createdOrder.tenantId,
         });
       }
 
@@ -283,6 +291,9 @@ export class CheckoutService {
             unitPriceSnapshot: paiseToDecimalString(pricing.unitPricePaise),
             quantity: item.quantity,
             lineTotal: paiseToDecimalString(pricing.lineTotalPaise),
+            // Derived from the order this line belongs to — never a
+            // client-supplied value (Phase 4 W7 / P4-D2).
+            tenantId: createdOrder.tenantId,
           },
         });
         if (item.customizations.length > 0) {
@@ -292,6 +303,7 @@ export class CheckoutService {
               fieldLabelSnapshot: c.customizationField.label,
               textValue: c.textValue,
               uploadedFileId: c.uploadedFileId,
+              tenantId: orderItem.tenantId,
             })),
           });
         }
@@ -304,6 +316,9 @@ export class CheckoutService {
           toStatus: OrderStatus.PENDING_PAYMENT,
           changedByUserId: userId,
           note: 'Order created from cart at checkout',
+          // Derived from the order this history row belongs to — never a
+          // client-supplied value (Phase 4 W7 / P4-D2).
+          tenantId: createdOrder.tenantId,
         },
       });
 

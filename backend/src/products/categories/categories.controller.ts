@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermission } from '../../auth/permissions/require-permission.decorator';
+import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
+import type { TenantContext } from '../../common/tenant/tenant-context';
 import { ProductsService } from '../products.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
@@ -55,8 +57,11 @@ export class CategoriesController {
 
   @RequirePermission('products:write')
   @Post()
-  async create(@Body() dto: CreateCategoryDto) {
-    return this.productsService.createCategory(dto);
+  async create(
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: CreateCategoryDto,
+  ) {
+    return this.productsService.createCategory(tenant.tenantId, dto);
   }
 
   @RequirePermission('products:write')

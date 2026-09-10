@@ -21,7 +21,19 @@ export class UploadsService {
     private readonly cloudinary: CloudinaryService,
   ) {}
 
-  async create(userId: string, file: MulterFileLike): Promise<UploadedFile> {
+  /**
+   * `resolveTenantId` is a thunk, not an already-resolved value — invoked
+   * only after every validation step below has passed, so a bad file is
+   * still rejected with the correct 4xx (size/signature) even when tenant
+   * resolution would itself fail (e.g. an ambiguous multi-tenant test
+   * fixture); this preserves the pre-existing validation-error precedence
+   * (Phase 4 W7 / P4-D2 must not change it).
+   */
+  async create(
+    userId: string,
+    resolveTenantId: () => Promise<string>,
+    file: MulterFileLike,
+  ): Promise<UploadedFile> {
     if (file.size > UPLOAD_MAX_BYTES) {
       throw new PayloadTooLargeException(
         `File exceeds the maximum allowed size of ${UPLOAD_MAX_BYTES} bytes`,
@@ -61,6 +73,7 @@ export class UploadsService {
       deliveryType,
     });
 
+    const tenantId = await resolveTenantId();
     return this.prisma.uploadedFile.create({
       data: {
         cloudinaryPublicId: result.public_id,
@@ -69,6 +82,9 @@ export class UploadsService {
         bytes: result.bytes ?? file.size,
         resourceType: result.resource_type,
         deliveryType,
+        // Server-derived from the caller's own resolved tenant context —
+        // never a client-supplied value (Phase 4 W7 / P4-D2).
+        tenantId,
       },
     });
   }

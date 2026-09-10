@@ -101,12 +101,52 @@ export function authHeader(user: TestUser): [string, string] {
   return ['Authorization', `Bearer ${user.accessToken}`];
 }
 
+/**
+ * Phase 4 W7 (decision P4-D2's create-path fix) — `tenantId` is required at
+ * the DB layer as of W7 (20 tables, `backend/src/migration-safety.spec.ts`);
+ * these Prisma-direct fixture builders now need one too. Rather than force
+ * every one of this suite's ~47 call sites to supply an explicit tenant
+ * (most of them test feature behavior, not multi-tenancy, and don't care
+ * which tenant a fixture row belongs to), `tenantId` is an OPTIONAL
+ * parameter on every builder below — omit it and a fresh throwaway tenant
+ * is created for that one fixture; pass one explicitly when a test's own
+ * assertions actually depend on tenant identity/isolation.
+ */
+async function ensureTenantId(
+  prisma: PrismaService,
+  tenantId?: string,
+): Promise<string> {
+  if (tenantId) {
+    return tenantId;
+  }
+  // Reuse the most recently created tenant in this (post-`resetDatabase`)
+  // test's own data if one already exists — e.g. a `registerAdmin()` call
+  // earlier in the same test — rather than unconditionally minting a new
+  // one. Keeps ambient fixture rows (a product added to a cart, a coupon
+  // applied at checkout) under the SAME tenant as that test's admin/
+  // storefront context by default, matching real single-tenant behavior;
+  // a test that genuinely needs two distinct tenants passes `tenantId`
+  // explicitly for at least the second one, same as it must already name
+  // which tenant a `TenantMembership` belongs to.
+  const existing = await prisma.tenant.findFirst({
+    orderBy: { createdAt: 'desc' },
+  });
+  if (existing) {
+    return existing.id;
+  }
+  const tenant = await prisma.tenant.create({
+    data: { slug: `fixture-tenant-${randomUUID()}` },
+  });
+  return tenant.id;
+}
+
 export interface ProductFixtureOptions {
   name?: string;
   basePrice?: string;
   minQuantity?: number;
   maxQuantity?: number | null;
   isActive?: boolean;
+  tenantId?: string;
 }
 
 export interface ProductFixture {
@@ -123,10 +163,12 @@ export async function createProduct(
   prisma: PrismaService,
   options: ProductFixtureOptions = {},
 ): Promise<ProductFixture> {
+  const tenantId = await ensureTenantId(prisma, options.tenantId);
   const category = await prisma.category.create({
     data: {
       name: `Test Category ${randomUUID()}`,
       slug: `cat-${randomUUID()}`,
+      tenantId,
     },
   });
   const slug = `prod-${randomUUID()}`;
@@ -141,6 +183,7 @@ export async function createProduct(
       maxQuantity:
         options.maxQuantity === undefined ? 100 : options.maxQuantity,
       isActive: options.isActive ?? true,
+      tenantId,
     },
   });
   return { categoryId: category.id, productId: product.id, slug, basePrice };
@@ -151,13 +194,16 @@ export async function createVariant(
   productId: string,
   priceDelta = '0.00',
   isAvailable = true,
+  tenantId?: string,
 ): Promise<string> {
+  const resolvedTenantId = await ensureTenantId(prisma, tenantId);
   const variant = await prisma.productVariant.create({
     data: {
       productId,
       label: `Variant ${randomUUID()}`,
       priceDelta,
       isAvailable,
+      tenantId: resolvedTenantId,
     },
   });
   return variant.id;
@@ -170,8 +216,10 @@ export async function createTextCustomizationField(
     isRequired?: boolean;
     surchargeType?: 'NONE' | 'FLAT' | 'PER_CHARACTER';
     surchargeAmount?: string;
+    tenantId?: string;
   } = {},
 ): Promise<string> {
+  const tenantId = await ensureTenantId(prisma, options.tenantId);
   const field = await prisma.customizationField.create({
     data: {
       productId,
@@ -180,6 +228,7 @@ export async function createTextCustomizationField(
       isRequired: options.isRequired ?? false,
       surchargeType: options.surchargeType ?? 'NONE',
       surchargeAmount: options.surchargeAmount ?? '0.00',
+      tenantId,
     },
   });
   return field.id;
@@ -189,13 +238,16 @@ export async function createFileCustomizationField(
   prisma: PrismaService,
   productId: string,
   isRequired = false,
+  tenantId?: string,
 ): Promise<string> {
+  const resolvedTenantId = await ensureTenantId(prisma, tenantId);
   const field = await prisma.customizationField.create({
     data: {
       productId,
       label: `Logo upload ${randomUUID()}`,
       type: 'LOGO_UPLOAD',
       isRequired,
+      tenantId: resolvedTenantId,
     },
   });
   return field.id;
@@ -208,7 +260,9 @@ export async function createFileCustomizationField(
 export async function createUploadedFile(
   prisma: PrismaService,
   userId: string,
+  tenantId?: string,
 ): Promise<string> {
+  const resolvedTenantId = await ensureTenantId(prisma, tenantId);
   const file = await prisma.uploadedFile.create({
     data: {
       cloudinaryPublicId: `fake/fixture/${randomUUID()}`,
@@ -217,6 +271,7 @@ export async function createUploadedFile(
       bytes: 1024,
       resourceType: 'image',
       deliveryType: 'authenticated',
+      tenantId: resolvedTenantId,
     },
   });
   return file.id;
@@ -247,6 +302,7 @@ export interface CouponFixtureOptions {
   usageLimitPerUser?: number;
   firstOrderOnly?: boolean;
   minOrderValue?: string;
+  tenantId?: string;
 }
 
 /** Direct-via-Prisma, same rationale as createProduct — admin coupon CRUD
@@ -258,6 +314,7 @@ export async function createCoupon(
   options: CouponFixtureOptions = {},
 ): Promise<{ id: string; code: string }> {
   const type = options.type ?? 'PERCENTAGE';
+  const tenantId = await ensureTenantId(prisma, options.tenantId);
   const coupon = await prisma.coupon.create({
     data: {
       code: `TEST${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`,
@@ -273,6 +330,7 @@ export async function createCoupon(
       firstOrderOnly: options.firstOrderOnly ?? false,
       minOrderValue: options.minOrderValue,
       createdByAdminId,
+      tenantId,
     },
   });
   return { id: coupon.id, code: coupon.code };

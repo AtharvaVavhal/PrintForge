@@ -84,6 +84,7 @@ async function payOrder(
       amountPaise,
       currency: 'INR',
       status: 'INITIATED',
+      tenantId: order.tenantId,
     },
   });
   const body = buildWebhookBody('payment.captured', {

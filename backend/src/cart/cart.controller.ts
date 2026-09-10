@@ -9,14 +9,19 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Req,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import type { ResultWithMeta } from '../common/types/api-response.interface';
+import type { RequestWithTenantContext } from '../common/tenant/tenant-context';
+import { StorefrontTenantResolver } from '../common/tenant/storefront-tenant.resolver';
 import { CartService } from './cart.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { CartItemView } from './dto/cart-view.interface';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+
+type RequestWithHostname = RequestWithTenantContext & { hostname: string };
 
 /**
  * Owns (§20): `GET /cart`, `POST/PATCH/DELETE /cart/items[/:id]` — Auth
@@ -33,32 +38,63 @@ import { UpdateCartItemDto } from './dto/update-cart-item.dto';
  */
 @Controller('cart')
 export class CartController {
-  constructor(private readonly cartService: CartService) {}
+  constructor(
+    private readonly cartService: CartService,
+    private readonly tenantResolver: StorefrontTenantResolver,
+  ) {}
+
+  /**
+   * A shopper (`Role.CUSTOMER`) never holds a `TenantMembership`, so
+   * `TenantContextGuard` never resolves `request.tenantContext` for these
+   * routes today — `StorefrontTenantResolver` is the fallback (Phase 4 W7
+   * / P4-D2). Prefers `tenantContext` when present (e.g. an admin account
+   * exercising these same endpoints) so the merchant path never pays for
+   * a redundant lookup.
+   */
+  private resolveTenantId(request: RequestWithHostname): Promise<string> {
+    return this.tenantResolver.resolveActiveTenantId(
+      request.tenantContext,
+      request.hostname,
+    );
+  }
 
   @Get()
-  async getCart(@CurrentUser() user: AuthenticatedUser) {
-    return this.cartService.getCart(user.id);
+  async getCart(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithHostname,
+  ) {
+    const tenantId = await this.resolveTenantId(request);
+    return this.cartService.getCart(user.id, tenantId);
   }
 
   @Post('items')
   @HttpCode(HttpStatus.CREATED)
   async addItem(
     @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithHostname,
     @Body() dto: AddCartItemDto,
   ): Promise<ResultWithMeta<CartItemView>> {
-    const item = await this.cartService.addItem(user.id, dto);
-    const meta = await this.cartService.getCartTotals(user.id);
+    const tenantId = await this.resolveTenantId(request);
+    const item = await this.cartService.addItem(user.id, tenantId, dto);
+    const meta = await this.cartService.getCartTotals(user.id, tenantId);
     return { data: item, meta };
   }
 
   @Patch('items/:itemId')
   async updateItem(
     @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithHostname,
     @Param('itemId', ParseUUIDPipe) itemId: string,
     @Body() dto: UpdateCartItemDto,
   ): Promise<ResultWithMeta<CartItemView>> {
-    const item = await this.cartService.updateItem(user.id, itemId, dto);
-    const meta = await this.cartService.getCartTotals(user.id);
+    const tenantId = await this.resolveTenantId(request);
+    const item = await this.cartService.updateItem(
+      user.id,
+      tenantId,
+      itemId,
+      dto,
+    );
+    const meta = await this.cartService.getCartTotals(user.id, tenantId);
     return { data: item, meta };
   }
 
@@ -66,10 +102,12 @@ export class CartController {
   @HttpCode(HttpStatus.OK)
   async removeItem(
     @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithHostname,
     @Param('itemId', ParseUUIDPipe) itemId: string,
   ): Promise<ResultWithMeta<{ message: string }>> {
-    await this.cartService.removeItem(user.id, itemId);
-    const meta = await this.cartService.getCartTotals(user.id);
+    const tenantId = await this.resolveTenantId(request);
+    await this.cartService.removeItem(user.id, tenantId, itemId);
+    const meta = await this.cartService.getCartTotals(user.id, tenantId);
     return { data: { message: 'Item removed from cart' }, meta };
   }
 }
