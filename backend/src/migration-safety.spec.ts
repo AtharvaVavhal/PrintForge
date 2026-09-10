@@ -445,7 +445,9 @@ function isApprovedTenantNotNullCheck(stmt: string): boolean {
   if (!parsed) {
     return false;
   }
-  return W7_APPROVED_TENANT_NOT_NULL_COLUMNS.get(parsed.table) === parsed.column;
+  return (
+    W7_APPROVED_TENANT_NOT_NULL_COLUMNS.get(parsed.table) === parsed.column
+  );
 }
 
 interface ValidateConstraintStatement {
@@ -521,9 +523,7 @@ function isApprovedTenantSetNotNull(
   if (!parsed) {
     return false;
   }
-  if (
-    W7_APPROVED_TENANT_NOT_NULL_COLUMNS.get(parsed.table) !== parsed.column
-  ) {
+  if (W7_APPROVED_TENANT_NOT_NULL_COLUMNS.get(parsed.table) !== parsed.column) {
     return false;
   }
   for (const def of declared.values()) {
@@ -588,9 +588,7 @@ interface LegacyUniqueDropStatement {
 }
 
 /** Parses a single-action `ALTER TABLE "<t>" DROP CONSTRAINT "<name>"`. */
-function parseLegacyUniqueDrop(
-  stmt: string,
-): LegacyUniqueDropStatement | null {
+function parseLegacyUniqueDrop(stmt: string): LegacyUniqueDropStatement | null {
   const m =
     /^ALTER\s+TABLE\s+(?:ONLY\s+)?"([^"]+)"\s+DROP\s+CONSTRAINT\s+"([^"]+)"\s*$/i.exec(
       stmt,
@@ -620,6 +618,77 @@ function isApprovedLegacyUniqueDrop(
     W7_APPROVED_LEGACY_UNIQUE_DROPS.get(parsed.name) === parsed.table &&
     !newInThisFile.has(parsed.table)
   );
+}
+
+/**
+ * Phase 4 W7 / P4-D2 (docs/saas/DECISIONS.md) — ROOT-CAUSE CORRECTION.
+ * The five legacy objects W7 supersedes are plain Postgres UNIQUE INDEXES,
+ * not named table CONSTRAINTs — verified directly against a real database
+ * (`pg_constraint` returns zero rows for any of the five names; all five
+ * are present in `pg_indexes` instead). Prisma's `@unique` scalar
+ * attribute compiles to `CREATE UNIQUE INDEX`, never a constraint, and the
+ * original migrations confirm this (`CREATE UNIQUE INDEX
+ * "categories_slug_key" ON "categories"("slug")`, etc.). `ALTER TABLE ...
+ * DROP CONSTRAINT "categories_slug_key"` therefore fails against the real
+ * schema ("constraint ... does not exist") — `DROP INDEX "<name>"` is the
+ * correct, semantically-equivalent statement. `W7_APPROVED_LEGACY_UNIQUE_
+ * DROPS`/`isApprovedLegacyUniqueDrop` above are UNCHANGED — kept in place
+ * exactly as committed (they still correctly recognize the CONSTRAINT
+ * shape, for any future object that genuinely is one) — this is an
+ * ADDITIONAL, separate, independently-gated exemption for the INDEX shape,
+ * not a replacement.
+ */
+const W7_APPROVED_LEGACY_UNIQUE_INDEX_DROPS = new Map<string, string>([
+  ['categories_slug_key', 'categories'],
+  ['products_slug_key', 'products'],
+  ['coupons_code_key', 'coupons'],
+  ['orders_orderNumber_key', 'orders'],
+  ['invoices_invoiceNumber_key', 'invoices'],
+]);
+
+interface DropIndexStatement {
+  name: string;
+}
+
+/**
+ * Parses a single-action `DROP INDEX "<name>"` — and ONLY that exact
+ * shape. Deliberately strict, matching this file's established parser
+ * policy (every other exemption uses a fully-anchored, no-optional-
+ * keywords regex): no `CONCURRENTLY`, no `IF EXISTS`, no schema
+ * qualification (`public."<name>"`), no multiple comma-separated index
+ * names — none of these appear in the real W7 migration, so none are
+ * permitted here. The full-statement `^...$` anchor itself proves single-
+ * action (a smuggled second `DROP INDEX "<other>"` via comma fails to
+ * match, since trailing text remains after the first quoted name).
+ */
+function parseDropIndex(stmt: string): DropIndexStatement | null {
+  const m = /^DROP\s+INDEX\s+"([^"]+)"\s*$/i.exec(stmt);
+  if (!m) {
+    return null;
+  }
+  return { name: m[1] };
+}
+
+/**
+ * True iff this DROP INDEX names one of the fixed five W7 legacy unique
+ * indexes, attached to its correct table, AND the table is not one
+ * created in this same migration file (a legacy index can only exist on
+ * an already-existing table). An allowlisted name is still rejected if
+ * `W7_APPROVED_LEGACY_UNIQUE_INDEX_DROPS` doesn't map it to the table it's
+ * actually invoked from context for (defense-in-depth consistency with
+ * the DROP CONSTRAINT check above, even though `DROP INDEX` itself names
+ * no table — Postgres resolves it from the index's own catalog entry).
+ */
+function isApprovedLegacyUniqueIndexDrop(
+  stmt: string,
+  newInThisFile: Set<string>,
+): boolean {
+  const parsed = parseDropIndex(stmt);
+  if (!parsed) {
+    return false;
+  }
+  const table = W7_APPROVED_LEGACY_UNIQUE_INDEX_DROPS.get(parsed.name);
+  return table !== undefined && !newInThisFile.has(table);
 }
 
 /**
@@ -743,6 +812,13 @@ export function findAdditiveOnlyViolations(rawSql: string): string[] {
     // otherwise fires unconditionally on any DROP CONSTRAINT text.
     if (isApprovedLegacyUniqueDrop(stmt, newInThisFile)) {
       continue; // approved W7 legacy-unique drop (P4-D2)
+    }
+    // Phase 4 W7 / P4-D2 (root-cause correction): the real W7 migration
+    // uses DROP INDEX, not DROP CONSTRAINT, for these same five legacy
+    // names (see isApprovedLegacyUniqueIndexDrop's own comment) — same
+    // early-recognition requirement, same reason.
+    if (isApprovedLegacyUniqueIndexDrop(stmt, newInThisFile)) {
+      continue; // approved W7 legacy-unique INDEX drop (P4-D2)
     }
 
     if (
@@ -1187,9 +1263,8 @@ describe('migration safety — additive-only guard (G-10)', () => {
         );
 
         it('permits all 20 approved sequences together in one migration file', () => {
-          const sql = APPROVED_TENANT_NOT_NULL_TABLES.map(notNullSequence).join(
-            '\n',
-          );
+          const sql =
+            APPROVED_TENANT_NOT_NULL_TABLES.map(notNullSequence).join('\n');
           expect(findAdditiveOnlyViolations(sql)).toEqual([]);
         });
       });
@@ -1219,6 +1294,38 @@ describe('migration safety — additive-only guard (G-10)', () => {
             ({ name, table }) =>
               `ALTER TABLE "${table}" DROP CONSTRAINT "${name}";`,
           ).join('\n');
+        expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+      });
+
+      // Phase 4 W7 / P4-D2 (root-cause correction) — the ACTUAL W7
+      // migration uses `DROP INDEX`, not `DROP CONSTRAINT`, for these same
+      // five legacy names (see isApprovedLegacyUniqueIndexDrop's comment).
+      // The DROP CONSTRAINT tests above are kept exactly as they were —
+      // that protection is unchanged — these are additional, independent
+      // tests for the separate INDEX-shaped exemption.
+      describe('positive: legacy-unique DROP INDEX (the real W7 shape)', () => {
+        it.each(
+          LEGACY_UNIQUE_DROPS.map(({ name, table }) => [name, table] as const),
+        )('permits the approved index drop alone: %s', (name) => {
+          const sql = `DROP INDEX "${name}";`;
+          expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+        });
+
+        it('permits all 5 approved index drops together', () => {
+          const sql = LEGACY_UNIQUE_DROPS.map(
+            ({ name }) => `DROP INDEX "${name}";`,
+          ).join('\n');
+          expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+        });
+      });
+
+      it('permits the REAL W7 migration shape: all 20 NOT NULL sequences + all 5 legacy DROP INDEX statements together', () => {
+        const sql =
+          APPROVED_TENANT_NOT_NULL_TABLES.map(notNullSequence).join('\n') +
+          '\n' +
+          LEGACY_UNIQUE_DROPS.map(({ name }) => `DROP INDEX "${name}";`).join(
+            '\n',
+          );
         expect(findAdditiveOnlyViolations(sql)).toEqual([]);
       });
 
@@ -1298,7 +1405,8 @@ describe('migration safety — additive-only guard (G-10)', () => {
         });
 
         it('rejects a VALIDATE CONSTRAINT with no matching CHECK declaration anywhere in the file', () => {
-          const sql = 'ALTER TABLE "products" VALIDATE CONSTRAINT "some_other_check";';
+          const sql =
+            'ALTER TABLE "products" VALIDATE CONSTRAINT "some_other_check";';
           expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
         });
 
@@ -1328,6 +1436,55 @@ describe('migration safety — additive-only guard (G-10)', () => {
           const cases = [
             'ALTER TABLE "carts" DROP CONSTRAINT "carts_userId_key";',
             'ALTER TABLE "reviews" DROP CONSTRAINT "reviews_productId_userId_key";',
+          ];
+          for (const sql of cases) {
+            expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+          }
+        });
+      });
+
+      describe('negative: DROP INDEX shape/allowlist violations', () => {
+        it('rejects an arbitrary DROP INDEX not on the five-name allowlist', () => {
+          const sql = 'DROP INDEX "products_some_other_idx";';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects DROP INDEX on any other real index/table, including a W6 composite unique index', () => {
+          const cases = [
+            'DROP INDEX "products_storeId_slug_key";',
+            'DROP INDEX "categories_storeId_slug_key";',
+            'DROP INDEX "coupons_storeId_code_key";',
+            'DROP INDEX "orders_tenantId_orderNumber_key";',
+            'DROP INDEX "invoices_tenantId_invoiceNumber_key";',
+            'DROP INDEX "categories_parentCategoryId_idx";',
+            'DROP INDEX "carts_userId_key";',
+            'DROP INDEX "reviews_productId_userId_key";',
+          ];
+          for (const sql of cases) {
+            expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+          }
+        });
+
+        it('rejects CONCURRENTLY, IF EXISTS, and schema-qualified forms of an otherwise-approved name — strict parser policy, no optional keywords', () => {
+          const cases = [
+            'DROP INDEX CONCURRENTLY "categories_slug_key";',
+            'DROP INDEX IF EXISTS "categories_slug_key";',
+            'DROP INDEX public."categories_slug_key";',
+          ];
+          for (const sql of cases) {
+            expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+          }
+        });
+
+        it('rejects multiple comma-separated index names in one statement, even when every name is individually approved (smuggled multi-drop)', () => {
+          const sql = 'DROP INDEX "categories_slug_key", "products_slug_key";';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects DROP INDEX on the legacy uniques P4-D1 defers past Phase 4 — never on the W7 allowlist, index form', () => {
+          const cases = [
+            'DROP INDEX "carts_userId_key";',
+            'DROP INDEX "reviews_productId_userId_key";',
           ];
           for (const sql of cases) {
             expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
@@ -1376,6 +1533,9 @@ describe('migration safety — additive-only guard (G-10)', () => {
           'ALTER TABLE "widgets" ALTER COLUMN "x" SET NOT NULL;',
           'ALTER TABLE "orders" ADD CONSTRAINT "orders_userId_couponId_fkey" FOREIGN KEY ("userId", "couponId") REFERENCES "coupons"("userId", "id");',
           'ALTER TABLE "orders" ADD CONSTRAINT "orders_storeId_couponId_MADE_UP_NAME" FOREIGN KEY ("storeId", "couponId") REFERENCES "coupons"("storeId", "id");',
+          'DROP INDEX "some_unrelated_idx";',
+          'DROP TABLE "widgets";',
+          'ALTER TABLE "orders" DROP CONSTRAINT "orders_pkey";',
         ];
         for (const sql of cases) {
           expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);

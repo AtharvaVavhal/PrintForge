@@ -193,11 +193,11 @@ model RefreshToken {
 model Category {
   id              String     @id @default(uuid())
   name            String
-  slug            String     @unique
+  slug            String
   parentCategoryId String?
   isActive        Boolean    @default(true)
 
-  tenantId        String?
+  tenantId        String
   storeId         String?
 
   createdAt       DateTime   @default(now())
@@ -220,7 +220,7 @@ model Product {
   id             String   @id @default(uuid())
   categoryId     String
   name           String
-  slug           String   @unique
+  slug           String
   basePrice      Decimal  @db.Decimal(10, 2)
   minQuantity    Int
   maxQuantity    Int?
@@ -235,7 +235,7 @@ model Product {
   avgRating      Decimal? @db.Decimal(3, 2)
   reviewCount    Int      @default(0)
 
-  tenantId       String?
+  tenantId       String
   storeId        String?
 
   createdAt      DateTime @default(now())
@@ -271,7 +271,7 @@ model ProductImage {
   sortOrder          Int      @default(0)
   isPrimary          Boolean  @default(false)
 
-  tenantId           String?
+  tenantId           String
   storeId            String?
 
   createdAt          DateTime @default(now())
@@ -293,7 +293,7 @@ model ProductVariant {
   priceDelta  Decimal  @db.Decimal(10, 2) @default(0)
   isAvailable Boolean  @default(true)
 
-  tenantId    String?
+  tenantId    String
   storeId     String?
 
   createdAt   DateTime @default(now())
@@ -323,7 +323,7 @@ model CustomizationField {
   surchargeType    SurchargeType          @default(NONE)
   surchargeAmount  Decimal                @db.Decimal(10, 2) @default(0)
 
-  tenantId         String?
+  tenantId         String
   storeId          String?
 
   createdAt        DateTime               @default(now())
@@ -352,7 +352,7 @@ model UploadedFile {
   resourceType       String
   deliveryType       String
 
-  tenantId              String?
+  tenantId              String
   uploadedByCustomerId  String?
 
   createdAt          DateTime @default(now())
@@ -374,7 +374,7 @@ model Cart {
   id        String   @id @default(uuid())
   userId    String   @unique
 
-  tenantId   String?
+  tenantId   String
   storeId    String?
   customerId String?
 
@@ -398,7 +398,7 @@ model CartItem {
   variantId String?
   quantity  Int
 
-  tenantId  String?
+  tenantId  String
   storeId   String?
 
   createdAt DateTime @default(now())
@@ -423,7 +423,7 @@ model CartItemCustomization {
   textValue            String?
   uploadedFileId       String?
 
-  tenantId             String?
+  tenantId             String
   storeId              String?
 
   cartItem             CartItem            @relation(fields: [cartItemId], references: [id])
@@ -442,7 +442,7 @@ model CartItemCustomization {
 // represents "has a Razorpay order been created" — not a separate status (§12.1).
 model Order {
   id              String      @id @default(uuid())
-  orderNumber     String      @unique
+  orderNumber     String
   userId          String
   status          OrderStatus @default(PENDING_PAYMENT)
 
@@ -499,7 +499,7 @@ model Order {
   shippingPostalCode     String
   shippingCountry        String
 
-  tenantId        String?
+  tenantId        String
   storeId         String?
   customerId      String?
 
@@ -544,7 +544,7 @@ model Order {
 // confirmation.
 model Invoice {
   id              String   @id @default(uuid())
-  invoiceNumber   String   @unique
+  invoiceNumber   String
   orderId         String   @unique
   issuedAt        DateTime @default(now())
 
@@ -561,7 +561,7 @@ model Invoice {
 
   sellerSnapshot  Json
 
-  tenantId        String?
+  tenantId        String
 
   createdAt       DateTime @default(now())
 
@@ -583,7 +583,7 @@ model OrderItem {
   quantity              Int
   lineTotal             Decimal  @db.Decimal(10, 2)
 
-  tenantId              String?
+  tenantId              String
   storeId               String?
 
   order          Order                     @relation(fields: [orderId], references: [id])
@@ -606,7 +606,7 @@ model OrderItemCustomization {
   textValue          String?
   uploadedFileId     String?
 
-  tenantId           String?
+  tenantId           String
 
   orderItem     OrderItem     @relation(fields: [orderItemId], references: [id])
   uploadedFile  UploadedFile? @relation(fields: [uploadedFileId], references: [id], onDelete: Restrict)
@@ -641,7 +641,7 @@ model PaymentAttempt {
   method            String?
   rawPayload        Json?
 
-  tenantId          String?
+  tenantId          String
 
   createdAt         DateTime             @default(now())
   capturedAt        DateTime?
@@ -681,7 +681,7 @@ model Refund {
   reason           String?
   failureReason    String?
 
-  tenantId         String?
+  tenantId         String
 
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
@@ -702,7 +702,7 @@ model OrderStatusHistory {
   changedByUserId String?
   note           String?
 
-  tenantId               String?
+  tenantId               String
   changedByCustomerId    String?
   changedByMembershipId  String?
 
@@ -750,7 +750,7 @@ model IdempotencyKey {
   resultOrderId String?   @unique
   expiresAt     DateTime
 
-  tenantId      String?
+  tenantId      String
   customerId    String?
 
   createdAt     DateTime  @default(now())
@@ -830,7 +830,7 @@ model Review {
   bodyText    String?
   status      ReviewStatus @default(PUBLISHED)
 
-  tenantId    String?
+  tenantId    String
   storeId     String?
   customerId  String?
 
@@ -876,7 +876,7 @@ enum CouponScopeType {
 // OrdersService.generateOrderNumber's counter row.
 model Coupon {
   id                String          @id @default(uuid())
-  code              String          @unique
+  code              String
   type              CouponType
   percentageOff     Int?
   flatAmountOff     Decimal?        @db.Decimal(10, 2)
@@ -893,7 +893,7 @@ model Coupon {
   description       String?
   createdByAdminId  String
 
-  tenantId  String?
+  tenantId  String
   storeId   String?
 
   createdAt DateTime @default(now())
@@ -927,7 +927,7 @@ model CouponUsage {
   orderId               String   @unique
   discountAppliedAmount Decimal  @db.Decimal(10, 2)
 
-  tenantId   String?
+  tenantId   String
   storeId    String?
   customerId String?
 
