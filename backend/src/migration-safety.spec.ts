@@ -54,15 +54,59 @@ import { join } from 'path';
  *     that verification is a separate, required preflight step run by the
  *     operator before the migration (the W6 docket's own §6/§7 queries),
  *     never by this guard.
- * Forbidden anywhere (unchanged — G-19 and this extension do NOT weaken these):
- *   - DROP (table / column / index / constraint / type / schema / view / sequence)
+ *   - **(Phase 4 W7 / P4-D2, docs/saas/DECISIONS.md)** the self-verifying
+ *     safe-`NOT NULL` contract pattern, plus a fixed legacy-unique
+ *     `DROP CONSTRAINT` allowlist — FOUR narrow, independently-gated shapes:
+ *       1. `ALTER TABLE <existing> ADD CONSTRAINT "<name>" CHECK
+ *          ("<col>" IS NOT NULL) NOT VALID` — permitted ONLY when
+ *          `(<existing>, <col>)` is one of the 20 approved
+ *          `(table, "tenantId")` pairs in `W7_APPROVED_TENANT_NOT_NULL_COLUMNS`
+ *          below. `outbox_events` is deliberately absent — its `tenantId`
+ *          stays nullable forever (`PHASE-4-START-GATE-AND-IMPLEMENTATION-
+ *          SPEC.md` §3.6, a permanent exception, not an oversight).
+ *          `storeId`/`customerId` are entirely out of scope for this
+ *          exemption — P4-D2's approved scope names only `tenantId`.
+ *       2. `ALTER TABLE <existing> VALIDATE CONSTRAINT "<name>"` —
+ *          permitted ONLY when `<name>` was itself declared by an approved
+ *          statement of shape (1), for the SAME table, anywhere in this
+ *          SAME migration file (the detector validates each file as
+ *          self-contained, same principle as `tablesCreatedIn` below).
+ *       3. `ALTER TABLE <existing> ALTER COLUMN "<col>" SET NOT NULL` —
+ *          permitted ONLY when `(<existing>, <col>)` is an approved pair
+ *          AND this same file ALSO contains a matching, approved
+ *          `CHECK ... NOT VALID` (1) whose name was also `VALIDATE`d (2)
+ *          for that exact `(table, column)` — this is what makes the
+ *          exemption self-verifying: a bare `SET NOT NULL` (or one paired
+ *          with a CHECK/VALIDATE for the wrong table or the wrong column)
+ *          stays rejected even though the target column is on the
+ *          approved list.
+ *       4. `ALTER TABLE <existing> DROP CONSTRAINT "<name>"` — permitted
+ *          ONLY when `<name>` is one of the fixed five legacy
+ *          single-column uniques in `W7_APPROVED_LEGACY_UNIQUE_DROPS`
+ *          below, attached to its correct table (an allowlisted name on
+ *          the wrong table is rejected — same discipline as P4-D3's
+ *          FK-name check). `carts.userId` and `reviews(productId,userId)`
+ *          are deliberately absent — P4-D1 defers their cutover past
+ *          Phase 4.
+ *     No second action is permitted in the same statement for any of the
+ *     four — proven by the full-statement `^...$` anchor on each pattern
+ *     (the same property the D4/G-20 RLS-toggle check already relies on),
+ *     not by a verb blacklist.
+ * Forbidden anywhere (unchanged — G-19, D4/G-20, P4-D3, and P4-D2 do NOT
+ * weaken these beyond their own narrow, named exemptions above):
+ *   - DROP (table / column / index / constraint / type / schema / view /
+ *     sequence) — EXCEPT the 5 exact P4-D2-approved legacy unique names,
+ *     on their correct table only.
  *   - DELETE / TRUNCATE / UPDATE of rows
- *   - SET NOT NULL
- *   - `ALTER TABLE` on a table NOT created in the same file for ANYTHING other
- *     than the one narrow nullable-ADD-COLUMN case above — a type change, a
- *     DEFAULT, a NOT NULL, an ADD CONSTRAINT, a RENAME, a multi-action ALTER,
- *     etc. are all still rejected (Phase 4's contract work still needs explicit
- *     review; Phase 1 risk P1-R6, scope creep).
+ *   - SET NOT NULL — EXCEPT the P4-D2 self-verifying pattern, on the 20
+ *     approved `(table, "tenantId")` pairs only.
+ *   - `ALTER TABLE` on a table NOT created in the same file for ANYTHING
+ *     other than the narrow cases enumerated above — a type change, a
+ *     DEFAULT, a RENAME, a multi-action ALTER, a generic `ADD CONSTRAINT`
+ *     (FK, CHECK, or otherwise), a generic `VALIDATE CONSTRAINT`, a generic
+ *     `SET NOT NULL`, a generic `DROP CONSTRAINT`, etc. are all still
+ *     rejected (Phase 4's contract work still needs explicit review; Phase
+ *     1 risk P1-R6, scope creep).
  *
  * The detector validates **each migration file as self-contained** — it does not
  * model the cumulative schema across earlier migrations (per audit finding P2-4:
@@ -318,6 +362,267 @@ function isApprovedCompositeOwnershipFk(stmt: string): boolean {
 }
 
 /**
+ * Phase 4 W7 / P4-D2 (docs/saas/DECISIONS.md) — the exact 20 tables (of the
+ * 21 W3 tenant-scoping tables) whose `tenantId` becomes `NOT NULL` in wave
+ * W7. `outbox_events` is a deliberate, PERMANENT exclusion — platform-scoped
+ * outbox events legitimately have no tenant
+ * (`docs/saas/PHASE-4-START-GATE-AND-IMPLEMENTATION-SPEC.md` §3.6) — do NOT
+ * add it here without a separate, explicit decision superseding that
+ * record. `storeId`/`customerId` are OUT OF SCOPE for this exemption
+ * entirely (P4-D2's approved scope names only `tenantId`) — do NOT extend
+ * this map to another column without its own recorded decision.
+ */
+const W7_APPROVED_TENANT_NOT_NULL_COLUMNS = new Map<string, string>([
+  ['categories', 'tenantId'],
+  ['products', 'tenantId'],
+  ['product_images', 'tenantId'],
+  ['product_variants', 'tenantId'],
+  ['customization_fields', 'tenantId'],
+  ['uploaded_files', 'tenantId'],
+  ['carts', 'tenantId'],
+  ['cart_items', 'tenantId'],
+  ['cart_item_customizations', 'tenantId'],
+  ['orders', 'tenantId'],
+  ['invoices', 'tenantId'],
+  ['order_items', 'tenantId'],
+  ['order_item_customizations', 'tenantId'],
+  ['payment_attempts', 'tenantId'],
+  ['refunds', 'tenantId'],
+  ['order_status_history', 'tenantId'],
+  ['idempotency_keys', 'tenantId'],
+  ['reviews', 'tenantId'],
+  ['coupons', 'tenantId'],
+  ['coupon_usages', 'tenantId'],
+]);
+
+/**
+ * Phase 4 W7 / P4-D2 — the exact five legacy single-column unique
+ * constraints this guard's `DROP CONSTRAINT` exemption permits, each
+ * already superseded by a composite unique added in W6 (verified against
+ * the real generated names in `migrations/20260825190725_init/`,
+ * `.../20260827204110_add_coupons/`, `.../20260902031308_order_tax_snapshot_and_invoices/`).
+ * Do NOT add to this list without a recorded decision (same discipline as
+ * `LEGACY_MIGRATIONS`/`W6_APPROVED_COMPOSITE_FKS` above). `carts_userId_key`
+ * and `reviews_productId_userId_key` are deliberately absent — P4-D1
+ * defers their cutover past Phase 4.
+ */
+const W7_APPROVED_LEGACY_UNIQUE_DROPS = new Map<string, string>([
+  ['categories_slug_key', 'categories'],
+  ['products_slug_key', 'products'],
+  ['coupons_code_key', 'coupons'],
+  ['orders_orderNumber_key', 'orders'],
+  ['invoices_invoiceNumber_key', 'invoices'],
+]);
+
+interface CheckNotValidStatement {
+  table: string;
+  name: string;
+  column: string;
+}
+
+/**
+ * Parses a single-action `ALTER TABLE "<t>" ADD CONSTRAINT "<name>" CHECK
+ * ("<col>" IS NOT NULL) NOT VALID`. Returns `null` for anything else (wrong
+ * condition, missing `NOT VALID`, a second action, etc.) — the
+ * full-statement `^...$` anchor itself proves single-action, the same
+ * property the D4/G-20 RLS-toggle check already relies on.
+ */
+function parseCheckNotValid(stmt: string): CheckNotValidStatement | null {
+  const m =
+    /^ALTER\s+TABLE\s+(?:ONLY\s+)?"([^"]+)"\s+ADD\s+CONSTRAINT\s+"([^"]+)"\s+CHECK\s*\(\s*"([^"]+)"\s+IS\s+NOT\s+NULL\s*\)\s+NOT\s+VALID\s*$/i.exec(
+      stmt,
+    );
+  if (!m) {
+    return null;
+  }
+  const [, table, name, column] = m;
+  return { table, name, column };
+}
+
+/** True iff the CHECK NOT VALID targets an approved `(table, "tenantId")` pair. */
+function isApprovedTenantNotNullCheck(stmt: string): boolean {
+  const parsed = parseCheckNotValid(stmt);
+  if (!parsed) {
+    return false;
+  }
+  return W7_APPROVED_TENANT_NOT_NULL_COLUMNS.get(parsed.table) === parsed.column;
+}
+
+interface ValidateConstraintStatement {
+  table: string;
+  name: string;
+}
+
+/** Parses a single-action `ALTER TABLE "<t>" VALIDATE CONSTRAINT "<name>"`. */
+function parseValidateConstraint(
+  stmt: string,
+): ValidateConstraintStatement | null {
+  const m =
+    /^ALTER\s+TABLE\s+(?:ONLY\s+)?"([^"]+)"\s+VALIDATE\s+CONSTRAINT\s+"([^"]+)"\s*$/i.exec(
+      stmt,
+    );
+  if (!m) {
+    return null;
+  }
+  const [, table, name] = m;
+  return { table, name };
+}
+
+/**
+ * True iff this VALIDATE CONSTRAINT references a name declared by an
+ * approved `CHECK ... NOT VALID` (see `parseCheckNotValid`) for the SAME
+ * table, somewhere in the pre-scanned `declared` map (built once per file
+ * by `collectApprovedTenantNotNullChecks` — see `findAdditiveOnlyViolations`).
+ */
+function isApprovedValidateConstraint(
+  stmt: string,
+  declared: Map<string, CheckNotValidStatement>,
+): boolean {
+  const parsed = parseValidateConstraint(stmt);
+  if (!parsed) {
+    return false;
+  }
+  const def = declared.get(parsed.name);
+  return !!def && def.table === parsed.table;
+}
+
+interface SetNotNullStatement {
+  table: string;
+  column: string;
+}
+
+/** Parses a single-action `ALTER TABLE "<t>" ALTER COLUMN "<col>" SET NOT NULL`. */
+function parseSetNotNull(stmt: string): SetNotNullStatement | null {
+  const m =
+    /^ALTER\s+TABLE\s+(?:ONLY\s+)?"([^"]+)"\s+ALTER\s+COLUMN\s+"([^"]+)"\s+SET\s+NOT\s+NULL\s*$/i.exec(
+      stmt,
+    );
+  if (!m) {
+    return null;
+  }
+  const [, table, column] = m;
+  return { table, column };
+}
+
+/**
+ * True iff this SET NOT NULL targets an approved `(table, "tenantId")` pair
+ * AND the same file also contains an approved `CHECK ... NOT VALID` for
+ * that exact `(table, column)` whose constraint name was ALSO validated
+ * (`VALIDATE CONSTRAINT`) in this same file — the self-verifying pairing
+ * P4-D2 requires. A bare `SET NOT NULL`, or one paired with a CHECK/VALIDATE
+ * for the wrong table or the wrong column, returns `false`.
+ */
+function isApprovedTenantSetNotNull(
+  stmt: string,
+  declared: Map<string, CheckNotValidStatement>,
+  validated: Set<string>,
+): boolean {
+  const parsed = parseSetNotNull(stmt);
+  if (!parsed) {
+    return false;
+  }
+  if (
+    W7_APPROVED_TENANT_NOT_NULL_COLUMNS.get(parsed.table) !== parsed.column
+  ) {
+    return false;
+  }
+  for (const def of declared.values()) {
+    if (
+      def.table === parsed.table &&
+      def.column === parsed.column &&
+      validated.has(`${parsed.table}::${def.name}`)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Pre-scans every statement in the file for approved `CHECK NOT VALID`
+ * declarations (shape AND column both approved), keyed by constraint name.
+ * This is what makes `VALIDATE CONSTRAINT` / `SET NOT NULL` self-verifying:
+ * they can only be approved by pointing back at a real, approved
+ * declaration elsewhere in this SAME file (the guard is a static,
+ * order-insensitive, per-file scanner — same principle as `tablesCreatedIn`).
+ */
+function collectApprovedTenantNotNullChecks(
+  statements: string[],
+): Map<string, CheckNotValidStatement> {
+  const declared = new Map<string, CheckNotValidStatement>();
+  for (const stmt of statements) {
+    const parsed = parseCheckNotValid(stmt);
+    if (parsed && isApprovedTenantNotNullCheck(stmt)) {
+      declared.set(parsed.name, parsed);
+    }
+  }
+  return declared;
+}
+
+/**
+ * Pre-scans every statement for `VALIDATE CONSTRAINT` statements that
+ * correctly reference a name declared above for the SAME table — returns
+ * the set of `"table::name"` pairs that are validated.
+ */
+function collectValidatedTenantNotNullChecks(
+  statements: string[],
+  declared: Map<string, CheckNotValidStatement>,
+): Set<string> {
+  const validated = new Set<string>();
+  for (const stmt of statements) {
+    const parsed = parseValidateConstraint(stmt);
+    if (!parsed) {
+      continue;
+    }
+    const def = declared.get(parsed.name);
+    if (def && def.table === parsed.table) {
+      validated.add(`${parsed.table}::${parsed.name}`);
+    }
+  }
+  return validated;
+}
+
+interface LegacyUniqueDropStatement {
+  table: string;
+  name: string;
+}
+
+/** Parses a single-action `ALTER TABLE "<t>" DROP CONSTRAINT "<name>"`. */
+function parseLegacyUniqueDrop(
+  stmt: string,
+): LegacyUniqueDropStatement | null {
+  const m =
+    /^ALTER\s+TABLE\s+(?:ONLY\s+)?"([^"]+)"\s+DROP\s+CONSTRAINT\s+"([^"]+)"\s*$/i.exec(
+      stmt,
+    );
+  if (!m) {
+    return null;
+  }
+  const [, table, name] = m;
+  return { table, name };
+}
+
+/**
+ * True iff this DROP CONSTRAINT names one of the fixed five W7 legacy
+ * uniques, attached to its correct table, AND the table is not one created
+ * in this same migration file (a legacy constraint can only exist on an
+ * already-existing table).
+ */
+function isApprovedLegacyUniqueDrop(
+  stmt: string,
+  newInThisFile: Set<string>,
+): boolean {
+  const parsed = parseLegacyUniqueDrop(stmt);
+  if (!parsed) {
+    return false;
+  }
+  return (
+    W7_APPROVED_LEGACY_UNIQUE_DROPS.get(parsed.name) === parsed.table &&
+    !newInThisFile.has(parsed.table)
+  );
+}
+
+/**
  * Phase 4 W6 P1 fix (independent audit finding; see
  * docs/saas/PHASE-4-IMPLEMENTATION-REPORT.md §18) — ROOT CAUSE: the
  * previous `singleAction` check was a keyword blacklist
@@ -420,8 +725,25 @@ export function findAdditiveOnlyViolations(rawSql: string): string[] {
     .map((s) => s.trim().replace(/\s+/g, ' '))
     .filter(Boolean);
 
+  // Phase 4 W7 / P4-D2: pre-scan the WHOLE file for the self-verifying SET
+  // NOT NULL safety pattern before the main per-statement loop runs — both
+  // VALIDATE CONSTRAINT and SET NOT NULL approval depend on what approved
+  // CHECK NOT VALID declarations exist elsewhere in this same file.
+  const w7DeclaredChecks = collectApprovedTenantNotNullChecks(statements);
+  const w7ValidatedChecks = collectValidatedTenantNotNullChecks(
+    statements,
+    w7DeclaredChecks,
+  );
+
   for (const stmt of statements) {
     const upper = stmt.toUpperCase();
+
+    // Phase 4 W7 / P4-D2: an approved legacy-unique DROP CONSTRAINT must be
+    // recognized BEFORE the generic DROP rejection immediately below, which
+    // otherwise fires unconditionally on any DROP CONSTRAINT text.
+    if (isApprovedLegacyUniqueDrop(stmt, newInThisFile)) {
+      continue; // approved W7 legacy-unique drop (P4-D2)
+    }
 
     if (
       /\bDROP\s+(TABLE|COLUMN|INDEX|CONSTRAINT|TYPE|SCHEMA|VIEW|SEQUENCE)\b/.test(
@@ -485,9 +807,32 @@ export function findAdditiveOnlyViolations(rawSql: string): string[] {
         if (singleAction && isApprovedCompositeOwnershipFk(stmt)) {
           continue; // approved additive composite ownership FK (P4-D3)
         }
+        // Phase 4 W7 / P4-D2: the two non-locking halves of the safe NOT
+        // NULL pattern — permitted only for the 20 approved
+        // (table, "tenantId") pairs (outbox_events deliberately excluded).
+        if (singleAction && isApprovedTenantNotNullCheck(stmt)) {
+          continue; // approved W7 CHECK ... NOT VALID (P4-D2)
+        }
+        if (
+          singleAction &&
+          isApprovedValidateConstraint(stmt, w7DeclaredChecks)
+        ) {
+          continue; // approved W7 VALIDATE CONSTRAINT (P4-D2)
+        }
+        // Phase 4 W7 / P4-D2: SET NOT NULL itself — approved ONLY for the
+        // 20 named (table, tenantId) pairs AND only when this exact file
+        // also contains the matching CHECK NOT VALID + VALIDATE CONSTRAINT
+        // pair for that same (table, column) — proves the safe two-step
+        // pattern was actually followed, not merely permitted in principle.
+        if (
+          singleAction &&
+          isApprovedTenantSetNotNull(stmt, w7DeclaredChecks, w7ValidatedChecks)
+        ) {
+          continue; // approved W7 SET NOT NULL (P4-D2)
+        }
         violations.push(
           `ALTER TABLE on a table not created in this migration ("${target}") is not allowed in an additive migration ` +
-            `(G-19 permits ONLY a single nullable ADD COLUMN with no DEFAULT / NOT NULL; D4/G-20 additionally permits a bare ENABLE/FORCE ROW LEVEL SECURITY; P4-D3 additionally permits an approved composite ownership FK by exact shape AND name): ${stmt.slice(0, 120)}`,
+            `(G-19 permits ONLY a single nullable ADD COLUMN with no DEFAULT / NOT NULL; D4/G-20 additionally permits a bare ENABLE/FORCE ROW LEVEL SECURITY; P4-D3 additionally permits an approved composite ownership FK by exact shape AND name; P4-D2 additionally permits the self-verifying CHECK NOT VALID / VALIDATE CONSTRAINT / SET NOT NULL trio for the 20 approved tenantId columns): ${stmt.slice(0, 120)}`,
         );
         continue;
       }
@@ -767,6 +1112,270 @@ describe('migration safety — additive-only guard (G-10)', () => {
           'TRUNCATE TABLE "orders";',
           `UPDATE "orders" SET "total" = 0;`,
           'ALTER TABLE "widgets" ALTER COLUMN "x" SET NOT NULL;',
+        ];
+        for (const sql of cases) {
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        }
+      });
+    });
+
+    // Phase 4 W7 / P4-D2 (docs/saas/DECISIONS.md) — the self-verifying
+    // CHECK NOT VALID / VALIDATE CONSTRAINT / SET NOT NULL trio for the 20
+    // approved (table, tenantId) pairs, and the fixed five-name legacy
+    // unique DROP CONSTRAINT allowlist.
+    describe('P4-D2: W7 contract-verb exemption', () => {
+      const APPROVED_TENANT_NOT_NULL_TABLES = [
+        'categories',
+        'products',
+        'product_images',
+        'product_variants',
+        'customization_fields',
+        'uploaded_files',
+        'carts',
+        'cart_items',
+        'cart_item_customizations',
+        'orders',
+        'invoices',
+        'order_items',
+        'order_item_customizations',
+        'payment_attempts',
+        'refunds',
+        'order_status_history',
+        'idempotency_keys',
+        'reviews',
+        'coupons',
+        'coupon_usages',
+      ];
+
+      const checkName = (table: string) => `${table}_tenantId_not_null_check`;
+
+      const notNullSequence = (table: string) => `
+        ALTER TABLE "${table}" ADD CONSTRAINT "${checkName(table)}" CHECK ("tenantId" IS NOT NULL) NOT VALID;
+        ALTER TABLE "${table}" VALIDATE CONSTRAINT "${checkName(table)}";
+        ALTER TABLE "${table}" ALTER COLUMN "tenantId" SET NOT NULL;
+      `;
+
+      const LEGACY_UNIQUE_DROPS: { name: string; table: string }[] = [
+        { name: 'categories_slug_key', table: 'categories' },
+        { name: 'products_slug_key', table: 'products' },
+        { name: 'coupons_code_key', table: 'coupons' },
+        { name: 'orders_orderNumber_key', table: 'orders' },
+        { name: 'invoices_invoiceNumber_key', table: 'invoices' },
+      ];
+
+      it('there are exactly 20 approved tenantId NOT NULL tables (guards this test file against silently drifting from the docket)', () => {
+        expect(APPROVED_TENANT_NOT_NULL_TABLES).toHaveLength(20);
+        expect(W7_APPROVED_TENANT_NOT_NULL_COLUMNS.size).toBe(20);
+        expect(W7_APPROVED_TENANT_NOT_NULL_COLUMNS.has('outbox_events')).toBe(
+          false,
+        );
+      });
+
+      it('there are exactly 5 approved legacy-unique DROP CONSTRAINT names', () => {
+        expect(LEGACY_UNIQUE_DROPS).toHaveLength(5);
+        expect(W7_APPROVED_LEGACY_UNIQUE_DROPS.size).toBe(5);
+      });
+
+      describe('positive: SET NOT NULL safety pattern', () => {
+        it.each(APPROVED_TENANT_NOT_NULL_TABLES.map((t) => [t] as const))(
+          'permits the full CHECK NOT VALID -> VALIDATE -> SET NOT NULL sequence alone: %s',
+          (table) => {
+            expect(findAdditiveOnlyViolations(notNullSequence(table))).toEqual(
+              [],
+            );
+          },
+        );
+
+        it('permits all 20 approved sequences together in one migration file', () => {
+          const sql = APPROVED_TENANT_NOT_NULL_TABLES.map(notNullSequence).join(
+            '\n',
+          );
+          expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+        });
+      });
+
+      describe('positive: legacy-unique DROP CONSTRAINT', () => {
+        it.each(
+          LEGACY_UNIQUE_DROPS.map(({ name, table }) => [name, table] as const),
+        )('permits the approved drop alone: %s', (name, table) => {
+          const sql = `ALTER TABLE "${table}" DROP CONSTRAINT "${name}";`;
+          expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+        });
+
+        it('permits all 5 approved drops together', () => {
+          const sql = LEGACY_UNIQUE_DROPS.map(
+            ({ name, table }) =>
+              `ALTER TABLE "${table}" DROP CONSTRAINT "${name}";`,
+          ).join('\n');
+          expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+        });
+      });
+
+      it('permits a realistic full W7 migration file: all 20 NOT NULL sequences + all 5 legacy drops together', () => {
+        const sql =
+          APPROVED_TENANT_NOT_NULL_TABLES.map(notNullSequence).join('\n') +
+          '\n' +
+          LEGACY_UNIQUE_DROPS.map(
+            ({ name, table }) =>
+              `ALTER TABLE "${table}" DROP CONSTRAINT "${name}";`,
+          ).join('\n');
+        expect(findAdditiveOnlyViolations(sql)).toEqual([]);
+      });
+
+      describe('negative: SET NOT NULL without a valid safety pattern', () => {
+        it('rejects a bare SET NOT NULL with no CHECK/VALIDATE pair anywhere in the file', () => {
+          const sql =
+            'ALTER TABLE "products" ALTER COLUMN "tenantId" SET NOT NULL;';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects SET NOT NULL when the preceding CHECK/VALIDATE pair targets an out-of-scope column on the same table (storeId) — proves the pairing requires an APPROVED column, not merely a same-table CHECK', () => {
+          const sql = `
+            ALTER TABLE "products" ADD CONSTRAINT "products_storeId_not_null_check" CHECK ("storeId" IS NOT NULL) NOT VALID;
+            ALTER TABLE "products" VALIDATE CONSTRAINT "products_storeId_not_null_check";
+            ALTER TABLE "products" ALTER COLUMN "tenantId" SET NOT NULL;
+          `;
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects SET NOT NULL when the preceding CHECK/VALIDATE pair is approved but for a DIFFERENT table — proves the pairing is table-specific, not just "a CHECK exists somewhere in the file"', () => {
+          const sql = `
+            ALTER TABLE "products" ADD CONSTRAINT "products_tenantId_not_null_check" CHECK ("tenantId" IS NOT NULL) NOT VALID;
+            ALTER TABLE "products" VALIDATE CONSTRAINT "products_tenantId_not_null_check";
+            ALTER TABLE "categories" ALTER COLUMN "tenantId" SET NOT NULL;
+          `;
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects SET NOT NULL when only a VALIDATE CONSTRAINT exists with no matching CHECK declaration (smuggled VALIDATE)', () => {
+          const sql = `
+            ALTER TABLE "products" VALIDATE CONSTRAINT "products_tenantId_not_null_check";
+            ALTER TABLE "products" ALTER COLUMN "tenantId" SET NOT NULL;
+          `;
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects SET NOT NULL on outbox_events.tenantId even with a well-formed CHECK/VALIDATE pair (permanent exception)', () => {
+          const sql = `
+            ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_tenantId_not_null_check" CHECK ("tenantId" IS NOT NULL) NOT VALID;
+            ALTER TABLE "outbox_events" VALIDATE CONSTRAINT "outbox_events_tenantId_not_null_check";
+            ALTER TABLE "outbox_events" ALTER COLUMN "tenantId" SET NOT NULL;
+          `;
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects SET NOT NULL on an approved table but an unapproved column (storeId is out of scope, even alone)', () => {
+          const sql = `
+            ALTER TABLE "products" ADD CONSTRAINT "products_storeId_not_null_check" CHECK ("storeId" IS NOT NULL) NOT VALID;
+            ALTER TABLE "products" VALIDATE CONSTRAINT "products_storeId_not_null_check";
+            ALTER TABLE "products" ALTER COLUMN "storeId" SET NOT NULL;
+          `;
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects SET NOT NULL on a table entirely absent from the approved list', () => {
+          const sql = 'ALTER TABLE "users" ALTER COLUMN "email" SET NOT NULL;';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+      });
+
+      describe('negative: CHECK NOT VALID / VALIDATE CONSTRAINT shape violations', () => {
+        it('rejects a CHECK NOT VALID on a column outside the approved list', () => {
+          const sql =
+            'ALTER TABLE "orders" ADD CONSTRAINT "orders_storeId_not_null_check" CHECK ("storeId" IS NOT NULL) NOT VALID;';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects a CHECK with the approved column but the wrong condition', () => {
+          const sql = `ALTER TABLE "products" ADD CONSTRAINT "products_tenantId_not_null_check" CHECK ("tenantId" <> '') NOT VALID;`;
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects a CHECK on the approved column missing NOT VALID (an immediate, locking check)', () => {
+          const sql =
+            'ALTER TABLE "products" ADD CONSTRAINT "products_tenantId_not_null_check" CHECK ("tenantId" IS NOT NULL);';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects a VALIDATE CONSTRAINT with no matching CHECK declaration anywhere in the file', () => {
+          const sql = 'ALTER TABLE "products" VALIDATE CONSTRAINT "some_other_check";';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects a VALIDATE CONSTRAINT referencing a name declared for a different table', () => {
+          const sql = `
+            ALTER TABLE "products" ADD CONSTRAINT "products_tenantId_not_null_check" CHECK ("tenantId" IS NOT NULL) NOT VALID;
+            ALTER TABLE "categories" VALIDATE CONSTRAINT "products_tenantId_not_null_check";
+          `;
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+      });
+
+      describe('negative: DROP CONSTRAINT shape/allowlist violations', () => {
+        it('rejects a generic DROP CONSTRAINT off the five-name allowlist', () => {
+          const sql =
+            'ALTER TABLE "products" DROP CONSTRAINT "products_some_other_key";';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects an allowlisted name attached to the wrong table', () => {
+          const sql =
+            'ALTER TABLE "categories" DROP CONSTRAINT "products_slug_key";';
+          expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+        });
+
+        it('rejects DROP CONSTRAINT on the legacy uniques P4-D1 defers past Phase 4 (carts.userId, reviews(productId,userId)) — never on the W7 allowlist', () => {
+          const cases = [
+            'ALTER TABLE "carts" DROP CONSTRAINT "carts_userId_key";',
+            'ALTER TABLE "reviews" DROP CONSTRAINT "reviews_productId_userId_key";',
+          ];
+          for (const sql of cases) {
+            expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+          }
+        });
+      });
+
+      describe('negative: smuggled second action on each of the four shapes', () => {
+        const SMUGGLE_CASES: { label: string; sql: string }[] = [
+          {
+            label: 'CHECK NOT VALID + a second ADD COLUMN',
+            sql: 'ALTER TABLE "products" ADD CONSTRAINT "products_tenantId_not_null_check" CHECK ("tenantId" IS NOT NULL) NOT VALID, ADD COLUMN "x" TEXT;',
+          },
+          {
+            label: 'VALIDATE CONSTRAINT + a second action',
+            sql: 'ALTER TABLE "products" VALIDATE CONSTRAINT "products_tenantId_not_null_check", DISABLE ROW LEVEL SECURITY;',
+          },
+          {
+            label: 'SET NOT NULL + a second action',
+            sql: 'ALTER TABLE "products" ALTER COLUMN "tenantId" SET NOT NULL, ALTER COLUMN "storeId" SET NOT NULL;',
+          },
+          {
+            label: 'DROP CONSTRAINT + a second action',
+            sql: 'ALTER TABLE "products" DROP CONSTRAINT "products_slug_key", ADD COLUMN "x" TEXT;',
+          },
+        ];
+
+        it.each(SMUGGLE_CASES.map(({ label, sql }) => [label, sql] as const))(
+          '%s -> REJECT',
+          (_label, sql) => {
+            expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
+          },
+        );
+      });
+
+      it('regression: every previously-rejected shape remains rejected (P4-D2 does not widen anything else)', () => {
+        const cases = [
+          'DROP TABLE "orders";',
+          'ALTER TABLE "orders" DROP COLUMN "total";',
+          'ALTER TABLE "orders" ADD COLUMN "note" TEXT NOT NULL;',
+          'ALTER TABLE "users" ADD COLUMN "x" TEXT, ADD COLUMN "z" TEXT;',
+          'ALTER TABLE "tenants" DISABLE ROW LEVEL SECURITY;',
+          'DELETE FROM "orders";',
+          'TRUNCATE TABLE "orders";',
+          `UPDATE "orders" SET "total" = 0;`,
+          'ALTER TABLE "widgets" ALTER COLUMN "x" SET NOT NULL;',
+          'ALTER TABLE "orders" ADD CONSTRAINT "orders_userId_couponId_fkey" FOREIGN KEY ("userId", "couponId") REFERENCES "coupons"("userId", "id");',
+          'ALTER TABLE "orders" ADD CONSTRAINT "orders_storeId_couponId_MADE_UP_NAME" FOREIGN KEY ("storeId", "couponId") REFERENCES "coupons"("storeId", "id");',
         ];
         for (const sql of cases) {
           expect(findAdditiveOnlyViolations(sql)).not.toHaveLength(0);
