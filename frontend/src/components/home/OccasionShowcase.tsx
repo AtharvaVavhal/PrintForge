@@ -20,103 +20,103 @@ interface ShowcaseCard {
 
 const MERCHANDISE_CARDS: ShowcaseCard[] = [
   {
-    id: 'merch-tshirt',
-    title: 'Custom Logo Round Neck T-Shirt',
-    image: '/images/products/prod-tshirts.jpg',
-    salePrice: '₹499',
-    originalPrice: '₹830',
-    discount: '40% OFF',
+    id: 'merch-tshirt-1990',
+    title: 'Originals 1990 Graphic T-Shirt',
+    image: '/images/products/store/tshirt-originals-1990.jpg',
+    salePrice: '₹499.00',
+    originalPrice: '₹799.00',
+    discount: '38% OFF',
     tag: 'Bestseller',
-    rating: '4.9',
+    rating: '4.95',
     reviews: 142,
     categorySlug: 't-shirts',
   },
   {
-    id: 'merch-bcard',
-    title: 'Premium Matte Business Cards (Pack of 100)',
-    image: '/images/products/prod-business-cards.jpg',
-    salePrice: '₹399',
-    originalPrice: '₹665',
-    discount: '40% OFF',
+    id: 'merch-bcard-3d',
+    title: 'Custom Premium 3D Business Cards',
+    image: '/images/products/store/bcard-custom-3d-navy.jpg',
+    salePrice: '₹399.00',
+    originalPrice: '₹599.00',
+    discount: '33% OFF',
     tag: 'Hotselling',
     rating: '5.0',
     reviews: 98,
-    categorySlug: 'business cards',
+    categorySlug: 'business-cards',
   },
   {
-    id: 'merch-mug',
-    title: 'Personalized Ceramic Photo Mug',
-    image: '/images/products/prod-mugs.jpg',
-    salePrice: '₹299',
-    originalPrice: '₹499',
+    id: 'merch-mug-classic',
+    title: 'Classic Photo Memory Mug',
+    image: '/images/products/store/mug-classic-photo-memory.jpg',
+    salePrice: '₹299.00',
+    originalPrice: '₹499.00',
     discount: '40% OFF',
     tag: 'Most Loved',
-    rating: '4.85',
+    rating: '4.9',
     reviews: 118,
     categorySlug: 'mugs',
   },
   {
-    id: 'merch-nameplate',
-    title: 'Designer Acrylic Door Name Plate',
-    image: '/images/products/prod-name-plates.jpg',
-    salePrice: '₹1,199',
-    originalPrice: '₹1,999',
-    discount: '40% OFF',
-    tag: 'Newly Launched',
-    rating: '4.92',
+    id: 'merch-nameplate-mukund',
+    title: 'Mukund Villa Premium LED Name Plate',
+    image: '/images/products/store/nameplate-mukund-villa.jpg',
+    salePrice: '₹999.00',
+    originalPrice: '₹1,599.00',
+    discount: '38% OFF',
+    tag: 'Customizable',
+    rating: '5.0',
     reviews: 86,
-    categorySlug: 'name plates',
+    categorySlug: 'name-plates',
   },
 ]
 
 const BRANDING_CARDS: ShowcaseCard[] = [
   {
-    id: 'brand-logo',
-    title: '3D Acrylic & LED Business Logo Sign',
-    image: '/images/products/prod-logo-sign.jpg',
-    salePrice: '₹2,499',
-    originalPrice: '₹4,165',
-    discount: '40% OFF',
+    id: 'brand-logo-iphone',
+    title: 'iPhone LED Logo Wall Sign',
+    image: '/images/products/store/logo-iphone-led-sign.jpg',
+    salePrice: '₹799.00',
+    originalPrice: '₹1,299.00',
+    discount: '38% OFF',
     tag: 'Premium',
     rating: '5.0',
-    reviews: 74,
+    reviews: 64,
     categorySlug: 'logo',
   },
   {
-    id: 'brand-polo',
-    title: 'Corporate Embroidered & Printed Polo T-Shirts',
-    image: '/images/banners/banner-tshirts-logo.jpg',
-    salePrice: '₹699',
-    originalPrice: '₹1,165',
-    discount: '40% OFF',
-    tag: 'Corporate',
-    rating: '4.9',
-    reviews: 65,
+    id: 'brand-tshirt-hustle',
+    title: 'Hustle Graffiti Graphic T-Shirt',
+    image: '/images/products/store/tshirt-hustle-graffiti.jpg',
+    salePrice: '₹499.00',
+    originalPrice: '₹799.00',
+    discount: '38% OFF',
+    tag: 'Streetwear',
+    rating: '5.0',
+    reviews: 110,
     categorySlug: 't-shirts',
   },
   {
-    id: 'brand-nameplate',
-    title: 'Executive Metal & Acrylic Desk Name Plate',
-    image: '/images/banners/banner-name-plates.jpg',
-    salePrice: '₹899',
-    originalPrice: '₹1,499',
-    discount: '40% OFF',
-    tag: 'Bestseller',
-    rating: '4.88',
-    reviews: 52,
-    categorySlug: 'name plates',
-  },
-  {
-    id: 'brand-bcard-foil',
-    title: 'Luxury Gold Foil Business Cards (Pack of 100)',
-    image: '/images/banners/banner-business-cards.jpg',
-    salePrice: '₹599',
-    originalPrice: '₹999',
-    discount: '40% OFF',
+    id: 'brand-bcard-gold',
+    title: 'Premium Blue Gold Business Cards',
+    image: '/images/products/store/bcard-blue-gold-premium.jpg',
+    salePrice: '₹399.00',
+    originalPrice: '₹599.00',
+    discount: '33% OFF',
     tag: 'Luxury',
     rating: '4.95',
-    reviews: 88,
-    categorySlug: 'business cards',
+    reviews: 86,
+    categorySlug: 'business-cards',
+  },
+  {
+    id: 'brand-logo-realme',
+    title: 'Realme LED Logo Wall Sign',
+    image: '/images/products/store/logo-realme-led-sign.jpg',
+    salePrice: '₹799.00',
+    originalPrice: '₹1,299.00',
+    discount: '38% OFF',
+    tag: 'Trending',
+    rating: '4.95',
+    reviews: 58,
+    categorySlug: 'logo',
   },
 ]
 
@@ -144,7 +144,7 @@ export function OccasionShowcase({ sectionId }: OccasionShowcaseProps) {
               </p>
             </div>
             <Link
-              to={`${ROUTES.PRODUCTS}?search=t-shirts`}
+              to={`${ROUTES.PRODUCTS}?category=t-shirts`}
               className={styles.viewAllBtn}
             >
               <span>View All Custom Merchandise</span>
@@ -177,7 +177,7 @@ export function OccasionShowcase({ sectionId }: OccasionShowcaseProps) {
               </p>
             </div>
             <Link
-              to={`${ROUTES.PRODUCTS}?search=logo`}
+              to={`${ROUTES.PRODUCTS}?category=logo`}
               className={styles.viewAllBtn}
             >
               <span>View All Corporate Signage</span>
@@ -200,7 +200,7 @@ function ProductCraftCard({ card }: { card: ShowcaseCard }) {
   return (
     <div className={styles.card}>
       <Link
-        to={`${ROUTES.PRODUCTS}?search=${encodeURIComponent(card.categorySlug)}`}
+        to={`${ROUTES.PRODUCTS}?category=${encodeURIComponent(card.categorySlug)}`}
         className={styles.imageLink}
       >
         <div className={styles.imageContainer}>
@@ -228,7 +228,7 @@ function ProductCraftCard({ card }: { card: ShowcaseCard }) {
 
         <h3 className={styles.cardTitle}>
           <Link
-            to={`${ROUTES.PRODUCTS}?search=${encodeURIComponent(card.categorySlug)}`}
+            to={`${ROUTES.PRODUCTS}?category=${encodeURIComponent(card.categorySlug)}`}
             className={styles.titleLink}
           >
             {card.title}
@@ -242,7 +242,7 @@ function ProductCraftCard({ card }: { card: ShowcaseCard }) {
         </div>
 
         <Link
-          to={`${ROUTES.PRODUCTS}?search=${encodeURIComponent(card.categorySlug)}`}
+          to={`${ROUTES.PRODUCTS}?category=${encodeURIComponent(card.categorySlug)}`}
           className={styles.shopButton}
         >
           <Gift size={14} aria-hidden="true" />

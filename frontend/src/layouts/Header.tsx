@@ -14,12 +14,12 @@ import { HeaderSearch } from './HeaderSearch'
 import styles from './Header.module.css'
 
 const UVPIXEL_DIRECT_LINKS = [
-  { label: 'All Products', to: ROUTES.PRODUCTS },
-  { label: 'Business Cards', to: `${ROUTES.PRODUCTS}?search=business+cards` },
-  { label: 'Logo', to: `${ROUTES.PRODUCTS}?search=logo` },
-  { label: 'Mugs', to: `${ROUTES.PRODUCTS}?search=mugs` },
-  { label: 'Name Plates', to: `${ROUTES.PRODUCTS}?search=name+plates` },
-  { label: 'T-Shirts', to: `${ROUTES.PRODUCTS}?search=t-shirts` },
+  { label: 'All Products', to: ROUTES.PRODUCTS, categoryKey: null },
+  { label: 'Business Cards', to: `${ROUTES.PRODUCTS}?category=business-cards`, categoryKey: 'business-cards' },
+  { label: 'Logo', to: `${ROUTES.PRODUCTS}?category=logo`, categoryKey: 'logo' },
+  { label: 'Mugs', to: `${ROUTES.PRODUCTS}?category=mugs`, categoryKey: 'mugs' },
+  { label: 'Name Plates', to: `${ROUTES.PRODUCTS}?category=name-plates`, categoryKey: 'name-plates' },
+  { label: 'T-Shirts', to: `${ROUTES.PRODUCTS}?category=t-shirts`, categoryKey: 't-shirts' },
 ]
 
 export function Header() {
@@ -30,6 +30,21 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
+
+  // Track active navigation link accurately by URL pathname & search query parameters
+  const searchParams = new URLSearchParams(location.search)
+  const currentCategoryParam = (searchParams.get('category') || searchParams.get('categoryId') || '').toLowerCase().trim()
+  const currentSearchParam = (searchParams.get('search') || '').toLowerCase().trim()
+  const isProductsCatalog = location.pathname === ROUTES.PRODUCTS
+
+  const isNavLinkActive = (categoryKey: string | null) => {
+    if (!isProductsCatalog) return false
+    if (categoryKey === null) {
+      return !currentCategoryParam && !currentSearchParam
+    }
+    const targetKey = categoryKey.toLowerCase()
+    return currentCategoryParam === targetKey || (!currentCategoryParam && currentSearchParam === targetKey)
+  }
 
   // "Sign up" carries the current page as `state.from` so a customer who
   // registers from the storefront chrome returns to where they were, the
@@ -125,18 +140,19 @@ export function Header() {
               <div className={styles.navSkeleton} aria-hidden="true" />
             ) : (
               <ul className={styles.uvpixelDirectNav}>
-                {UVPIXEL_DIRECT_LINKS.map((link) => (
-                  <li key={link.label}>
-                    <NavLink
-                      to={link.to}
-                      className={({ isActive }) =>
-                        cn(styles.uvDirectLink, isActive && styles.uvDirectLinkActive)
-                      }
-                    >
-                      {link.label}
-                    </NavLink>
-                  </li>
-                ))}
+                {UVPIXEL_DIRECT_LINKS.map((link) => {
+                  const isActive = isNavLinkActive(link.categoryKey)
+                  return (
+                    <li key={link.label}>
+                      <NavLink
+                        to={link.to}
+                        className={cn(styles.uvDirectLink, isActive && styles.uvDirectLinkActive)}
+                      >
+                        {link.label}
+                      </NavLink>
+                    </li>
+                  )
+                })}
                 {categories.length > 0 && (
                   <li
                     className={styles.moreCategoriesItem}

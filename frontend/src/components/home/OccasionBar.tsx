@@ -23,7 +23,7 @@ const OCCASIONS: OccasionItem[] = [
     id: 'business-cards',
     label: 'Business Cards',
     icon: CreditCard,
-    query: 'business cards',
+    query: 'business-cards',
     badge: '40% OFF',
   },
   {
@@ -44,7 +44,7 @@ const OCCASIONS: OccasionItem[] = [
     id: 'name-plates',
     label: 'Name Plates',
     icon: BadgeCheck,
-    query: 'name plates',
+    query: 'name-plates',
     badge: 'Premium',
   },
   {
@@ -72,7 +72,7 @@ export function OccasionBar() {
             {OCCASIONS.map((item) => {
               const Icon = item.icon
               const toUrl = item.query
-                ? `${ROUTES.PRODUCTS}?search=${encodeURIComponent(item.query)}`
+                ? `${ROUTES.PRODUCTS}?category=${encodeURIComponent(item.query)}`
                 : ROUTES.PRODUCTS
               return (
                 <div key={item.id} role="listitem" className={styles.chipWrapper}>
