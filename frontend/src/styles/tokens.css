@@ -6,19 +6,17 @@
    * and elevation. No dark mode in this pass.
    * ============================================================ */
 
-  /* ---- Brand / primary (Royal Atelier Cobalt: confident, premium,
-   *      crafted printmaker character) ---------------------------- */
-  --color-primary: #1d4ed8;
-  --color-primary-hover: #1e40af;
-  --color-primary-active: #172554;
+  /* ---- Brand / primary (UVPixel Vibrant Red: signature energetic,
+   *      custom-printing brand character) ---------------------------- */
+  --color-primary: #e50b0b;
+  --color-primary-hover: #c90808;
+  --color-primary-active: #a30606;
   --color-primary-foreground: #ffffff;
-  --color-primary-ring: rgb(29 78 216 / 22%);
+  --color-primary-ring: rgb(229 11 11 / 22%);
 
   /* Historical alias. `--color-accent*` has always meant "the primary
    * interactive colour" across the storefront and the (frozen) admin —
-   * ~110 call sites. It now resolves to the primary blue; kept as an
-   * alias so none of those call sites have to change. Prefer
-   * `--color-primary*` in new code. */
+   * ~110 call sites. Resolves to the vibrant red. */
   --color-accent: var(--color-primary);
   --color-accent-hover: var(--color-primary-hover);
   --color-accent-contrast: var(--color-primary-foreground);

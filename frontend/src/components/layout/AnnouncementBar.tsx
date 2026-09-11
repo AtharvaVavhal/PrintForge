@@ -35,28 +35,39 @@ export function AnnouncementBar() {
         const value = res.data.data?.value;
         if (value) {
           setText(value);
-        } else {
-          setVisible(false);
         }
       })
-      .catch(() => {
-        if (!cancelled) setVisible(false);
-      })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
-  }, [initiallyDismissed]);   // stable dependency
+  }, [initiallyDismissed]);
 
-  /* ---------------------------------------------------------------
-   * 4️⃣  Render – unchanged behaviour, accessibility, dismiss flow.
-   * --------------------------------------------------------------- */
-  if (loading || !visible || !text) return null;
+  if (loading || !visible) return null;
 
   return (
     <div className={styles.bar} role="status" aria-live="polite">
-      <p className={styles.text}>{text}</p>
+      <div className={styles.content}>
+        {text ? (
+          <p className={styles.text}>{text}</p>
+        ) : (
+          <div className={styles.uvSegments}>
+            <span className={styles.segment}>
+              🎁 Free Message Bottle at ₹1,799+
+            </span>
+            <span className={styles.divider} aria-hidden="true">|</span>
+            <span className={styles.segment}>
+              🚚 Free Shipping at ₹1,000+
+            </span>
+            <span className={styles.divider} aria-hidden="true">|</span>
+            <span className={styles.segment}>
+              🎉 Extra 12% OFF – Code <strong className={styles.code}>UVPixel12</strong>
+            </span>
+          </div>
+        )}
+      </div>
       <button
         className={styles.close}
         onClick={() => {

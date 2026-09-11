@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { ShoppingCart, Menu, X, User, Printer, Package, ShieldCheck, Clock } from 'lucide-react'
+import { ShoppingCart, Menu, X, User, Package, ShieldCheck, Clock, ChevronDown } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useCart } from '@/hooks/useCart'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
@@ -9,10 +9,18 @@ import { ROUTES } from '@/constants/routes'
 import { cn } from '@/utils/cn'
 import { LogoutButton } from '@/features/auth/LogoutButton'
 import { CurrencySelector } from '@/components/layout/CurrencySelector'
-import { MegaMenuBar } from '@/components/layout/MegaMenu'
 import { CategoryAccordion } from '@/components/layout/CategoryAccordion'
 import { HeaderSearch } from './HeaderSearch'
 import styles from './Header.module.css'
+
+const UVPIXEL_DIRECT_LINKS = [
+  { label: 'All Products', to: ROUTES.PRODUCTS },
+  { label: 'Business Cards', to: `${ROUTES.PRODUCTS}?search=business+cards` },
+  { label: 'Logo', to: `${ROUTES.PRODUCTS}?search=logo` },
+  { label: 'Mugs', to: `${ROUTES.PRODUCTS}?search=mugs` },
+  { label: 'Name Plates', to: `${ROUTES.PRODUCTS}?search=name+plates` },
+  { label: 'T-Shirts', to: `${ROUTES.PRODUCTS}?search=t-shirts` },
+]
 
 export function Header() {
   const { user, status } = useAuth()
@@ -20,6 +28,7 @@ export function Header() {
   const { data: categoryTree, isLoading: treeLoading } = useCategoryTree()
   const storeName = useStoreName()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
 
   // "Sign up" carries the current page as `state.from` so a customer who
@@ -50,10 +59,15 @@ export function Header() {
         </button>
 
         <NavLink to={ROUTES.HOME} className={styles.brand} aria-label={`${storeName} home`}>
-          <span className={styles.brandIcon} aria-hidden="true">
-            <Printer size={18} strokeWidth={2.2} />
-          </span>
-          <span className={styles.brandText}>{storeName}</span>
+          <div className={styles.uvLogoFrame}>
+            <span className={styles.brandIcon} aria-hidden="true">
+              <span className={styles.uvDiamond}>
+                <span className={styles.uvDiamondDot} />
+              </span>
+            </span>
+            <span className={styles.brandText}>{storeName}</span>
+          </div>
+          <span className={styles.trademark} aria-hidden="true">&reg;</span>
         </NavLink>
 
         <HeaderSearch variant="bar" />
@@ -110,7 +124,65 @@ export function Header() {
             {treeLoading ? (
               <div className={styles.navSkeleton} aria-hidden="true" />
             ) : (
-              <MegaMenuBar categories={categories} />
+              <ul className={styles.uvpixelDirectNav}>
+                {UVPIXEL_DIRECT_LINKS.map((link) => (
+                  <li key={link.label}>
+                    <NavLink
+                      to={link.to}
+                      className={({ isActive }) =>
+                        cn(styles.uvDirectLink, isActive && styles.uvDirectLinkActive)
+                      }
+                    >
+                      {link.label}
+                    </NavLink>
+                  </li>
+                ))}
+                {categories.length > 0 && (
+                  <li
+                    className={styles.moreCategoriesItem}
+                    onMouseEnter={() => setMoreOpen(true)}
+                    onMouseLeave={() => setMoreOpen(false)}
+                  >
+                    <button
+                      type="button"
+                      className={cn(styles.uvDirectLink, styles.moreBtn, moreOpen && styles.uvDirectLinkActive)}
+                      onClick={() => setMoreOpen((prev) => !prev)}
+                      aria-expanded={moreOpen}
+                      aria-haspopup="true"
+                    >
+                      <span>More Categories</span>
+                      <ChevronDown
+                        size={14}
+                        className={cn(styles.moreChevron, moreOpen && styles.moreChevronOpen)}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    {moreOpen && (
+                      <div className={styles.moreDropdownMenu} role="menu">
+                        <NavLink
+                          to={ROUTES.PRODUCTS}
+                          className={styles.dropdownCategoryLink}
+                          onClick={() => setMoreOpen(false)}
+                          role="menuitem"
+                        >
+                          All Products
+                        </NavLink>
+                        {categories.map((cat) => (
+                          <NavLink
+                            key={cat.id}
+                            to={`${ROUTES.PRODUCTS}?categoryId=${encodeURIComponent(cat.id)}`}
+                            className={styles.dropdownCategoryLink}
+                            onClick={() => setMoreOpen(false)}
+                            role="menuitem"
+                          >
+                            {cat.name}
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                )}
+              </ul>
             )}
           </div>
           <div className={styles.navDesktopPerks} aria-label="Studio guarantees">
@@ -121,7 +193,7 @@ export function Header() {
             <span className={styles.perkDivider} aria-hidden="true" />
             <div className={styles.perkItem}>
               <ShieldCheck size={14} className={styles.perkIconAmber} aria-hidden="true" />
-              <span>100% Free Proofs</span>
+              <span>Free Delivery</span>
             </div>
             <span className={styles.perkDivider} aria-hidden="true" />
             <div className={styles.perkItem}>

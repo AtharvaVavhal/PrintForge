@@ -3,6 +3,11 @@ import { BannerGrid } from '@/components/home/BannerGrid'
 import { CategoryShowcase } from '@/components/home/CategoryShowcase'
 import { HomeHero } from '@/components/home/HomeHero'
 import { CategoryRail } from '@/components/home/CategoryRail'
+import { CategoryStoryBar } from '@/components/home/CategoryStoryBar'
+import { OccasionBar } from '@/components/home/OccasionBar'
+import { OccasionShowcase } from '@/components/home/OccasionShowcase'
+import { CraftPillars } from '@/components/home/CraftPillars'
+import { CraftImpactBar } from '@/components/home/CraftImpactBar'
 import { ProductRail } from '@/components/home/ProductRail'
 import { TrustStrip } from '@/components/home/TrustStrip'
 import { useHomepageSettings } from '@/hooks/useHomepageSettings'
@@ -44,6 +49,7 @@ export function HomePage() {
         canonicalPath="/"
         jsonLd={websiteJsonLd()}
       />
+      <CategoryStoryBar />
       {isLoading ? (
         <Skeleton className={styles.skeletonSlide} label="Loading homepage" />
       ) : heroSlides.length > 0 ? (
@@ -51,6 +57,12 @@ export function HomePage() {
       ) : (
         <HomeHero />
       )}
+
+      <OccasionBar />
+
+      <OccasionShowcase />
+
+      <CraftPillars />
 
       {banners.length > 0 && <BannerGrid banners={banners} />}
 
@@ -75,6 +87,8 @@ export function HomePage() {
         params={{ sort: 'rating_desc', minRating: 4 }}
         viewAllHref={`${ROUTES.PRODUCTS}?sort=rating_desc`}
       />
+
+      <CraftImpactBar />
 
       <StudioStandards />
 
