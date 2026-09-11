@@ -19,10 +19,10 @@ import { PLATFORM_ONLY_KEY } from '../decorators/platform-only.decorator';
  * guard — tenant access still requires a TenantMembership, enforced by Phase 3's
  * tenant-aware layer (not built yet; D6 deferred, decision P2-D9).
  *
- * Registered globally in AppModule alongside RolesGuard. Phase 2a: the guard is
- * a no-op for every request because NO route is decorated with `@PlatformOnly()`
- * yet — the platform console is Phase 5. It is delivered live so Phase 5 only
- * has to add the decorator.
+ * Registered globally in AppModule alongside RolesGuard. Delivered live in
+ * Phase 2a as a dormant foundation (no route decorated with
+ * `@PlatformOnly()` yet); Phase 5 W3's platform console
+ * (`platform/platform.controller.ts`) is its first real consumer.
  */
 @Injectable()
 export class PlatformGuard {

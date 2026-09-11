@@ -1,5 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { OrderStatus } from '@prisma/client';
+import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { TenantContext } from '../common/tenant/tenant-context';
 import { OrdersService } from './orders.service';
 
 /**
@@ -12,6 +14,20 @@ import { OrdersService } from './orders.service';
  * little extra signal over order-lifecycle.util.spec.ts's pure-function
  * coverage of the same rule.
  */
+const tenantContext: TenantContext = {
+  tenantId: 'tenant-a',
+  source: 'membership-default',
+  membership: { role: 'ADMIN' },
+};
+
+const admin: AuthenticatedUser = {
+  id: 'admin-1',
+  email: 'admin@example.test',
+  role: 'ADMIN',
+  platformRole: null,
+  memberships: [{ tenantId: 'tenant-a', role: 'ADMIN' }],
+};
+
 describe('OrdersService.adminTransitionStatus — illegal transition rejection', () => {
   function buildService(currentStatus: OrderStatus) {
     const prisma = {
@@ -19,6 +35,7 @@ describe('OrdersService.adminTransitionStatus — illegal transition rejection',
         findUnique: jest.fn().mockResolvedValue({
           id: 'order-1',
           userId: 'user-1',
+          tenantId: 'tenant-a',
           status: currentStatus,
         }),
         updateMany: jest.fn(),
@@ -28,9 +45,11 @@ describe('OrdersService.adminTransitionStatus — illegal transition rejection',
       },
     };
     const notificationsService = { enqueueOutboxEvent: jest.fn() };
+    const audit = { logTenantAction: jest.fn() };
     const service = new OrdersService(
       prisma as never,
       notificationsService as never,
+      audit as never,
     );
     return { service, prisma };
   }
@@ -39,7 +58,7 @@ describe('OrdersService.adminTransitionStatus — illegal transition rejection',
     const { service, prisma } = buildService(OrderStatus.PENDING_PAYMENT);
 
     await expect(
-      service.adminTransitionStatus('admin-1', 'order-1', {
+      service.adminTransitionStatus(tenantContext, admin, 'order-1', {
         status: OrderStatus.SHIPPED,
       }),
     ).rejects.toThrow(ConflictException);
@@ -50,7 +69,7 @@ describe('OrdersService.adminTransitionStatus — illegal transition rejection',
     const { service, prisma } = buildService(OrderStatus.DELIVERED);
 
     await expect(
-      service.adminTransitionStatus('admin-1', 'order-1', {
+      service.adminTransitionStatus(tenantContext, admin, 'order-1', {
         status: OrderStatus.IN_PRODUCTION,
       }),
     ).rejects.toThrow(ConflictException);
@@ -61,7 +80,7 @@ describe('OrdersService.adminTransitionStatus — illegal transition rejection',
     const { service, prisma } = buildService(OrderStatus.REFUNDED);
 
     await expect(
-      service.adminTransitionStatus('admin-1', 'order-1', {
+      service.adminTransitionStatus(tenantContext, admin, 'order-1', {
         status: OrderStatus.CONFIRMED,
       }),
     ).rejects.toThrow(ConflictException);
@@ -72,7 +91,7 @@ describe('OrdersService.adminTransitionStatus — illegal transition rejection',
     const { service, prisma } = buildService(OrderStatus.PENDING_PAYMENT);
 
     await expect(
-      service.adminTransitionStatus('admin-1', 'order-1', {
+      service.adminTransitionStatus(tenantContext, admin, 'order-1', {
         status: OrderStatus.CANCELLED,
       }),
     ).rejects.toThrow(ConflictException);

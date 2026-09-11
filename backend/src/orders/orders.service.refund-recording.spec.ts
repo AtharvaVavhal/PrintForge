@@ -1,5 +1,21 @@
 import { OrderStatus, RefundStatus } from '@prisma/client';
+import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { TenantContext } from '../common/tenant/tenant-context';
 import { OrdersService } from './orders.service';
+
+const tenantContext: TenantContext = {
+  tenantId: 'tenant-a',
+  source: 'membership-default',
+  membership: { role: 'ADMIN' },
+};
+
+const admin: AuthenticatedUser = {
+  id: 'admin-1',
+  email: 'admin@example.test',
+  role: 'ADMIN',
+  platformRole: null,
+  memberships: [{ tenantId: 'tenant-a', role: 'ADMIN' }],
+};
 
 /**
  * Focused on the one behavior Phase 9 adds to adminTransitionStatus: a
@@ -23,12 +39,16 @@ describe('OrdersService.adminTransitionStatus — REFUNDED closes the PENDING Re
       refund: { updateMany: txRefundUpdateMany },
       orderStatusHistory: { create: txHistoryCreate },
       user: { findUniqueOrThrow: txUserFindUniqueOrThrow },
+      tenantMembership: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'membership-1' }),
+      },
     };
 
     const detailOrder = {
       id: 'order-1',
       orderNumber: 'PF-000001',
       userId: 'user-1',
+      tenantId: 'tenant-a',
       status: OrderStatus.REFUNDED,
       subtotal: '100.00',
       shippingFee: '0.00',
@@ -61,6 +81,7 @@ describe('OrdersService.adminTransitionStatus — REFUNDED closes the PENDING Re
           .mockResolvedValueOnce({
             id: 'order-1',
             userId: 'user-1',
+            tenantId: 'tenant-a',
             orderNumber: 'PF-000001',
             status: currentStatus,
           })
@@ -72,17 +93,19 @@ describe('OrdersService.adminTransitionStatus — REFUNDED closes the PENDING Re
     };
 
     const notificationsService = { enqueueOutboxEvent: jest.fn() };
+    const audit = { logTenantAction: jest.fn().mockResolvedValue(undefined) };
     const service = new OrdersService(
       prisma as never,
       notificationsService as never,
+      audit as never,
     );
-    return { service, prisma, tx };
+    return { service, prisma, tx, audit };
   }
 
   it('marks the PENDING Refund row PROCESSED and writes the order CAS + history atomically for PAID -> REFUNDED', async () => {
     const { service, tx } = buildService(OrderStatus.PAID);
 
-    await service.adminTransitionStatus('admin-1', 'order-1', {
+    await service.adminTransitionStatus(tenantContext, admin, 'order-1', {
       status: OrderStatus.REFUNDED,
     });
 
@@ -119,7 +142,7 @@ describe('OrdersService.adminTransitionStatus — REFUNDED closes the PENDING Re
     async (from) => {
       const { service, tx } = buildService(from);
 
-      await service.adminTransitionStatus('admin-1', 'order-1', {
+      await service.adminTransitionStatus(tenantContext, admin, 'order-1', {
         status: OrderStatus.REFUNDED,
       });
 
@@ -134,7 +157,7 @@ describe('OrdersService.adminTransitionStatus — REFUNDED closes the PENDING Re
   it('does not touch the Refund table for a non-REFUNDED transition (PAID -> CONFIRMED)', async () => {
     const { service, tx } = buildService(OrderStatus.PAID);
 
-    await service.adminTransitionStatus('admin-1', 'order-1', {
+    await service.adminTransitionStatus(tenantContext, admin, 'order-1', {
       status: OrderStatus.CONFIRMED,
     });
 

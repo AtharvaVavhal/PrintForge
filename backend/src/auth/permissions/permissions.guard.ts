@@ -22,6 +22,21 @@ import { REQUIRE_PERMISSION_KEY } from './require-permission.decorator';
  * handler (frozen SaaS invariant 4); a `SUPER_ADMIN` with no
  * `TenantMembership` has no entry in the permission map and is denied here
  * exactly like any other user with no membership.
+ *
+ * Phase 5 W6 (decision P5-D8) — permission CEILING branch: when
+ * `tenantContext.source === 'support-session'` there is no real
+ * `TenantMembership`/role to check `can()` against (correctly so — the
+ * actor is a platform admin, not a tenant member), so this guard instead
+ * checks the route's required permission against the SESSION's own
+ * `grantedPermissions` set, granted once at session-creation time
+ * (`support-session.service.ts`) from the SAME ratified `PERMISSIONS`
+ * catalogue `can()` already uses — no second permission catalogue exists.
+ * This is a strict ceiling, never an expansion: a session can never permit
+ * an operation the underlying route did not already require, and a session
+ * scoped to fewer permissions than a route needs is denied exactly like an
+ * under-permissioned TenantRole would be. `PermissionsGuard` itself is not
+ * replaced — this is the smallest possible additional branch alongside its
+ * existing one.
  */
 @Injectable()
 export class PermissionsGuard {
@@ -40,6 +55,17 @@ export class PermissionsGuard {
     const { tenantContext } = context
       .switchToHttp()
       .getRequest<RequestWithTenantContext>();
+
+    if (tenantContext?.source === 'support-session') {
+      if (
+        !tenantContext.supportSession?.grantedPermissions.includes(required)
+      ) {
+        throw new ForbiddenException(
+          'This support session is not scoped to the required permission',
+        );
+      }
+      return true;
+    }
 
     if (!tenantContext?.membership) {
       throw new ForbiddenException('No active tenant context for this request');

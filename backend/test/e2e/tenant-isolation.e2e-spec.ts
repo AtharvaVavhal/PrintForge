@@ -53,6 +53,20 @@ describe('Phase 3 — tenant isolation', () => {
           slug: `iso-${role.toLowerCase()}-${Date.now()}-${Math.random()}`,
         },
       });
+      // Phase 5 W9 (decision D11) — GET/PATCH /admin/settings now resolves
+      // the tenant's primary Store for any STORE-owned key (storeName
+      // included); every real tenant has one from creation
+      // (`prisma/seed-tenant-bootstrap.ts`), so this fixture must pair one
+      // too or the settings calls below 404.
+      await prisma.store.create({
+        data: {
+          tenantId: tenant.id,
+          slug: `iso-${role.toLowerCase()}-store-${Date.now()}`,
+          name: 'Test Store',
+          status: 'ACTIVE',
+          isPrimary: true,
+        },
+      });
       await prisma.tenantMembership.create({
         data: { userId: user.id, tenantId: tenant.id, role, status: 'ACTIVE' },
       });
@@ -153,6 +167,18 @@ describe('Phase 3 — tenant isolation', () => {
           tenantId: tenantB.id,
           role: 'OWNER',
           status: 'ACTIVE',
+        },
+      });
+      // Phase 5 W9 — only tenant B's write is expected to succeed (200)
+      // below; tenant A's own write is blocked on permissions (403) before
+      // ever reaching primary-store resolution, so only B needs a Store.
+      await prisma.store.create({
+        data: {
+          tenantId: tenantB.id,
+          slug: `iso-multi-b-store-${Date.now()}`,
+          name: 'Test Store',
+          status: 'ACTIVE',
+          isPrimary: true,
         },
       });
 

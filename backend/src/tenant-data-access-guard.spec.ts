@@ -106,8 +106,69 @@ const ALLOWLIST: ReadonlyArray<{ path: string; category: string }> = [
   },
   { path: 'notifications/outbox/outbox.poller.ts', category: 'cron poller' },
   // "platform admin" — cross-tenant by design (Phase 5, SUPER_ADMIN +
-  // audit). No file exists yet; reserved so Phase 5 does not need to
-  // reopen this guard to add its first entry.
+  // audit; W3). `PlatformService` is exactly the "narrowly scoped platform
+  // service querying the Tenant table for platform-level tenant
+  // management" the Phase 5 plan names as the one legitimate exception —
+  // gated entirely by `PlatformGuard`/`@PlatformOnly()` upstream
+  // (`platform.controller.ts`), never reachable by a tenant user, and
+  // touches no business/commerce/customer table anywhere in the file.
+  {
+    path: 'platform/platform.service.ts',
+    category:
+      'platform admin (Phase 5 W3 — SUPER_ADMIN tenant list/detail/suspend/resume, gated by PlatformGuard)',
+  },
+  // "tenant lifecycle" — Phase 5 W4's single, shared ACTIVE/SUSPENDED
+  // check (SaaS Master Plan §11). Reads only `Tenant.status` by id, never
+  // any other tenancy model, never a business/commerce table. Called from
+  // three gated contexts (TenantLifecycleGuard after TenantContextGuard;
+  // StorefrontTenantResolver's own already-allowlisted resolution; and
+  // CheckoutService reading an already-loaded cart's own tenantId) — it is
+  // not itself a new cross-tenant read path, just the one place the
+  // resulting status check lives instead of being duplicated three times.
+  {
+    path: 'common/tenant/tenant-lifecycle.ts',
+    category:
+      'tenant lifecycle (Phase 5 W4 — ACTIVE/SUSPENDED check, read-only, id-scoped)',
+  },
+  // "support-session lifecycle" — Phase 5 W6's SupportSession create/
+  // revoke/list, cross-tenant by design (SUPER_ADMIN + audit; same
+  // category the header above already names for `platform.service.ts`).
+  // Reads/writes `Tenant` only to validate a creation target's existence/
+  // ACTIVE status — never any other tenancy model, never a business/
+  // commerce table — gated entirely by `PlatformGuard`/`@PlatformOnly()`
+  // upstream (`support-session.controller.ts`), never reachable by a
+  // tenant user or an in-progress support session itself.
+  {
+    path: 'support-sessions/support-session.service.ts',
+    category:
+      'platform admin (Phase 5 W6 — SUPER_ADMIN support-session create/revoke/list, gated by PlatformGuard)',
+  },
+  // "team management" — Phase 5 W7's Tenant Control Plane team list/
+  // invite/role-change/suspend. Reads/writes `TenantMembership` only,
+  // every query filtered by the caller's own server-derived
+  // TenantContext.tenantId (never a client-supplied value) — gated
+  // entirely by PermissionsGuard's `members:manage` check (G-13: OWNER
+  // only, unmodified), never reachable without it. Touches no other D4
+  // tenancy model and no business/commerce table anywhere in the file.
+  {
+    path: 'team/team.service.ts',
+    category:
+      'tenant admin (Phase 5 W7 — OWNER team list/invite/role-change/suspend, gated by PermissionsGuard members:manage)',
+  },
+  // "tenant audit actor attribution" — Phase 5 W8's shared helper, used by
+  // every W8-audited Tenant Control Plane service to resolve
+  // `actorMembershipId`/`viaSupportSessionId` for a `TenantAuditLog` write.
+  // Reads only the CALLER's own membership row, by the unique
+  // (userId, tenantId) key, using the caller's already server-derived
+  // TenantContext — never a client-supplied membership id, never any
+  // other tenant's row. Extracted from `team.service.ts`'s own W7 logic
+  // (same category) so every new audited service shares one proven
+  // implementation instead of reimplementing it slightly differently.
+  {
+    path: 'common/audit/tenant-actor-attribution.ts',
+    category:
+      'tenant admin (Phase 5 W8 — shared actor-attribution helper for TenantAuditLog writes)',
+  },
 ];
 
 function stripComments(code: string): string {
@@ -176,7 +237,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
     }
   });
 
-  it('the three known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, and storefront-tenant.resolver.ts', () => {
+  it('the eight known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, and tenant-actor-attribution.ts', () => {
     const detectedTodayFiles = ALLOWLIST.filter((a) => {
       try {
         const code = stripComments(readFileSync(join(SRC_DIR, a.path), 'utf8'));
@@ -193,6 +254,11 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
         'auth/strategies/jwt.strategy.ts',
         'common/tenant/tenant-context.guard.ts',
         'common/tenant/storefront-tenant.resolver.ts',
+        'platform/platform.service.ts',
+        'common/tenant/tenant-lifecycle.ts',
+        'support-sessions/support-session.service.ts',
+        'team/team.service.ts',
+        'common/audit/tenant-actor-attribution.ts',
       ].sort(),
     );
   });

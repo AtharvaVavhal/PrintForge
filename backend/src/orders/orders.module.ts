@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../common/audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ProductsModule } from '../products/products.module';
 import { UploadsModule } from '../uploads/uploads.module';
@@ -27,6 +28,7 @@ import { OrdersService } from './orders.service';
     UploadsModule,
     NotificationsModule,
     InvoicesModule,
+    AuditModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

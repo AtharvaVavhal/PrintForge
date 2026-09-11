@@ -145,4 +145,23 @@ describe('TenantContextGuard (Phase 3 / D6)', () => {
     expect(await guard.canActivate(context)).toBe(true);
     expect(request.tenantContext).toBeUndefined();
   });
+
+  it('Phase 5 W6 (P5-D8): does not overwrite or reject a tenantContext already resolved by SupportSessionContextGuard, even with a mismatched X-Active-Tenant header present', async () => {
+    const { context, reflector, request } = makeContext({
+      user: { memberships: [] },
+      headers: { [ACTIVE_TENANT_HEADER]: 'some-other-tenant' },
+    });
+    const preset = {
+      tenantId: 'session-tenant',
+      source: 'support-session' as const,
+      supportSession: { id: 's1', grantedPermissions: ['orders:read'] },
+    };
+    request.tenantContext = preset;
+    const guard = new TenantContextGuard(reflector, prisma);
+    expect(await guard.canActivate(context)).toBe(true);
+    expect(request.tenantContext).toBe(preset);
+    /* eslint-disable @typescript-eslint/unbound-method */
+    expect(prisma.storeDomain.findUnique).not.toHaveBeenCalled();
+    /* eslint-enable @typescript-eslint/unbound-method */
+  });
 });

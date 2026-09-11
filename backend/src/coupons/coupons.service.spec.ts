@@ -76,13 +76,14 @@ describe('CouponsService', () => {
       subtotalPaise: 100_00n,
       shippingFeePaise: 49_00n,
       lineItems: [{ categoryId: 'cat-mugs', lineTotalPaise: 100_00n }],
+      tenantId: 'tenant-1',
       ...overrides,
     };
   }
 
   describe('per-type discount calculation', () => {
     it('PERCENTAGE: discounts scopedSubtotalPaise by the configured percentage', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         type: CouponType.PERCENTAGE,
         percentageOff: 20,
@@ -99,7 +100,7 @@ describe('CouponsService', () => {
     });
 
     it('FLAT_AMOUNT: discounts by the flat amount when it fits under the subtotal', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         type: CouponType.FLAT_AMOUNT,
         percentageOff: null,
@@ -117,7 +118,7 @@ describe('CouponsService', () => {
     });
 
     it('FLAT_AMOUNT: caps the discount at scopedSubtotalPaise, never exceeding it (total can never go negative)', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         type: CouponType.FLAT_AMOUNT,
         percentageOff: null,
@@ -135,7 +136,7 @@ describe('CouponsService', () => {
     });
 
     it('FREE_SHIPPING: zero discount, but shippingFeePaise is overridden to 0', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         type: CouponType.FREE_SHIPPING,
         percentageOff: null,
@@ -155,7 +156,7 @@ describe('CouponsService', () => {
 
   describe('category-scope isolation', () => {
     it('a CATEGORY-scoped coupon only discounts matching line items, not the whole cart', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         type: CouponType.PERCENTAGE,
         percentageOff: 10,
@@ -180,7 +181,7 @@ describe('CouponsService', () => {
     });
 
     it('rejects a CATEGORY-scoped coupon when nothing in the cart matches its category', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         scopeType: CouponScopeType.CATEGORY,
         categoryId: 'cat-mugs',
@@ -199,7 +200,7 @@ describe('CouponsService', () => {
     });
 
     it('a STORE_WIDE coupon discounts the whole subtotal regardless of per-item categories', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         type: CouponType.PERCENTAGE,
         percentageOff: 10,
@@ -224,7 +225,7 @@ describe('CouponsService', () => {
 
   describe('usage-limit exhaustion (concurrent claims)', () => {
     it('throws 409 when the atomic CAS claim returns zero rows (lost the race to a concurrent claim)', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ usageLimitTotal: 10, usedCount: 9 });
       // Simulates: by the time this UPDATE runs, another transaction's
       // commit already pushed usedCount to 10 — the CAS's WHERE clause no
@@ -237,7 +238,7 @@ describe('CouponsService', () => {
     });
 
     it('succeeds when the CAS claim returns a row (usage limit not yet reached)', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ usageLimitTotal: 10, usedCount: 5 });
       const tx = buildTx(coupon, { claimReturnsRow: true });
 
@@ -248,7 +249,7 @@ describe('CouponsService', () => {
     });
 
     it('a coupon with no usageLimitTotal (unlimited) is never blocked by the CAS', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ usageLimitTotal: null, usedCount: 100_000 });
       const tx = buildTx(coupon, { claimReturnsRow: true });
 
@@ -260,7 +261,7 @@ describe('CouponsService', () => {
 
   describe('per-user usage limit', () => {
     it('rejects (400, not the CAS/409) when this user has already used the coupon usageLimitPerUser times', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ usageLimitPerUser: 1 });
       const tx = buildTx(coupon, { usageCount: 1 });
 
@@ -272,7 +273,7 @@ describe('CouponsService', () => {
     });
 
     it('allows a user under their per-user limit', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ usageLimitPerUser: 2 });
       const tx = buildTx(coupon, { usageCount: 1 });
 
@@ -282,7 +283,7 @@ describe('CouponsService', () => {
     });
 
     it('a coupon with no usageLimitPerUser (null, unlimited per user) is never blocked here', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ usageLimitPerUser: null });
       const tx = buildTx(coupon, { usageCount: 50 });
 
@@ -294,7 +295,7 @@ describe('CouponsService', () => {
 
   describe('firstOrderOnly', () => {
     it('rejects a user who already has at least one order, of any status', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ firstOrderOnly: true });
       const tx = buildTx(coupon, { orderCount: 1 });
 
@@ -305,7 +306,7 @@ describe('CouponsService', () => {
     });
 
     it('allows a user with zero prior orders', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ firstOrderOnly: true });
       const tx = buildTx(coupon, { orderCount: 0 });
 
@@ -317,7 +318,7 @@ describe('CouponsService', () => {
 
   describe('minOrderValue', () => {
     it('rejects when the scoped subtotal is below the coupon minimum', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         minOrderValue: new Prisma.Decimal('200.00'),
       });
@@ -332,7 +333,7 @@ describe('CouponsService', () => {
     });
 
     it('allows when the scoped subtotal meets the minimum exactly', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         minOrderValue: new Prisma.Decimal('100.00'),
       });
@@ -349,7 +350,7 @@ describe('CouponsService', () => {
 
   describe('inactive / expired / not-yet-started coupons', () => {
     it('rejects an inactive coupon', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({ isActive: false });
       const tx = buildTx(coupon);
 
@@ -359,7 +360,7 @@ describe('CouponsService', () => {
     });
 
     it('rejects an expired coupon', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         expiresAt: new Date('2020-01-01T00:00:00.000Z'),
       });
@@ -371,7 +372,7 @@ describe('CouponsService', () => {
     });
 
     it('rejects a coupon that has not started yet', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const coupon = buildCoupon({
         startsAt: new Date('2099-01-01T00:00:00.000Z'),
       });
@@ -383,7 +384,7 @@ describe('CouponsService', () => {
     });
 
     it('rejects an unknown coupon code', async () => {
-      const service = new CouponsService({} as never);
+      const service = new CouponsService({} as never, {} as never);
       const tx = buildTx(null);
 
       await expect(
@@ -401,7 +402,7 @@ describe('CouponsService', () => {
       const tx = buildTx(coupon);
       // previewDiscount uses `this.prisma`, not a tx — inject the same
       // fake object as the constructor's PrismaService.
-      const previewService = new CouponsService(tx as never);
+      const previewService = new CouponsService(tx as never, {} as never);
 
       const result = await previewService.previewDiscount(
         buildParams({ subtotalPaise: 100_00n }),
@@ -418,11 +419,60 @@ describe('CouponsService', () => {
         expiresAt: new Date('2020-01-01T00:00:00.000Z'),
       });
       const tx = buildTx(coupon);
-      const previewService = new CouponsService(tx as never);
+      const previewService = new CouponsService(tx as never, {} as never);
 
       await expect(
         previewService.previewDiscount(buildParams()),
       ).rejects.toThrow(BadRequestException);
     });
+  });
+});
+
+describe('CouponsService.createCoupon — audit atomicity (Phase 5 W8)', () => {
+  it('fails the whole operation when the audit write fails — the create call still happened, which is why it must be inside the same transaction', async () => {
+    const couponDelegate = {
+      create: jest.fn().mockResolvedValue({ id: 'coupon-1', code: 'SAVE10' }),
+    };
+    const tenantMembershipDelegate = {
+      findUnique: jest.fn().mockResolvedValue({ id: 'membership-1' }),
+    };
+    const tx = {
+      coupon: couponDelegate,
+      tenantMembership: tenantMembershipDelegate,
+    };
+    const prisma = {
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
+      category: { findUnique: jest.fn() },
+    };
+    const audit = {
+      logTenantAction: jest
+        .fn()
+        .mockRejectedValueOnce(new Error('audit db down')),
+    };
+    const service = new CouponsService(prisma as never, audit as never);
+
+    await expect(
+      service.createCoupon(
+        {
+          tenantId: 'tenant-a',
+          source: 'membership-default',
+          membership: { role: 'OWNER' },
+        },
+        {
+          id: 'user-1',
+          email: 'owner@example.test',
+          role: 'ADMIN',
+          platformRole: null,
+          memberships: [{ tenantId: 'tenant-a', role: 'OWNER' }],
+        },
+        {
+          code: 'SAVE10',
+          type: CouponType.PERCENTAGE,
+          percentageOff: 10,
+          scopeType: CouponScopeType.STORE_WIDE,
+        },
+      ),
+    ).rejects.toThrow('audit db down');
+    expect(couponDelegate.create).toHaveBeenCalled();
   });
 });

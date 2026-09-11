@@ -165,8 +165,11 @@ describe('Admin control plane (Phase 13.2)', () => {
         .send({ value: 'Rogue Owner' })
         .expect(403);
 
+      // Phase 5 W9 (decision D11) — storeName is STORE-owned; a rejected
+      // write must leave no row in storeSettings, never the old global
+      // app_settings table.
       expect(
-        await prisma.appSetting.findUnique({ where: { key: 'storeName' } }),
+        await prisma.storeSetting.findFirst({ where: { key: 'storeName' } }),
       ).toBeNull();
     });
 

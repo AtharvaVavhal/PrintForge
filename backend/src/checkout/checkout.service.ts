@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
+import { assertTenantActive } from '../common/tenant/tenant-lifecycle';
+import { resolvePrimaryStoreId } from '../common/tenant/primary-store';
 import {
   decimalToPaise,
   paiseToDecimalString,
@@ -142,6 +144,19 @@ export class CheckoutService {
         throw new BadRequestException('Your cart is empty');
       }
 
+      // Phase 5 W4 (SaaS Master Plan §11) — checkout reads the cart's own
+      // tenantId directly (an already-loaded parent resource), bypassing
+      // StorefrontTenantResolver entirely (see that resolver's own header
+      // comment) — so it needs its own lifecycle check. Placed inside this
+      // same transaction, right after the cart's FOR UPDATE lock and
+      // before any pricing/order-creation work, so a concurrent suspend is
+      // seen consistently rather than racing a check made outside the tx.
+      await assertTenantActive(
+        tx,
+        lockedCart.tenantId,
+        'This store is currently unavailable',
+      );
+
       const claim = await this.idempotencyService.claim(tx, {
         key: idempotencyKey,
         userId,
@@ -180,7 +195,17 @@ export class CheckoutService {
 
       this.assertItemsCheckoutable(cart.items);
 
-      const shippingFeePaise = await this.getShippingFeePaise(tx);
+      // Phase 5 W9 (decision D11) — shippingFeeFlat is STORE-owned.
+      // `resolvePrimaryStoreId` requires the full `PrismaService` (its D4
+      // tenant-scoped client cannot be built from an already-open
+      // `Prisma.TransactionClient` — the same limitation
+      // `AppSettingService.updateConfigurable` documents), so this one read
+      // uses a separate connection (`this.prisma`) rather than `tx`. This
+      // does not weaken checkout's atomicity: no checkout-adjacent code
+      // path ever mutates `Store.isPrimary`, so there is nothing for this
+      // read to race against.
+      const storeId = await resolvePrimaryStoreId(this.prisma, cart.tenantId);
+      const shippingFeePaise = await this.getShippingFeePaise(tx, storeId);
       const linePricing = cart.items.map((item) => ({
         item,
         pricing: this.priceItem(item),
@@ -210,6 +235,9 @@ export class CheckoutService {
             categoryId: item.product.categoryId,
             lineTotalPaise: pricing.lineTotalPaise,
           })),
+          // Derived from the cart being checked out — never a
+          // client-supplied value (Phase 4 W7 / P4-D2; W10 hardening).
+          tenantId: cart.tenantId,
         });
         discountPaise = claim.discountPaise;
         finalShippingFeePaise = claim.shippingFeePaise;
@@ -222,7 +250,7 @@ export class CheckoutService {
       // Tax split (Phase 13.4). Base is the tax-inclusive goods value.
       // For the default INCLUSIVE/disabled config `taxToAddPaise` is 0 —
       // `total` is byte-for-byte what it was before this phase.
-      const taxConfig = await this.taxService.getConfig(tx);
+      const taxConfig = await this.taxService.getConfig(cart.tenantId, tx);
       const taxComputation = this.taxService.computeTax(
         subtotalPaise - discountPaise,
         taxConfig,
@@ -370,7 +398,19 @@ export class CheckoutService {
       throw new BadRequestException('Your cart is empty');
     }
 
-    const shippingFeePaise = await this.getShippingFeePaise(this.prisma);
+    // Phase 5 W4 — same rationale as createOrder above: a pricing preview
+    // is still "normal storefront commerce data" for a suspended tenant.
+    await assertTenantActive(
+      this.prisma,
+      cart.tenantId,
+      'This store is currently unavailable',
+    );
+
+    const storeId = await resolvePrimaryStoreId(this.prisma, cart.tenantId);
+    const shippingFeePaise = await this.getShippingFeePaise(
+      this.prisma,
+      storeId,
+    );
     const linePricing = cart.items.map((item) => ({
       item,
       pricing: this.priceItem(item),
@@ -392,13 +432,16 @@ export class CheckoutService {
           categoryId: item.product.categoryId,
           lineTotalPaise: pricing.lineTotalPaise,
         })),
+        // Derived from the cart being previewed — never a client-supplied
+        // value (Phase 4 W7 / P4-D2; W10 hardening).
+        tenantId: cart.tenantId,
       });
       discountPaise = preview.discountPaise;
       finalShippingFeePaise = preview.shippingFeePaise;
       normalizedCouponCode = preview.couponCode;
     }
 
-    const taxConfig = await this.taxService.getConfig(this.prisma);
+    const taxConfig = await this.taxService.getConfig(cart.tenantId);
     const taxComputation = this.taxService.computeTax(
       subtotalPaise - discountPaise,
       taxConfig,
@@ -461,11 +504,15 @@ export class CheckoutService {
     }
   }
 
+  /** Phase 5 W9 (decision D11) — shippingFeeFlat is STORE-owned, read from
+   * `StoreSetting`. `storeId` is always resolved server-side via
+   * `resolvePrimaryStoreId` beforehand — never a client-supplied value. */
   private async getShippingFeePaise(
-    tx: Prisma.TransactionClient,
+    client: Pick<PrismaService, 'storeSetting'>,
+    storeId: string,
   ): Promise<bigint> {
-    const setting = await tx.appSetting.findUnique({
-      where: { key: SHIPPING_FEE_SETTING_KEY },
+    const setting = await client.storeSetting.findUnique({
+      where: { storeId_key: { storeId, key: SHIPPING_FEE_SETTING_KEY } },
     });
     return setting ? decimalToPaise(new Prisma.Decimal(setting.value)) : 0n;
   }

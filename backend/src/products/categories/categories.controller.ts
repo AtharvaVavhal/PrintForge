@@ -13,6 +13,8 @@ import {
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermission } from '../../auth/permissions/require-permission.decorator';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import type { TenantContext } from '../../common/tenant/tenant-context';
 import { ProductsService } from '../products.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
@@ -51,26 +53,29 @@ export class CategoriesController {
 
   @RequirePermission('products:read')
   @Get('admin')
-  async adminList() {
-    return this.productsService.adminListCategories();
+  async adminList(@CurrentTenant() tenant: TenantContext) {
+    return this.productsService.adminListCategories(tenant);
   }
 
   @RequirePermission('products:write')
   @Post()
   async create(
     @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Body() dto: CreateCategoryDto,
   ) {
-    return this.productsService.createCategory(tenant.tenantId, dto);
+    return this.productsService.createCategory(tenant, actor, dto);
   }
 
   @RequirePermission('products:write')
   @Patch(':id')
   async update(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCategoryDto,
   ) {
-    return this.productsService.updateCategory(id, dto);
+    return this.productsService.updateCategory(tenant, actor, id, dto);
   }
 
   /** Soft-delete (isActive=false), mirroring DELETE /products/:id. */
@@ -78,9 +83,11 @@ export class CategoriesController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async deactivate(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ message: string }> {
-    await this.productsService.deactivateCategory(id);
+    await this.productsService.deactivateCategory(tenant, actor, id);
     return { message: 'Category deactivated' };
   }
 
@@ -89,9 +96,11 @@ export class CategoriesController {
   @Post(':id/reactivate')
   @HttpCode(HttpStatus.OK)
   async reactivate(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ message: string }> {
-    await this.productsService.reactivateCategory(id);
+    await this.productsService.reactivateCategory(tenant, actor, id);
     return { message: 'Category reactivated' };
   }
 }

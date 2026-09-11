@@ -32,6 +32,9 @@ describe('ReviewsService', () => {
       product: {
         update: jest.fn(),
       },
+      tenantMembership: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'membership-1' }),
+      },
       $queryRaw: jest.fn().mockResolvedValue(undefined),
     };
     const prisma = {
@@ -40,8 +43,13 @@ describe('ReviewsService', () => {
     const ordersService = {
       findDeliveredOrderItemForProduct: jest.fn(),
     };
-    const service = new ReviewsService(prisma as never, ordersService as never);
-    return { service, tx, ordersService };
+    const audit = { logTenantAction: jest.fn().mockResolvedValue(undefined) };
+    const service = new ReviewsService(
+      prisma as never,
+      ordersService as never,
+      audit as never,
+    );
+    return { service, tx, ordersService, audit };
   }
 
   function buildReviewRow(overrides: Partial<Record<string, unknown>> = {}) {

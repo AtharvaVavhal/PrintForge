@@ -1,6 +1,14 @@
 import { NotFoundException } from '@nestjs/common';
 import { OrderStatus, Prisma, Role } from '@prisma/client';
 import { AdminService } from './admin.service';
+import { TenantContext } from '../common/tenant/tenant-context';
+
+const TENANT_ID = 'tenant-a';
+const tenantContext: TenantContext = {
+  tenantId: TENANT_ID,
+  source: 'membership-default',
+  membership: { role: 'OWNER' },
+};
 
 const FULL_CUSTOMER_ROW = {
   id: 'user-1',
@@ -56,7 +64,7 @@ function buildService({
   };
   const ordersService = {
     adminRecentOrders: jest.fn().mockResolvedValue(recentOrders),
-    listOrdersForUser: jest
+    adminListOrdersForCustomer: jest
       .fn()
       .mockResolvedValue({ items: recentOrders, meta: {} }),
   };
@@ -74,7 +82,7 @@ describe('AdminService.getDashboard — aggregation against seeded fixtures', ()
       ],
     });
 
-    const dashboard = await service.getDashboard();
+    const dashboard = await service.getDashboard(tenantContext);
 
     expect(dashboard.totalOrders).toBe(6);
   });
@@ -84,7 +92,7 @@ describe('AdminService.getDashboard — aggregation against seeded fixtures', ()
       groupBy: [{ status: OrderStatus.PAID, _count: { _all: 3 } }],
     });
 
-    const dashboard = await service.getDashboard();
+    const dashboard = await service.getDashboard(tenantContext);
 
     expect(dashboard.ordersByStatus).toHaveLength(
       Object.values(OrderStatus).length,
@@ -103,16 +111,17 @@ describe('AdminService.getDashboard — aggregation against seeded fixtures', ()
     });
   });
 
-  it('converts the paid-or-later revenue sum from Decimal to a major-unit string', async () => {
+  it('converts the paid-or-later revenue sum from Decimal to a major-unit string, scoped to the caller tenant', async () => {
     const { service, prisma } = buildService({
       aggregateSum: new Prisma.Decimal('12345.67'),
     });
 
-    const dashboard = await service.getDashboard();
+    const dashboard = await service.getDashboard(tenantContext);
 
     expect(dashboard.totalRevenue).toBe('12345.67');
     expect(prisma.order.aggregate).toHaveBeenCalledWith({
       where: {
+        tenantId: TENANT_ID,
         status: {
           in: [
             OrderStatus.PAID,
@@ -130,37 +139,55 @@ describe('AdminService.getDashboard — aggregation against seeded fixtures', ()
   it('reports zero revenue instead of throwing when no order matches (aggregate _sum is null)', async () => {
     const { service } = buildService({ aggregateSum: null });
 
-    const dashboard = await service.getDashboard();
+    const dashboard = await service.getDashboard(tenantContext);
 
     expect(dashboard.totalRevenue).toBe('0.00');
   });
 
-  it('surfaces the last 10 recent orders from OrdersService, newest first, unmodified', async () => {
+  it('scopes the status-count groupBy to the caller tenant (W10 hardening)', async () => {
+    const { service, prisma } = buildService();
+
+    await service.getDashboard(tenantContext);
+
+    expect(prisma.order.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { tenantId: TENANT_ID } }),
+    );
+  });
+
+  it('surfaces the last 10 recent orders from OrdersService, scoped to the caller tenant, newest first, unmodified', async () => {
     const recentOrders = [{ id: 'order-9' }, { id: 'order-1' }];
     const { service, ordersService } = buildService({ recentOrders });
 
-    const dashboard = await service.getDashboard();
+    const dashboard = await service.getDashboard(tenantContext);
 
-    expect(ordersService.adminRecentOrders).toHaveBeenCalledWith(10);
+    expect(ordersService.adminRecentOrders).toHaveBeenCalledWith(
+      tenantContext,
+      10,
+    );
     expect(dashboard.recentOrders).toBe(recentOrders);
   });
 });
 
-describe('AdminService.listCustomers — read-only, admin-excluded, no sensitive fields', () => {
-  it('filters to role=CUSTOMER only', async () => {
+describe('AdminService.listCustomers — read-only, admin-excluded, tenant-scoped, no sensitive fields', () => {
+  it('filters to role=CUSTOMER, scoped to customers with an order in the caller tenant (W10 hardening)', async () => {
     const { service, prisma } = buildService();
 
-    await service.listCustomers({ page: 1, limit: 20 });
+    await service.listCustomers(tenantContext, { page: 1, limit: 20 });
 
     expect(prisma.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { role: Role.CUSTOMER } }),
+      expect.objectContaining({
+        where: {
+          role: Role.CUSTOMER,
+          orders: { some: { tenantId: TENANT_ID } },
+        },
+      }),
     );
   });
 
-  it('applies email search and isActive filters when provided', async () => {
+  it('applies email search and isActive filters when provided, still tenant-scoped', async () => {
     const { service, prisma } = buildService();
 
-    await service.listCustomers({
+    await service.listCustomers(tenantContext, {
       page: 1,
       limit: 20,
       search: 'alice',
@@ -171,8 +198,23 @@ describe('AdminService.listCustomers — read-only, admin-excluded, no sensitive
       expect.objectContaining({
         where: {
           role: Role.CUSTOMER,
+          orders: { some: { tenantId: TENANT_ID } },
           email: { contains: 'alice', mode: 'insensitive' },
           isActive: false,
+        },
+      }),
+    );
+  });
+
+  it("counts orders scoped to the caller tenant only, never a customer's cross-tenant total (W10 hardening)", async () => {
+    const { service, prisma } = buildService();
+
+    await service.listCustomers(tenantContext, { page: 1, limit: 20 });
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: {
+          _count: { select: { orders: { where: { tenantId: TENANT_ID } } } },
         },
       }),
     );
@@ -184,7 +226,10 @@ describe('AdminService.listCustomers — read-only, admin-excluded, no sensitive
       count: 1,
     });
 
-    const { items } = await service.listCustomers({ page: 1, limit: 20 });
+    const { items } = await service.listCustomers(tenantContext, {
+      page: 1,
+      limit: 20,
+    });
 
     expect(items[0]).not.toHaveProperty('passwordHash');
     expect(items[0]).not.toHaveProperty('tokenVersion');
@@ -199,7 +244,10 @@ describe('AdminService.listCustomers — read-only, admin-excluded, no sensitive
       count: 1,
     });
 
-    const { items } = await service.listCustomers({ page: 1, limit: 20 });
+    const { items } = await service.listCustomers(tenantContext, {
+      page: 1,
+      limit: 20,
+    });
 
     expect(items[0]).toMatchObject({
       id: 'user-1',
@@ -215,26 +263,45 @@ describe('AdminService.getCustomerDetail', () => {
     const { service } = buildService({ findFirst: null });
 
     await expect(
-      service.getCustomerDetail('missing-or-admin-id'),
+      service.getCustomerDetail(tenantContext, 'missing-or-admin-id'),
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('computes totalSpend from paid-or-later orders and includes recent orders', async () => {
+  it("throws NotFoundException for a customer who exists but has never ordered from the caller's tenant (W10 hardening — cross-tenant customer lookup fails safe)", async () => {
+    const { service, prisma } = buildService({ findFirst: null });
+
+    await expect(
+      service.getCustomerDetail(tenantContext, 'other-tenant-customer'),
+    ).rejects.toThrow(NotFoundException);
+    const [call] = prisma.user.findFirst.mock.calls[0] as [
+      { where: { id: string; orders: { some: { tenantId: string } } } },
+    ];
+    expect(call.where.id).toBe('other-tenant-customer');
+    expect(call.where.orders).toEqual({ some: { tenantId: TENANT_ID } });
+  });
+
+  it('computes totalSpend from paid-or-later orders scoped to the caller tenant and includes recent orders', async () => {
     const recentOrders = [{ id: 'order-1' }];
-    const { service, prisma } = buildService({
+    const { service, prisma, ordersService } = buildService({
       findFirst: FULL_CUSTOMER_ROW,
       aggregateSum: new Prisma.Decimal('999.50'),
       recentOrders,
     });
 
-    const detail = await service.getCustomerDetail('user-1');
+    const detail = await service.getCustomerDetail(tenantContext, 'user-1');
 
     expect(detail.totalSpend).toBe('999.50');
     expect(detail.recentOrders).toBe(recentOrders);
     expect(detail).not.toHaveProperty('passwordHash');
     const aggregateArgs = prisma.order.aggregate.mock.calls[0][0] as {
-      where: { userId: string };
+      where: { userId: string; tenantId: string };
     };
     expect(aggregateArgs.where.userId).toBe('user-1');
+    expect(aggregateArgs.where.tenantId).toBe(TENANT_ID);
+    expect(ordersService.adminListOrdersForCustomer).toHaveBeenCalledWith(
+      tenantContext,
+      'user-1',
+      expect.objectContaining({ page: 1 }),
+    );
   });
 });

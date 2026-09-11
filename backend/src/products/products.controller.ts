@@ -14,6 +14,8 @@ import {
 import { Public } from '../common/decorators/public.decorator';
 import { RequirePermission } from '../auth/permissions/require-permission.decorator';
 import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant/tenant-context';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -63,8 +65,12 @@ export class ProductsController {
 
   @RequirePermission('products:read')
   @Get('admin')
-  async adminList(@Query() query: ListAdminProductsQueryDto) {
+  async adminList(
+    @CurrentTenant() tenant: TenantContext,
+    @Query() query: ListAdminProductsQueryDto,
+  ) {
     return this.productsService.adminListProducts(
+      tenant,
       query.page,
       query.limit,
       query.categoryId,
@@ -75,8 +81,11 @@ export class ProductsController {
 
   @RequirePermission('products:read')
   @Get('admin/:id')
-  async adminGet(@Param('id', ParseUUIDPipe) id: string) {
-    return this.productsService.adminGetProduct(id);
+  async adminGet(
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.productsService.adminGetProduct(tenant, id);
   }
 
   @Public()
@@ -90,27 +99,32 @@ export class ProductsController {
   @HttpCode(HttpStatus.CREATED)
   async create(
     @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Body() dto: CreateProductDto,
   ) {
-    return this.productsService.createProduct(tenant.tenantId, dto);
+    return this.productsService.createProduct(tenant, actor, dto);
   }
 
   @RequirePermission('products:write')
   @Patch(':id')
   async update(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProductDto,
   ) {
-    return this.productsService.updateProduct(id, dto);
+    return this.productsService.updateProduct(tenant, actor, id, dto);
   }
 
   @RequirePermission('products:write')
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async remove(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ message: string }> {
-    await this.productsService.deactivateProduct(id);
+    await this.productsService.deactivateProduct(tenant, actor, id);
     return { message: 'Product deactivated' };
   }
 
@@ -122,9 +136,11 @@ export class ProductsController {
   @Post(':id/reactivate')
   @HttpCode(HttpStatus.OK)
   async reactivate(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ message: string }> {
-    await this.productsService.reactivateProduct(id);
+    await this.productsService.reactivateProduct(tenant, actor, id);
     return { message: 'Product reactivated' };
   }
 
@@ -133,20 +149,29 @@ export class ProductsController {
   @HttpCode(HttpStatus.CREATED)
   async addVariant(
     @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateVariantDto,
   ) {
-    return this.productsService.createVariant(tenant.tenantId, id, dto);
+    return this.productsService.createVariant(tenant, actor, id, dto);
   }
 
   @RequirePermission('products:write')
   @Patch(':id/variants/:variantId')
   async updateVariant(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('variantId', ParseUUIDPipe) variantId: string,
     @Body() dto: UpdateVariantDto,
   ) {
-    return this.productsService.updateVariant(id, variantId, dto);
+    return this.productsService.updateVariant(
+      tenant,
+      actor,
+      id,
+      variantId,
+      dto,
+    );
   }
 
   /**
@@ -161,11 +186,13 @@ export class ProductsController {
   @HttpCode(HttpStatus.CREATED)
   async addCustomizationField(
     @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateCustomizationFieldDto,
   ) {
     return this.productsService.createCustomizationField(
-      tenant.tenantId,
+      tenant,
+      actor,
       id,
       dto,
     );
@@ -174,11 +201,19 @@ export class ProductsController {
   @RequirePermission('products:write')
   @Patch(':id/customization-fields/:fieldId')
   async updateCustomizationField(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('fieldId', ParseUUIDPipe) fieldId: string,
     @Body() dto: UpdateCustomizationFieldDto,
   ) {
-    return this.productsService.updateCustomizationField(id, fieldId, dto);
+    return this.productsService.updateCustomizationField(
+      tenant,
+      actor,
+      id,
+      fieldId,
+      dto,
+    );
   }
 
   @RequirePermission('products:write')
@@ -186,20 +221,23 @@ export class ProductsController {
   @HttpCode(HttpStatus.CREATED)
   async addImage(
     @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateProductImageDto,
   ) {
-    return this.productsService.addImage(tenant.tenantId, id, dto);
+    return this.productsService.addImage(tenant, actor, id, dto);
   }
 
   @RequirePermission('products:write')
   @Delete(':id/images/:imageId')
   @HttpCode(HttpStatus.OK)
   async removeImage(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() actor: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('imageId', ParseUUIDPipe) imageId: string,
   ): Promise<{ message: string }> {
-    await this.productsService.removeImage(id, imageId);
+    await this.productsService.removeImage(tenant, actor, id, imageId);
     return { message: 'Image removed' };
   }
 }

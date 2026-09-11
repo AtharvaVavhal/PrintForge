@@ -9,10 +9,12 @@ import { AuthenticatedUser } from '../decorators/current-user.decorator';
  * PlatformGuard — SaaS Phase 2a (Master Plan §8; decision P2-D1, gate G-12;
  * docs/saas/PHASE-2-DECISION-RESOLUTION-AND-SPEC.md §C.9 AC-P2-10 / AC-P2-11).
  *
- * The guard is a FOUNDATION capability: it only acts on @PlatformOnly() routes,
- * and Phase 2a decorates NO route with it. These tests exercise the guard's
- * canActivate() directly with a fake ExecutionContext, and assert the codebase
- * has not accidentally activated it anywhere.
+ * The guard is a FOUNDATION capability: it only acts on @PlatformOnly() routes.
+ * Phase 2a decorated NO route with it (a deliberately dormant foundation);
+ * Phase 5 W3 (`platform/platform.controller.ts`) is its first real consumer.
+ * These tests exercise the guard's canActivate() directly with a fake
+ * ExecutionContext, and assert the codebase applies @PlatformOnly() to
+ * exactly the known, enumerated set of routes — no more, no fewer.
  */
 
 function makeContext(
@@ -101,7 +103,14 @@ describe('PlatformGuard (Phase 2a)', () => {
     );
   });
 
-  it('dormant: NO route in src/ actually applies @PlatformOnly() (comments/docs excluded)', () => {
+  it('the only route(s) in src/ that apply @PlatformOnly() are the exact, known Phase 5 W3 set (comments/docs excluded)', () => {
+    // Phase 2a: this test asserted @PlatformOnly() was dormant everywhere
+    // ("Phase 5 is its first consumer" — platform-only.decorator.ts's own
+    // header). Phase 5 W3 built that first consumer
+    // (platform/platform.controller.ts) — dormancy is no longer the
+    // invariant to protect; an EXACT, enumerated usage set is. A file
+    // silently gaining @PlatformOnly() outside this list is exactly as
+    // much a drift to catch as a route silently losing it.
     const srcDir = join(__dirname, '..', '..');
     const stripComments = (s: string): string =>
       s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
@@ -119,12 +128,20 @@ describe('PlatformGuard (Phase 2a)', () => {
             /@PlatformOnly\s*\(/.test(code) &&
             !p.endsWith('platform.guard.spec.ts')
           ) {
-            hits.push(p);
+            hits.push(p.slice(srcDir.length + 1));
           }
         }
       }
     };
     walk(srcDir);
-    expect(hits).toEqual([]);
+    expect(hits.sort()).toEqual(
+      [
+        'platform/platform.controller.ts',
+        // Phase 5 W6 — SupportSessionController is the SupportSession
+        // lifecycle's own SUPER_ADMIN-only route set, the second legitimate
+        // @PlatformOnly() consumer after W3's PlatformController.
+        'support-sessions/support-session.controller.ts',
+      ].sort(),
+    );
   });
 });

@@ -31,6 +31,13 @@ const ALL_TABLES = [
   'idempotency_keys',
   'outbox_events',
   'app_settings',
+  // Phase 5 (W9) — additive AppSetting tenant/store ownership. `tenant_
+  // counters` is included here too: W9 is its first real read/write
+  // consumer (invoice numbering), so it now matters for test isolation
+  // the same way app_settings already did.
+  'tenant_settings',
+  'store_settings',
+  'tenant_counters',
   // SaaS Foundation (Phase 1) — additive. No existing e2e test writes to
   // these yet; listed so the truncate stays complete as later phases do.
   'subscriptions',
@@ -42,6 +49,10 @@ const ALL_TABLES = [
   // SaaS Identity (Phase 2a) — additive (Customer). No customer auth runtime
   // yet; only the tenancy-foundation / platform-guard specs write here.
   'customers',
+  // Phase 5 (W2) — additive audit foundation. Written by
+  // platform-control-plane.e2e-spec.ts (W3) onward.
+  'platform_audit_logs',
+  'tenant_audit_logs',
 ];
 
 /**
@@ -90,8 +101,26 @@ export async function resetDatabase(
   // table (e.g. `tenant-bootstrap-seed.e2e-spec.ts`'s own seed-script
   // smoke test).
   if (options.seedBaselineTenant ?? true) {
-    await prisma.tenant.create({
+    const tenant = await prisma.tenant.create({
       data: { slug: 'test-baseline-tenant' },
+    });
+    // Phase 5 W9 (decision D11) — real tenants always have a primary Store
+    // from creation (`prisma/seed-tenant-bootstrap.ts` creates Tenant +
+    // Store together), and `resolvePrimaryStoreId` now sits on paths that
+    // are otherwise unconditional (e.g. checkout's shipping-fee lookup).
+    // Without this, any test that never explicitly creates its own tenant
+    // (relying on this baseline one via `StorefrontTenantResolver`'s
+    // fallback) would 404 the moment it touched a STORE-owned setting.
+    // Mirrors `fixtures.ts`'s own `grantOwnerMembership`/`ensureTenantId`
+    // pairing for every OTHER tenant a test fixture creates.
+    await prisma.store.create({
+      data: {
+        tenantId: tenant.id,
+        slug: 'baseline-store',
+        name: 'Test Store',
+        status: 'ACTIVE',
+        isPrimary: true,
+      },
     });
   }
 }

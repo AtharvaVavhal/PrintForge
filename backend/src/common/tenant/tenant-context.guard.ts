@@ -57,6 +57,28 @@ export class TenantContextGuard {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<
+      RequestWithTenantContext & {
+        user?: AuthenticatedUser;
+        headers: Record<string, string | string[] | undefined>;
+        hostname?: string;
+      }
+    >();
+
+    // Phase 5 W6 (decision P5-D8): `SupportSessionContextGuard` runs before
+    // this guard and, when it resolves a valid support session, sets
+    // `request.tenantContext` itself. That resolution is authoritative and
+    // must never be second-guessed, overridden, or REJECTED by this
+    // guard's own header/domain/membership-default logic below — in
+    // particular, a client-supplied `X-Active-Tenant` header must not be
+    // able to redirect (or 403) a support-session-derived context, since a
+    // SUPER_ADMIN using a support session structurally has zero
+    // `TenantMembership` rows and the header branch below would otherwise
+    // throw a spoof-rejection 403 for every such request. Skip entirely.
+    if (request.tenantContext) {
+      return true;
+    }
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -68,14 +90,6 @@ export class TenantContextGuard {
     if (isPublic || isPlatformOnly) {
       return true;
     }
-
-    const request = context.switchToHttp().getRequest<
-      RequestWithTenantContext & {
-        user?: AuthenticatedUser;
-        headers: Record<string, string | string[] | undefined>;
-        hostname?: string;
-      }
-    >();
 
     const user = request.user;
     if (!user) {

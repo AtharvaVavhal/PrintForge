@@ -45,6 +45,13 @@ interface SellerSnapshot {
 export interface InvoiceActor {
   userId: string;
   isAdmin: boolean;
+  /** Required when `isAdmin` is true (the caller's own already
+   * server-derived tenant) — W10 hardening: `isAdmin: true` used to bypass
+   * ownership entirely, letting any tenant's admin read any OTHER
+   * tenant's invoice by order id. Unused for a non-admin caller, who is
+   * still scoped by `userId` alone (a customer has no tenant identity of
+   * its own to check against). */
+  tenantId?: string;
 }
 
 @Injectable()
@@ -71,7 +78,17 @@ export class InvoicesService {
       where: { id: orderId },
       include: ORDER_INCLUDE,
     });
-    if (!order || (!actor.isAdmin && order.userId !== actor.userId)) {
+    // W10 hardening (P0) — `isAdmin: true` used to skip ownership checking
+    // entirely; it must instead check the ADMIN's OWN tenant against the
+    // order's tenant, exactly the same shape the non-admin branch already
+    // checks userId against.
+    const crossTenantAdmin =
+      actor.isAdmin && order && order.tenantId !== actor.tenantId;
+    if (
+      !order ||
+      (!actor.isAdmin && order.userId !== actor.userId) ||
+      crossTenantAdmin
+    ) {
       throw new NotFoundException('Order not found');
     }
 
@@ -90,13 +107,27 @@ export class InvoicesService {
   }
 
   private async createInvoice(order: OrderWithInvoice): Promise<Invoice> {
+    // Phase 5 W9 (decision D11) — `invoice.numberPrefix` and the seller
+    // identity fields are TENANT-owned; `order.tenantId` is the order's own
+    // already-persisted, server-derived ownership column, never a
+    // client-supplied value (Phase 4 W7 / P4-D2) — the same value this
+    // method already trusts two lines below for the Invoice row itself.
     const prefix =
-      (await this.appSettings.get('invoice.numberPrefix'))?.trim() || 'INV-';
-    const seller = await this.buildSellerSnapshot();
+      (
+        await this.appSettings.getTenantValue(
+          order.tenantId,
+          'invoice.numberPrefix',
+        )
+      )?.trim() || 'INV-';
+    const seller = await this.buildSellerSnapshot(order.tenantId);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const invoiceNumber = await this.invoiceNumber.allocate(tx, prefix);
+        const invoiceNumber = await this.invoiceNumber.allocate(
+          tx,
+          order.tenantId,
+          prefix,
+        );
         return tx.invoice.create({
           data: {
             invoiceNumber,
@@ -134,8 +165,8 @@ export class InvoicesService {
     }
   }
 
-  private async buildSellerSnapshot(): Promise<SellerSnapshot> {
-    const stored = await this.appSettings.getMany([
+  private async buildSellerSnapshot(tenantId: string): Promise<SellerSnapshot> {
+    const stored = await this.appSettings.getManyTenantValues(tenantId, [
       'invoice.sellerLegalName',
       'invoice.sellerAddress',
       'invoice.sellerGstin',

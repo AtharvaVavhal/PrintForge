@@ -70,14 +70,20 @@ export class AdminController {
 
   @RequirePermission('orders:read')
   @Get('orders')
-  async listOrders(@Query() query: ListAdminOrdersQueryDto) {
-    return this.ordersService.adminListOrders(query);
+  async listOrders(
+    @CurrentTenant() tenant: TenantContext,
+    @Query() query: ListAdminOrdersQueryDto,
+  ) {
+    return this.ordersService.adminListOrders(tenant, query);
   }
 
   @RequirePermission('orders:read')
   @Get('orders/:id')
-  async orderDetail(@Param('id', ParseUUIDPipe) id: string) {
-    return this.ordersService.adminGetOrderDetail(id);
+  async orderDetail(
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.ordersService.adminGetOrderDetail(tenant, id);
   }
 
   /** Admin view of any order's invoice (idempotent lazy creation for a
@@ -85,62 +91,79 @@ export class AdminController {
   @RequirePermission('orders:read')
   @Get('orders/:id/invoice')
   async orderInvoice(
+    @CurrentTenant() tenant: TenantContext,
     @CurrentUser() admin: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.invoicesService.getInvoiceForOrder(id, {
       userId: admin.id,
       isAdmin: true,
+      tenantId: tenant.tenantId,
     });
   }
 
   @RequirePermission('orders:transition')
   @Patch('orders/:id/status')
   async updateOrderStatus(
+    @CurrentTenant() tenant: TenantContext,
     @CurrentUser() admin: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateOrderStatusDto,
   ) {
-    return this.ordersService.adminTransitionStatus(admin.id, id, dto);
+    return this.ordersService.adminTransitionStatus(tenant, admin, id, dto);
   }
 
   @RequirePermission('dashboard:read')
   @Get('dashboard')
-  async dashboard() {
-    return this.adminService.getDashboard();
+  async dashboard(@CurrentTenant() tenant: TenantContext) {
+    return this.adminService.getDashboard(tenant);
   }
 
   @RequirePermission('customers:read')
   @Get('customers')
-  async listCustomers(@Query() query: ListAdminCustomersQueryDto) {
-    return this.adminService.listCustomers(query);
+  async listCustomers(
+    @CurrentTenant() tenant: TenantContext,
+    @Query() query: ListAdminCustomersQueryDto,
+  ) {
+    return this.adminService.listCustomers(tenant, query);
   }
 
   @RequirePermission('customers:read')
   @Get('customers/:id')
-  async customerDetail(@Param('id', ParseUUIDPipe) id: string) {
-    return this.adminService.getCustomerDetail(id);
+  async customerDetail(
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.adminService.getCustomerDetail(tenant, id);
   }
 
   @RequirePermission('reviews:moderate')
   @Patch('reviews/:id/status')
   async updateReviewStatus(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReviewStatusDto,
   ) {
-    return this.reviewsService.adminUpdateStatus(id, dto);
+    return this.reviewsService.adminUpdateStatus(tenant, admin, id, dto);
   }
 
   @RequirePermission('coupons:read')
   @Get('coupons')
-  async listCoupons(@Query() query: ListAdminCouponsQueryDto) {
-    return this.couponsService.listCoupons(query);
+  async listCoupons(
+    @CurrentTenant() tenant: TenantContext,
+    @Query() query: ListAdminCouponsQueryDto,
+  ) {
+    return this.couponsService.listCoupons(tenant, query);
   }
 
   @RequirePermission('coupons:read')
   @Get('coupons/:id')
-  async couponDetail(@Param('id', ParseUUIDPipe) id: string) {
-    return this.couponsService.getCoupon(id);
+  async couponDetail(
+    @CurrentTenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.couponsService.getCoupon(tenant, id);
   }
 
   @RequirePermission('coupons:write')
@@ -150,16 +173,18 @@ export class AdminController {
     @CurrentTenant() tenant: TenantContext,
     @Body() dto: CreateCouponDto,
   ) {
-    return this.couponsService.createCoupon(admin.id, tenant.tenantId, dto);
+    return this.couponsService.createCoupon(tenant, admin, dto);
   }
 
   @RequirePermission('coupons:write')
   @Patch('coupons/:id')
   async updateCoupon(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCouponDto,
   ) {
-    return this.couponsService.updateCoupon(id, dto);
+    return this.couponsService.updateCoupon(tenant, admin, id, dto);
   }
 
   // ─── Configurable app settings ───────────────────────────────────────
@@ -171,16 +196,23 @@ export class AdminController {
 
   @RequirePermission('settings:read')
   @Get('settings')
-  async listSettings() {
-    return this.appSettingService.listConfigurable();
+  async listSettings(@CurrentTenant() tenant: TenantContext) {
+    return this.appSettingService.listConfigurable(tenant);
   }
 
   @RequirePermission('settings:write')
   @Patch('settings/:key')
   async updateSetting(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
     @Param('key') key: string,
     @Body() dto: UpdateSettingDto,
   ) {
-    return this.appSettingService.updateConfigurable(key, dto.value);
+    return this.appSettingService.updateConfigurable(
+      tenant,
+      admin,
+      key,
+      dto.value,
+    );
   }
 }

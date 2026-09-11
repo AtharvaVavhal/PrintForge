@@ -28,11 +28,20 @@ export function isPublicSettingKey(key: string): key is PublicSettingKey {
 export type AdminSettingKind =
   'money' | 'text' | 'boolean' | 'enum' | 'percent';
 
+/**
+ * Phase 5 W9 (decision D11) — the frozen ownership axis every configurable
+ * setting belongs to, exactly one of the two. Drives which table
+ * (`TenantSetting` / `StoreSetting`) `AppSettingService` reads and writes
+ * for a given key — never inferred per-row, never client-selectable.
+ */
+export type SettingOwnership = 'TENANT' | 'STORE';
+
 export interface AdminSettingDefinition {
   key: string;
   label: string;
   description: string;
   kind: AdminSettingKind;
+  ownership: SettingOwnership;
   /** Returned when the row does not exist yet — never a fabricated value. */
   default: string;
   /** Allowed values for `kind: 'enum'`. */
@@ -41,6 +50,24 @@ export interface AdminSettingDefinition {
    * and are shipped blank — surfaced in the admin UI as "pending". */
   pendingClientInput?: boolean;
 }
+
+/**
+ * Phase 5 W9 (decision D11) — ownership for the 3 PUBLIC_SETTING_KEYS that
+ * have no admin-write definition yet (`hero_slides`/`banners`/
+ * `showcase_categories` — confirmed by inspection: no `ADMIN_SETTING_
+ * DEFINITIONS` entry, no admin endpoint ever writes them; their current
+ * values were seeded directly). All three are STORE-owned, same as every
+ * other public key. Recorded here (not invented as a new admin-write
+ * capability — that stays out of W9's scope) purely so the public
+ * storefront read path can classify them correctly.
+ */
+export const PUBLIC_ONLY_SETTING_OWNERSHIP: Readonly<
+  Record<string, SettingOwnership>
+> = {
+  hero_slides: 'STORE',
+  banners: 'STORE',
+  showcase_categories: 'STORE',
+};
 
 interface NormalizeOk {
   valid: true;
@@ -233,6 +260,7 @@ const NORMALIZERS: Record<string, (raw: string) => NormalizeResult> = {
 export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   {
     key: 'storeName',
+    ownership: 'STORE',
     label: 'Store name',
     description:
       'The name customers see for this store — in the header, the homepage hero and the footer. This is the STORE name, not the "PrintForge" platform name. Required.',
@@ -243,6 +271,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'storeAdminName',
+    ownership: 'STORE',
     label: 'Store admin name',
     description:
       'Display name for the store owner / administrator. Optional — used where store-owner attribution is needed. Never shown to customers unless a specific context calls for it.',
@@ -251,6 +280,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'shippingFeeFlat',
+    ownership: 'STORE',
     label: 'Flat shipping fee (₹)',
     description:
       'Charged once per order at checkout. Use 0 for free shipping. The server always recomputes the order total from this value inside the checkout transaction — it is never taken from the client.',
@@ -259,6 +289,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'announcement_text',
+    ownership: 'STORE',
     label: 'Announcement bar text',
     description:
       'Shown in the storefront announcement bar. Leave blank to hide the bar.',
@@ -267,6 +298,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'tax.enabled',
+    ownership: 'TENANT',
     label: 'GST / tax enabled',
     description:
       'When off (default), every order records tax = ₹0.00 and the customer total is unchanged. Turn on ONLY after the client confirms the applicable GST rate. Prices are treated as tax-inclusive unless the pricing mode below says otherwise.',
@@ -275,6 +307,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'tax.pricingMode',
+    ownership: 'TENANT',
     label: 'Tax pricing mode',
     description:
       'INCLUSIVE (per the app blueprint §4): displayed prices already include GST and the GST amount is extracted from within the total — the customer total never changes. Tax-EXCLUSIVE pricing (GST added on top, total increases) is implemented but LOCKED pending explicit client confirmation of inclusive-vs-exclusive pricing; it cannot be selected here.',
@@ -284,6 +317,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'tax.ratePercent',
+    ownership: 'TENANT',
     label: 'Combined GST rate (%)',
     description:
       'Single combined GST percentage applied to the goods value (subtotal − discount). PENDING CLIENT CONFIRMATION — do not set a guessed value. The CGST/SGST/IGST split and place-of-supply rules are NOT implemented and require a separate business decision.',
@@ -293,6 +327,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'invoice.numberPrefix',
+    ownership: 'TENANT',
     label: 'Invoice number prefix',
     description:
       'Prepended to a dedicated, gap-free invoice sequence (e.g. "INV-" → INV-000001). The statutory format (financial-year series, etc.) is PENDING CLIENT CONFIRMATION — this is a technical placeholder.',
@@ -302,6 +337,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'invoice.sellerLegalName',
+    ownership: 'TENANT',
     label: 'Seller legal name (on invoice)',
     description:
       'Registered business name printed on invoices. PENDING CLIENT INPUT — left blank until supplied; invoices show a "seller details pending" note while empty.',
@@ -311,6 +347,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'invoice.sellerAddress',
+    ownership: 'TENANT',
     label: 'Seller registered address (on invoice)',
     description:
       'Registered place of business printed on invoices. PENDING CLIENT INPUT.',
@@ -320,6 +357,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'invoice.sellerGstin',
+    ownership: 'TENANT',
     label: 'Seller GSTIN (on invoice)',
     description:
       'The business GST identification number. PENDING CLIENT INPUT — validated for format only if entered, never fabricated. Without it an invoice is not a valid tax invoice.',
@@ -329,6 +367,7 @@ export const ADMIN_SETTING_DEFINITIONS: readonly AdminSettingDefinition[] = [
   },
   {
     key: 'invoice.sellerState',
+    ownership: 'TENANT',
     label: 'Seller state / place of supply',
     description:
       'Seller state for place-of-supply determination. PENDING CLIENT INPUT — intra/inter-state (CGST+SGST vs IGST) logic is not implemented.',
@@ -342,6 +381,22 @@ export function getAdminSettingDefinition(
   key: string,
 ): AdminSettingDefinition | undefined {
   return ADMIN_SETTING_DEFINITIONS.find((d) => d.key === key);
+}
+
+/**
+ * Phase 5 W9 (decision D11) — the single source of truth for which table
+ * (`TenantSetting` / `StoreSetting`) a key belongs to. Checks the
+ * admin-configurable definitions first, then the 3 public-only keys with
+ * no admin-write definition. Returns `undefined` for any key outside the
+ * frozen D11 classification (e.g. `order_number_counter`,
+ * `invoice_number_counter` — deliberately unclassified; see the W9
+ * implementation report).
+ */
+export function getSettingOwnership(key: string): SettingOwnership | undefined {
+  return (
+    getAdminSettingDefinition(key)?.ownership ??
+    PUBLIC_ONLY_SETTING_OWNERSHIP[key]
+  );
 }
 
 export function normalizeAdminSettingValue(

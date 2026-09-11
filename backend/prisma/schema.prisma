@@ -110,18 +110,18 @@ enum OutboxEventStatus {
 // [RECONCILED, §15]. Never hard-deleted while owning any order (orders.userId
 // is RESTRICT). tokenVersion only ever increments (§23).
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id           String @id @default(uuid())
+  email        String @unique
   passwordHash String
 
-  role      Role     @default(CUSTOMER)
+  role         Role          @default(CUSTOMER)
   // SaaS Identity (Phase 2a) — platform super-admin axis. Nullable, NO default:
   // null = not a platform admin. Checked only by PlatformGuard on
   // @PlatformOnly() routes (none exist yet — Phase 5). Independent of `role`
   // and of any TenantMembership (frozen SaaS invariant 4; Master Plan §8;
   // decision P2-D1/P2-D2). This is the ONLY column Phase 2a adds to `users`.
   platformRole PlatformRole?
-  tokenVersion Int   @default(0)
+  tokenVersion Int           @default(0)
 
   failedLoginAttempts    Int       @default(0)
   passwordResetTokenHash String?
@@ -135,20 +135,20 @@ model User {
   country      String?
   phone        String?
 
-  isActive  Boolean  @default(true)
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  refreshTokens       RefreshToken[]
-  uploadedFiles       UploadedFile[]
-  cart                Cart?
-  orders              Order[]
-  orderStatusChanges  OrderStatusHistory[]
-  idempotencyKeys     IdempotencyKey[]
-  reviews             Review[]
-  createdCoupons      Coupon[]
-  couponUsages        CouponUsage[]
+  refreshTokens      RefreshToken[]
+  uploadedFiles      UploadedFile[]
+  cart               Cart?
+  orders             Order[]
+  orderStatusChanges OrderStatusHistory[]
+  idempotencyKeys    IdempotencyKey[]
+  reviews            Review[]
+  createdCoupons     Coupon[]
+  couponUsages       CouponUsage[]
 
   // SaaS Foundation (Phase 1) — back-relations only; these add NO column to
   // `users` (Prisma virtual fields — the FK columns live on tenant_memberships).
@@ -157,22 +157,36 @@ model User {
   tenantMemberships        TenantMembership[] @relation("TenantMembershipUser")
   invitedTenantMemberships TenantMembership[] @relation("TenantMembershipInvitedBy")
 
+  // Phase 5 (W2) — back-relation only; adds NO column to `users`. A
+  // PlatformAuditLog.actorUserId is always a SUPER_ADMIN acting on
+  // /platform/* (decision P5-D3).
+  platformAuditLogs PlatformAuditLog[]
+
+  // Phase 5 (W6) — back-relations only; add NO column to `users`. Every
+  // SupportSession.createdByUserId is a SUPER_ADMIN at creation time
+  // (enforced in support-session.service.ts, not by a DB constraint —
+  // platformRole is nullable/mutable, so a since-demoted admin's past
+  // sessions still resolve correctly here); revokedByUserId is nullable
+  // (a session may never be revoked — it can also simply expire).
+  supportSessionsCreated SupportSession[] @relation("SupportSessionCreatedBy")
+  supportSessionsRevoked SupportSession[] @relation("SupportSessionRevokedBy")
+
   @@map("users")
 }
 
 // Session persistence, rotation, revocation — §23. Never updated after
 // revokedAt except by the chain-revocation sweep on reuse detection.
 model RefreshToken {
-  id              String    @id @default(uuid())
-  userId          String
-  tokenHash       String
-  expiresAt       DateTime
-  revokedAt       DateTime?
+  id                String    @id @default(uuid())
+  userId            String
+  tokenHash         String
+  expiresAt         DateTime
+  revokedAt         DateTime?
   replacedByTokenId String?
 
-  createdAt       DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  user            User      @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([tokenHash])
@@ -191,17 +205,17 @@ model RefreshToken {
 // Flat, one nesting level (§8). Only active categories appear in the
 // public storefront; isActive mirrors Product's pattern for soft-delete.
 model Category {
-  id              String     @id @default(uuid())
-  name            String
-  slug            String
+  id               String  @id @default(uuid())
+  name             String
+  slug             String
   parentCategoryId String?
-  isActive        Boolean    @default(true)
+  isActive         Boolean @default(true)
 
-  tenantId        String
-  storeId         String?
+  tenantId String
+  storeId  String?
 
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   parentCategory  Category?  @relation("CategoryToCategory", fields: [parentCategoryId], references: [id])
   childCategories Category[] @relation("CategoryToCategory")
@@ -217,37 +231,37 @@ model Category {
 // Never hard-deleted once it appears in any OrderItem — isActive=false
 // instead; propagates transitively to images/variants/fields (§8).
 model Product {
-  id             String   @id @default(uuid())
+  id             String  @id @default(uuid())
   categoryId     String
   name           String
   slug           String
-  basePrice      Decimal  @db.Decimal(10, 2)
+  basePrice      Decimal @db.Decimal(10, 2)
   minQuantity    Int
   maxQuantity    Int?
   specifications Json?
-  isActive       Boolean  @default(true)
+  isActive       Boolean @default(true)
 
   // Denormalized from `reviews` — recomputed via a scoped aggregate inside
   // the same transaction as any review create/edit/status-change, never
   // computed at read time (PHASE-10-PROPOSAL.md §1.1/R7). avgRating stays
   // null until the first PUBLISHED review exists, so a product page can
   // render "No reviews yet" rather than a misleading 0.00.
-  avgRating      Decimal? @db.Decimal(3, 2)
-  reviewCount    Int      @default(0)
+  avgRating   Decimal? @db.Decimal(3, 2)
+  reviewCount Int      @default(0)
 
-  tenantId       String
-  storeId        String?
+  tenantId String
+  storeId  String?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  category             Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  images               ProductImage[]
-  variants             ProductVariant[]
-  customizationFields  CustomizationField[]
-  cartItems            CartItem[]
-  orderItems           OrderItem[]
-  reviews              Review[]
+  category            Category             @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  images              ProductImage[]
+  variants            ProductVariant[]
+  customizationFields CustomizationField[]
+  cartItems           CartItem[]
+  orderItems          OrderItem[]
+  reviews             Review[]
 
   @@index([categoryId])
   @@index([tenantId])
@@ -256,7 +270,7 @@ model Product {
 }
 
 model ProductImage {
-  id                 String   @id @default(uuid())
+  id                 String  @id @default(uuid())
   productId          String
   cloudinaryPublicId String
   // Denormalized from the UploadedFile this image was created from
@@ -266,17 +280,17 @@ model ProductImage {
   // this fix — see uploads.service.ts's create() — but this stores the
   // upload's actual values rather than assuming that, so a differently-
   // delivered file attached here still resolves to a correct URL.
-  resourceType       String   @default("image")
-  deliveryType       String   @default("upload")
-  sortOrder          Int      @default(0)
-  isPrimary          Boolean  @default(false)
+  resourceType       String  @default("image")
+  deliveryType       String  @default("upload")
+  sortOrder          Int     @default(0)
+  isPrimary          Boolean @default(false)
 
-  tenantId           String
-  storeId            String?
+  tenantId String
+  storeId  String?
 
-  createdAt          DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  product            Product  @relation(fields: [productId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
 
   @@index([productId])
   @@index([tenantId])
@@ -287,20 +301,20 @@ model ProductImage {
 // Flat list of concrete purchasable combinations — never a generated
 // attribute matrix (§8).
 model ProductVariant {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   productId   String
   label       String
   priceDelta  Decimal  @db.Decimal(10, 2) @default(0)
-  isAvailable Boolean  @default(true)
+  isAvailable Boolean @default(true)
 
-  tenantId    String
-  storeId     String?
+  tenantId String
+  storeId  String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  product     Product     @relation(fields: [productId], references: [id])
-  cartItems   CartItem[]
+  product   Product    @relation(fields: [productId], references: [id])
+  cartItems CartItem[]
 
   @@unique([productId, label])
   @@index([productId])
@@ -312,25 +326,25 @@ model ProductVariant {
 // Per-product field definitions (§9). Pricing-critical values are typed
 // columns, never buried in JSONB — surchargeType/surchargeAmount.
 model CustomizationField {
-  id               String                 @id @default(uuid())
-  productId        String
-  label            String
-  type             CustomizationFieldType
-  isRequired       Boolean                @default(false)
-  sortOrder        Int                    @default(0)
-  helpText         String?
-  constraints      Json?
-  surchargeType    SurchargeType          @default(NONE)
+  id              String                 @id @default(uuid())
+  productId       String
+  label           String
+  type            CustomizationFieldType
+  isRequired      Boolean                @default(false)
+  sortOrder       Int                    @default(0)
+  helpText        String?
+  constraints     Json?
+  surchargeType   SurchargeType          @default(NONE)
   surchargeAmount  Decimal                @db.Decimal(10, 2) @default(0)
 
-  tenantId         String
-  storeId          String?
+  tenantId String
+  storeId  String?
 
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  product          Product                       @relation(fields: [productId], references: [id])
-  cartItemValues   CartItemCustomization[]
+  product        Product                 @relation(fields: [productId], references: [id])
+  cartItemValues CartItemCustomization[]
 
   @@index([productId])
   @@index([tenantId])
@@ -344,22 +358,22 @@ model CustomizationField {
 // guest-identity special case (§9/§22). Ownership re-verified on every
 // referencing write.
 model UploadedFile {
-  id                 String   @id @default(uuid())
-  cloudinaryPublicId String   @unique
+  id                 String @id @default(uuid())
+  cloudinaryPublicId String @unique
   uploadedByUserId   String
   format             String
   bytes              Int
   resourceType       String
   deliveryType       String
 
-  tenantId              String
-  uploadedByCustomerId  String?
+  tenantId             String
+  uploadedByCustomerId String?
 
-  createdAt          DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  uploadedBy         User                      @relation(fields: [uploadedByUserId], references: [id])
-  cartItemValues     CartItemCustomization[]
-  orderItemValues    OrderItemCustomization[]
+  uploadedBy      User                     @relation(fields: [uploadedByUserId], references: [id])
+  cartItemValues  CartItemCustomization[]
+  orderItemValues OrderItemCustomization[]
 
   @@index([uploadedByUserId])
   @@index([tenantId])
@@ -371,8 +385,8 @@ model UploadedFile {
 
 // One open cart per user — always authenticated, no guest cart (§10).
 model Cart {
-  id        String   @id @default(uuid())
-  userId    String   @unique
+  id     String @id @default(uuid())
+  userId String @unique
 
   tenantId   String
   storeId    String?
@@ -381,8 +395,8 @@ model Cart {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User       @relation(fields: [userId], references: [id])
-  items     CartItem[]
+  user  User       @relation(fields: [userId], references: [id])
+  items CartItem[]
 
   @@index([tenantId])
   @@index([storeId])
@@ -392,22 +406,22 @@ model Cart {
 
 // Duplicate lines allowed by design — no line-merging on duplicate add (§10).
 model CartItem {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   cartId    String
   productId String
   variantId String?
   quantity  Int
 
-  tenantId  String
-  storeId   String?
+  tenantId String
+  storeId  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cart            Cart                    @relation(fields: [cartId], references: [id])
-  product         Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
-  variant         ProductVariant?         @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  customizations  CartItemCustomization[]
+  cart           Cart                    @relation(fields: [cartId], references: [id])
+  product        Product                 @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant        ProductVariant?         @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  customizations CartItemCustomization[]
 
   @@index([cartId])
   @@index([tenantId])
@@ -423,12 +437,12 @@ model CartItemCustomization {
   textValue            String?
   uploadedFileId       String?
 
-  tenantId             String
-  storeId              String?
+  tenantId String
+  storeId  String?
 
-  cartItem             CartItem            @relation(fields: [cartItemId], references: [id])
-  customizationField   CustomizationField  @relation(fields: [customizationFieldId], references: [id], onDelete: Restrict)
-  uploadedFile         UploadedFile?       @relation(fields: [uploadedFileId], references: [id])
+  cartItem           CartItem           @relation(fields: [cartItemId], references: [id])
+  customizationField CustomizationField @relation(fields: [customizationFieldId], references: [id], onDelete: Restrict)
+  uploadedFile       UploadedFile?      @relation(fields: [uploadedFileId], references: [id])
 
   @@index([tenantId])
   @@index([storeId])
@@ -441,20 +455,20 @@ model CartItemCustomization {
 // creation (§11, §24 invariant 6). razorpayOrderId's nullability alone
 // represents "has a Razorpay order been created" — not a separate status (§12.1).
 model Order {
-  id              String      @id @default(uuid())
-  orderNumber     String
-  userId          String
-  status          OrderStatus @default(PENDING_PAYMENT)
+  id          String      @id @default(uuid())
+  orderNumber String
+  userId      String
+  status      OrderStatus @default(PENDING_PAYMENT)
 
-  subtotal        Decimal     @db.Decimal(10, 2)
+  subtotal    Decimal @db.Decimal(10, 2)
   // Stored, not derived — checkout.service.ts used to compute this on read
   // as `total - subtotal`, which was only correct while discount was
   // hardcoded to zero (no coupons yet). Written once at order-creation time
   // from the same getShippingFeePaise() value that feeds computeOrderTotal,
   // and read back verbatim thereafter (docs/architecture/PHASE-10-PROPOSAL.md §2.5).
-  shippingFee     Decimal     @db.Decimal(10, 2)
-  total           Decimal     @db.Decimal(10, 2)
-  currency        String      @default("INR")
+  shippingFee Decimal @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(10, 2)
+  currency    String  @default("INR")
 
   // Coupon snapshot (PHASE-10-PROPOSAL.md §2.1/C7) — couponId/couponCode
   // are nullable (most orders have no coupon); discountAmount is never
@@ -465,9 +479,9 @@ model Order {
   // OrderItem.productNameSnapshot) — display never needs a join back to a
   // coupons row that (unlike products) isn't even guaranteed to still
   // exist by identity if the FK were ever nulled out.
-  couponId        String?
-  couponCode      String?
-  discountAmount  Decimal     @default(0) @db.Decimal(10, 2)
+  couponId       String?
+  couponCode     String?
+  discountAmount Decimal @default(0) @db.Decimal(10, 2)
 
   // ─── Tax snapshot (Phase 13.4) ────────────────────────────────────────
   // Tax-INCLUSIVE pricing (pricing.service.ts / BLUEPRINT §4): the customer
@@ -480,33 +494,33 @@ model Order {
   // treatment used at checkout so an invoice never re-derives tax from
   // current config. Invariant (INCLUSIVE): total = taxableAmount +
   // taxAmount + shippingFee. See checkout.service.ts.
-  taxMode         String      @default("INCLUSIVE")
-  taxableAmount   Decimal     @default(0) @db.Decimal(10, 2)
-  taxAmount       Decimal     @default(0) @db.Decimal(10, 2)
-  taxRateSnapshot Decimal?    @db.Decimal(5, 4)
+  taxMode         String   @default("INCLUSIVE")
+  taxableAmount   Decimal  @default(0) @db.Decimal(10, 2)
+  taxAmount       Decimal  @default(0) @db.Decimal(10, 2)
+  taxRateSnapshot Decimal? @db.Decimal(5, 4)
   taxBreakdown    Json?
 
-  razorpayOrderId String?     @unique
+  razorpayOrderId String? @unique
 
   // Immutable shipping snapshot — copied from User at creation time, never a
   // live FK (§11 "Immutable shipping snapshot").
-  shippingRecipientName  String
-  shippingPhone          String
-  shippingAddressLine1   String
-  shippingAddressLine2   String?
-  shippingCity           String
-  shippingState          String
-  shippingPostalCode     String
-  shippingCountry        String
+  shippingRecipientName String
+  shippingPhone         String
+  shippingAddressLine1  String
+  shippingAddressLine2  String?
+  shippingCity          String
+  shippingState         String
+  shippingPostalCode    String
+  shippingCountry       String
 
-  tenantId        String
-  storeId         String?
-  customerId      String?
+  tenantId   String
+  storeId    String?
+  customerId String?
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user            User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   items           OrderItem[]
   paymentAttempts PaymentAttempt[]
   statusHistory   OrderStatusHistory[]
@@ -516,7 +530,7 @@ model Order {
   // hard-deleted anyway (isActive=false is the retirement path) — nothing
   // about a coupon's lifecycle should ever be blocked by an order that
   // merely referenced it once (PHASE-10-PROPOSAL.md §2.1).
-  coupon          Coupon?                 @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  coupon          Coupon?              @relation(fields: [couponId], references: [id], onDelete: SetNull)
   couponUsage     CouponUsage?
   invoice         Invoice?
 
@@ -543,10 +557,10 @@ model Order {
 // (invoice.numberPrefix) and its statutory format is pending client
 // confirmation.
 model Invoice {
-  id              String   @id @default(uuid())
-  invoiceNumber   String
-  orderId         String   @unique
-  issuedAt        DateTime @default(now())
+  id            String   @id @default(uuid())
+  invoiceNumber String
+  orderId       String   @unique
+  issuedAt      DateTime @default(now())
 
   currency        String
   subtotal        Decimal  @db.Decimal(10, 2)
@@ -559,13 +573,13 @@ model Invoice {
   taxRateSnapshot Decimal? @db.Decimal(5, 4)
   taxBreakdown    Json?
 
-  sellerSnapshot  Json
+  sellerSnapshot Json
 
-  tenantId        String
+  tenantId String
 
-  createdAt       DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  order           Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([issuedAt])
   @@index([tenantId])
@@ -574,20 +588,20 @@ model Invoice {
 
 // Snapshotted lines — never recomputed retroactively (§13.G).
 model OrderItem {
-  id                    String   @id @default(uuid())
-  orderId               String
-  productId             String?
-  productNameSnapshot   String
-  variantLabelSnapshot  String?
-  unitPriceSnapshot     Decimal  @db.Decimal(10, 2)
-  quantity              Int
-  lineTotal             Decimal  @db.Decimal(10, 2)
+  id                   String  @id @default(uuid())
+  orderId              String
+  productId            String?
+  productNameSnapshot  String
+  variantLabelSnapshot String?
+  unitPriceSnapshot    Decimal @db.Decimal(10, 2)
+  quantity             Int
+  lineTotal            Decimal @db.Decimal(10, 2)
 
-  tenantId              String
-  storeId               String?
+  tenantId String
+  storeId  String?
 
-  order          Order                     @relation(fields: [orderId], references: [id])
-  product        Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  order          Order                    @relation(fields: [orderId], references: [id])
+  product        Product?                 @relation(fields: [productId], references: [id], onDelete: SetNull)
   customizations OrderItemCustomization[]
   reviews        Review[]
 
@@ -606,10 +620,10 @@ model OrderItemCustomization {
   textValue          String?
   uploadedFileId     String?
 
-  tenantId           String
+  tenantId String
 
-  orderItem     OrderItem     @relation(fields: [orderItemId], references: [id])
-  uploadedFile  UploadedFile? @relation(fields: [uploadedFileId], references: [id], onDelete: Restrict)
+  orderItem    OrderItem     @relation(fields: [orderItemId], references: [id])
+  uploadedFile UploadedFile? @relation(fields: [uploadedFileId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
   @@map("order_item_customizations")
@@ -641,14 +655,14 @@ model PaymentAttempt {
   method            String?
   rawPayload        Json?
 
-  tenantId          String
+  tenantId String
 
-  createdAt         DateTime             @default(now())
-  capturedAt        DateTime?
-  updatedAt         DateTime             @updatedAt
+  createdAt  DateTime  @default(now())
+  capturedAt DateTime?
+  updatedAt  DateTime  @updatedAt
 
-  order             Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  refunds           Refund[]
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refunds Refund[]
 
   @@index([orderId])
   @@index([tenantId])
@@ -681,12 +695,12 @@ model Refund {
   reason           String?
   failureReason    String?
 
-  tenantId         String
+  tenantId String
 
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  paymentAttempt   PaymentAttempt @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
+  paymentAttempt PaymentAttempt @relation(fields: [paymentAttemptId], references: [id], onDelete: Restrict)
 
   @@index([paymentAttemptId])
   @@index([tenantId])
@@ -695,21 +709,21 @@ model Refund {
 
 // Append-only audit trail (§13.K/L).
 model OrderStatusHistory {
-  id             String       @id @default(uuid())
-  orderId        String
-  fromStatus     OrderStatus?
-  toStatus       OrderStatus
+  id              String       @id @default(uuid())
+  orderId         String
+  fromStatus      OrderStatus?
+  toStatus        OrderStatus
   changedByUserId String?
-  note           String?
+  note            String?
 
-  tenantId               String
-  changedByCustomerId    String?
-  changedByMembershipId  String?
+  tenantId              String
+  changedByCustomerId   String?
+  changedByMembershipId String?
 
-  createdAt      DateTime     @default(now())
+  createdAt DateTime @default(now())
 
-  order          Order        @relation(fields: [orderId], references: [id])
-  changedBy      User?        @relation(fields: [changedByUserId], references: [id])
+  order     Order @relation(fields: [orderId], references: [id])
+  changedBy User? @relation(fields: [changedByUserId], references: [id])
 
   @@index([orderId])
   @@index([tenantId])
@@ -724,18 +738,18 @@ model OrderStatusHistory {
 // exponential-backoff + dead-letter policy the outbox poller already had
 // (Phase 13.3).
 model WebhookEvent {
-  id              String              @id @default(uuid())
-  razorpayEventId String              @unique
+  id              String             @id @default(uuid())
+  razorpayEventId String             @unique
   payload         Json
-  status          WebhookEventStatus  @default(RECEIVED)
+  status          WebhookEventStatus @default(RECEIVED)
 
-  attempts        Int                 @default(0)
-  availableAt     DateTime            @default(now())
-  lastError       String?
-  processedAt     DateTime?
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  lastError   String?
+  processedAt DateTime?
 
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status, availableAt])
   @@map("webhook_events")
@@ -743,20 +757,20 @@ model WebhookEvent {
 
 // Checkout dedup — claimed via INSERT...ON CONFLICT DO NOTHING (§13.G).
 model IdempotencyKey {
-  id            String    @id @default(uuid())
-  key           String    @unique
+  id            String   @id @default(uuid())
+  key           String   @unique
   userId        String
   endpoint      String
-  resultOrderId String?   @unique
+  resultOrderId String?  @unique
   expiresAt     DateTime
 
-  tenantId      String
-  customerId    String?
+  tenantId   String
+  customerId String?
 
-  createdAt     DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  user          User      @relation(fields: [userId], references: [id])
-  resultOrder   Order?    @relation(fields: [resultOrderId], references: [id])
+  user        User   @relation(fields: [userId], references: [id])
+  resultOrder Order? @relation(fields: [resultOrderId], references: [id])
 
   @@index([tenantId])
   @@index([customerId])
@@ -774,14 +788,14 @@ model OutboxEvent {
   payload       Json
   status        OutboxEventStatus @default(PENDING)
 
-  attempts      Int               @default(0)
-  availableAt   DateTime          @default(now())
-  lastError     String?
-  processedAt   DateTime?
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  lastError   String?
+  processedAt DateTime?
 
-  tenantId      String?
+  tenantId String?
 
-  createdAt     DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([status, availableAt])
   @@index([tenantId])
@@ -793,9 +807,9 @@ model OutboxEvent {
 // Small admin-editable config (flat shipping fee, etc.) — no shipping-rules
 // engine in MVP (§15).
 model AppSetting {
-  id        String   @id @default(uuid())
-  key       String   @unique
-  value     String
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
 
   updatedAt DateTime @updatedAt
 
@@ -830,16 +844,16 @@ model Review {
   bodyText    String?
   status      ReviewStatus @default(PUBLISHED)
 
-  tenantId    String
-  storeId     String?
-  customerId  String?
+  tenantId   String
+  storeId    String?
+  customerId String?
 
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  product     Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
-  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
-  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
 
   @@unique([productId, userId])
   @@index([productId])
@@ -893,8 +907,8 @@ model Coupon {
   description       String?
   createdByAdminId  String
 
-  tenantId  String
-  storeId   String?
+  tenantId String
+  storeId  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -921,11 +935,11 @@ model Coupon {
 // before it and never without it. Append-only, no updatedAt, same
 // audit-log spirit as OrderStatusHistory.
 model CouponUsage {
-  id                    String   @id @default(uuid())
+  id                    String  @id @default(uuid())
   couponId              String
   userId                String
-  orderId               String   @unique
-  discountAppliedAmount Decimal  @db.Decimal(10, 2)
+  orderId               String  @unique
+  discountAppliedAmount Decimal @db.Decimal(10, 2)
 
   tenantId   String
   storeId    String?
@@ -1032,16 +1046,23 @@ model Tenant {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  stores       Store[]
-  memberships  TenantMembership[]
-  storeDomains StoreDomain[]
-  subscription Subscription?
+  stores            Store[]
+  memberships       TenantMembership[]
+  storeDomains      StoreDomain[]
+  subscription      Subscription?
   // SaaS Identity (Phase 2a) — back-relation only; adds NO column to `tenants`.
   // `Customer.tenantId` is denormalized (isolation defence-in-depth); the
   // same-store composite FK is Phase 4 hardening (decision P2-D12).
-  customers    Customer[]
+  customers         Customer[]
   // Phase 4 (W3) — back-relation only; adds NO column to `tenants`.
-  tenantCounters TenantCounter[]
+  tenantCounters    TenantCounter[]
+  // Phase 5 (W2) — back-relations only; add NO column to `tenants`.
+  platformAuditLogs PlatformAuditLog[]
+  tenantAuditLogs   TenantAuditLog[]
+  // Phase 5 (W6) — back-relation only; adds NO column to `tenants`.
+  supportSessions   SupportSession[]
+  // Phase 5 (W9) — back-relation only; adds NO column to `tenants`.
+  tenantSettings    TenantSetting[]
 
   @@index([status])
   @@map("tenants")
@@ -1078,8 +1099,21 @@ model Store {
   // The FK column `storeId` lives on `customers`. Customer = store-scoped
   // storefront identity (decision D5-a).
   customers Customer[]
+  // Phase 5 (W9) — back-relation only; adds NO column to `stores`. The
+  // StoreSetting model this file's own comment above anticipated
+  // ("Branding / a keyed StoreSetting are deferred to Phase 4/12").
+  storeSettings StoreSetting[]
 
   @@unique([tenantId, slug])
+  // Phase 5 (W9) — supporting index for StoreSetting's composite ownership
+  // FK (`store_settings(tenantId, storeId) -> stores(tenantId, id)`,
+  // hand-added to that model's own migration, same convention every Phase
+  // 4 W6 composite ownership FK already uses) — exactly the same
+  // "(scopeCol, id) is not inferred from the id-only PRIMARY KEY"
+  // prerequisite that migration documents for 8 other tables. This index
+  // itself IS representable in Prisma's own DSL (a plain compound
+  // @@unique, no WHERE clause) — only the FK that consumes it is not.
+  @@unique([tenantId, id])
   @@index([tenantId])
   @@map("stores")
 }
@@ -1136,6 +1170,11 @@ model TenantMembership {
   user      User   @relation("TenantMembershipUser", fields: [userId], references: [id], onDelete: Restrict)
   tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   invitedBy User?  @relation("TenantMembershipInvitedBy", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  // Phase 5 (W2) — back-relation only; adds NO column to `tenant_memberships`.
+  // A TenantAuditLog.actorMembershipId row's actor (SET NULL if the
+  // membership is later suspended/removed — the log entry survives).
+  tenantAuditLogs TenantAuditLog[]
 
   @@unique([userId, tenantId])
   @@index([tenantId])
@@ -1241,6 +1280,9 @@ model Customer {
   store  Store  @relation(fields: [storeId], references: [id], onDelete: Restrict)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  // Phase 5 (W2) — back-relation only; adds NO column to `customers`.
+  tenantAuditLogs TenantAuditLog[]
+
   @@unique([storeId, email])
   @@index([storeId])
   @@index([tenantId])
@@ -1268,15 +1310,235 @@ model Customer {
 // counter pattern.
 // ═══════════════════════════════════════════════════════════════════════════
 model TenantCounter {
-  id        String   @id @default(uuid())
-  tenantId  String
-  key       String
-  value     Int      @default(0)
+  id       String @id @default(uuid())
+  tenantId String
+  key      String
+  value    Int    @default(0)
 
   updatedAt DateTime @updatedAt
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, key])
   @@map("tenant_counters")
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 5 (W2) — Audit foundation
+//   Master Plan §11 (Platform Admin / Tenant Admin) · Phase 5 Decision
+//   Ratification, decisions P5-D3 / P5-D4A (this session).
+//
+// Two frozen, append-only models — never a generic AuditLog (decision
+// P5-D3 explicitly rejects that design). No application service ever calls
+// `.update()`/`.delete()`/`.upsert()` on either model (enforced by
+// backend/src/common/audit/audit.append-only.spec.ts's static scan).
+// Writes always go through AuditService.logPlatformAction /
+// .logTenantAction, always inside the CALLER's own transaction — the exact
+// convention NotificationsService.enqueueOutboxEvent already established
+// for OutboxEvent, and OrderStatusHistory's own append-only precedent
+// before that.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Platform-scoped audit trail — every SUPER_ADMIN action on /platform/*
+// (Phase 5 W3 onward). `tenantId` is nullable: present only when the
+// action touched a specific tenant (e.g. suspend/resume, opening a
+// SupportSession); absent for purely platform-internal actions.
+// `justification` is required BY APPLICATION LOGIC for any action that
+// reaches into a specific tenant's context (§11 SECURITY IMPACT) — the
+// column itself stays nullable since not every platform action needs one.
+model PlatformAuditLog {
+  id            String  @id @default(uuid())
+  actorUserId   String
+  action        String
+  targetType    String
+  targetId      String
+  tenantId      String?
+  justification String?
+  metadata      Json
+  ip            String
+
+  createdAt DateTime @default(now())
+
+  actor  User    @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([actorUserId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("platform_audit_logs")
+}
+
+// Tenant-scoped general audit trail — settings/team/coupon/catalog changes
+// and any other sensitive Tenant Control Plane mutation (§11: "the general
+// one for settings/team/coupon/catalog changes" — OrderStatusHistory
+// remains the separate, unchanged, order-specific trail). Read is always
+// filtered by the caller's own tenantId; no route may return another
+// tenant's rows (frozen SaaS invariant 5).
+//
+// Exactly one of `actorMembershipId` / `actorCustomerId` is set, per the
+// acting identity — both SET NULL on their referenced row's removal
+// (incidental reference, matching order_status_history.changedByUserId's
+// existing convention), so the log entry survives even if the acting
+// membership/customer is later suspended or removed.
+//
+// `viaSupportSessionId` (decision P5-D4A) is a forward reference to the
+// SupportSession model Phase 5 W6 introduces — NOT a relation yet (that
+// model does not exist as of W2; see the W2 implementation report for why
+// a real FK is deliberately deferred rather than worked around). When set,
+// it identifies that this action occurred through a platform-granted
+// SupportSession rather than an ordinary membership, and which one.
+model TenantAuditLog {
+  id                  String  @id @default(uuid())
+  tenantId            String
+  actorMembershipId   String?
+  actorCustomerId     String?
+  action              String
+  targetType          String
+  targetId            String
+  metadata            Json
+  viaSupportSessionId String?
+
+  createdAt DateTime @default(now())
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  actorMembership TenantMembership? @relation(fields: [actorMembershipId], references: [id], onDelete: SetNull)
+  actorCustomer   Customer?         @relation(fields: [actorCustomerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("tenant_audit_logs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 5 (W6) — SupportSession
+//   Master Plan §11 (Platform Admin / Tenant Admin) · Phase 5 decisions
+//   P5-D4 / P5-D4A / P5-D8 (this session's Phase 5 ratification).
+//
+// A platform-initiated, SUPER_ADMIN-created, single-tenant-scoped,
+// explicitly-justified, explicitly-expiring, revocable grant that a future
+// (now: current) request can present to operate within one tenant's context
+// without a TenantMembership (frozen SaaS invariant 4: platform authority
+// stays structurally separate from tenant membership — this model is the
+// one deliberate, fully-audited exception, not a loophole in that
+// invariant).
+//
+// No `status` column — ACTIVE/REVOKED/EXPIRED is deliberately DERIVED at
+// check time from `revokedAt`/`expiresAt` (support-session-context.guard.ts,
+// support-session.service.ts), never persisted, and never advanced by a
+// background job (there is no cron/worker in this codebase and W6
+// introduces none — expiration is enforced live, on every request that
+// presents a session, exactly like `RefreshToken.expiresAt`/`revokedAt`
+// below already do for a completely different credential).
+//
+// `grantedPermissions` stores plain strings, not a second permission
+// catalogue — every value is validated against the existing, ratified
+// `PERMISSIONS` catalogue (`auth/permissions/permission.ts`) at creation
+// time (`support-session.service.ts`); nothing here defines a new
+// permission or a new role. At request time this array is a CEILING
+// (`PermissionsGuard`), never a grant beyond what the underlying route
+// already requires — see that guard's own header comment.
+//
+// No secret/token column: request-time identification is the caller's
+// already-verified JWT identity (`AuthenticatedUser`, unchanged) plus this
+// row's own `id` (a plain, non-secret UUID, exactly like every other
+// resource id in this system) presented via a header and authorized by a
+// server-side ownership + validity check
+// (`common/tenant/support-session-context.guard.ts`) — not by treating the
+// id itself as a bearer credential. See that guard's file header for the
+// full reasoning and the W6 implementation report for why no new
+// cryptographic token was introduced.
+model SupportSession {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  createdByUserId    String
+  justification      String
+  grantedPermissions String[]
+  expiresAt          DateTime
+  revokedAt          DateTime?
+  revokedByUserId    String?
+
+  createdAt DateTime @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy User   @relation("SupportSessionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  revokedBy User?  @relation("SupportSessionRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("support_sessions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 5 (W9) — AppSetting tenant/store ownership (decision D11)
+//   Master Plan §11 (Platform Admin / Tenant Admin).
+//
+// The original `AppSetting` model above (`@@map("app_settings")`) stays
+// completely UNCHANGED and UNMIGRATED — it cannot be altered in place
+// (migration-safety.spec.ts's additive-only guard has no exemption for a
+// pre-existing table gaining a NOT NULL tenantId/storeId outside its own
+// fixed, already-ratified W7 allowlist, and rightly so: extending that
+// allowlist for a brand-new phase would weaken the exact discipline that
+// guard exists to enforce). It continues to serve exactly one purpose
+// after W9: `OrdersService.generateOrderNumber`'s platform-wide order
+// counter (`order_number_counter`) — a deliberately platform-scoped
+// identifier by original design, out of scope for this decision (see the
+// W9 implementation report). `invoice_number_counter` (the OTHER counter
+// that used to live in `app_settings`) is retired by this phase in favor
+// of the already-existing `TenantCounter` model (Phase 4 W3/W4, decision
+// D10) — its old `app_settings` row is left physically in place,
+// untouched, but no longer read or written by any application code.
+//
+// Two new models replace the global key-value rows for the frozen D11
+// key set — deliberately TWO separate models, not one mixed-ownership
+// table: each ownership axis gets its own required (never nullable)
+// scope column and a plain `@@unique`, sidestepping the SQL NULL-equality
+// gotcha a single nullable-storeId table would have (two rows with
+// storeId=NULL are NOT "duplicates" under standard unique-constraint NULL
+// semantics, so a mixed model could not actually prevent two tenant-owned
+// rows for the same key without a hand-written partial index). Which of
+// the two a given key uses is decided once, centrally, by
+// `app-setting.constants.ts`'s ownership classification — never inferred
+// per-row, never client-selectable.
+// ═══════════════════════════════════════════════════════════════════════════
+
+model TenantSetting {
+  id    String @id @default(uuid())
+  tenantId String
+  key      String
+  value    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("tenant_settings")
+}
+
+// `tenantId` is denormalized alongside `storeId` (same convention
+// `Customer.tenantId` already establishes — "isolation defence-in-depth")
+// and cross-checked by a composite ownership FK
+// (`store_settings(tenantId, storeId) -> stores(tenantId, id)`) — hand-added
+// to this model's own migration, exactly like every Phase 4 W6 composite
+// FK, since Prisma's relation DSL cannot represent a second FK to a table
+// already related via a plain single-column FK (`store`, below). This is
+// what makes "a Store-owned setting must not reference a Store belonging
+// to another Tenant" a database-enforced invariant, not merely an
+// application-layer promise.
+model StoreSetting {
+  id       String @id @default(uuid())
+  tenantId String
+  storeId  String
+  key      String
+  value    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  @@unique([storeId, key])
+  @@index([storeId])
+  @@index([tenantId])
+  @@map("store_settings")
+}
+

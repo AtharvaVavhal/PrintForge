@@ -18,6 +18,11 @@ import {
   decimalToPaise,
   paiseToDecimalString,
 } from '../cart/pricing/money.util';
+import { AuditService } from '../common/audit/audit.service';
+import { resolveTenantAuditActor } from '../common/audit/tenant-actor-attribution';
+import { assertObjectInTenant } from '../common/tenant/object-auth';
+import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { TenantContext } from '../common/tenant/tenant-context';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ListOrdersQueryDto } from './dto/list-orders-query.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
@@ -40,6 +45,19 @@ const ORDER_NUMBER_COUNTER_KEY = 'order_number_counter';
 interface Actor {
   role: Role;
   actorId: string;
+}
+
+/**
+ * Phase 5 W8 — present only for an ADMIN-initiated transition (never the
+ * customer-facing `cancelOrder` path, which shares `performCancellation`/
+ * `transitionOrderWithHistory` with the admin path but must never produce
+ * a TenantAuditLog row of its own: a storefront customer is not a tenant
+ * actor). When present, the audited private method writes exactly one
+ * TenantAuditLog row inside the SAME transaction as the order mutation.
+ */
+interface TenantAuditContext {
+  tenantContext: TenantContext;
+  actor: AuthenticatedUser;
 }
 
 const ORDER_LIST_INCLUDE = {
@@ -79,6 +97,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly auditService: AuditService,
   ) {}
 
   /**
@@ -149,6 +168,27 @@ export class OrdersService {
     return this.paginatedList(where, query.page, query.limit);
   }
 
+  /**
+   * W10 hardening (P0) — GET /admin/customers/:id's "recent orders" panel
+   * used to call `listOrdersForUser` above directly, which scopes by
+   * `userId` alone (correct for that method's OWN customer-facing caller,
+   * where a user only ever has one identity). Reused unmodified from an
+   * admin context it would leak a customer's order history with every
+   * OTHER tenant they've ever shopped at, onto THIS tenant's admin
+   * dashboard. This tenant-scoped sibling is for admin callers only.
+   */
+  async adminListOrdersForCustomer(
+    tenantContext: TenantContext,
+    userId: string,
+    query: { page: number; limit: number },
+  ): Promise<PaginatedResult<OrderListItemView>> {
+    const where: Prisma.OrderWhereInput = {
+      userId,
+      tenantId: tenantContext.tenantId,
+    };
+    return this.paginatedList(where, query.page, query.limit);
+  }
+
   async getOrderDetailForUser(
     userId: string,
     orderId: string,
@@ -190,10 +230,19 @@ export class OrdersService {
 
   // ─── Admin-facing (GET/PATCH /admin/orders[/:id], PATCH .../status) ───────
 
+  /**
+   * W10 hardening (P0) — this list, adminGetOrderDetail, and
+   * adminRecentOrders below were all unconditionally global (no
+   * `where.tenantId` at all): any tenant with `orders:read` could browse
+   * and page through every OTHER tenant's full order history, including
+   * customer PII (shipping name/address/phone) and financial totals.
+   */
   async adminListOrders(
+    tenantContext: TenantContext,
     query: ListAdminOrdersQueryDto,
   ): Promise<PaginatedResult<OrderListItemView>> {
     const where: Prisma.OrderWhereInput = {
+      tenantId: tenantContext.tenantId,
       ...(query.status ? { status: query.status } : {}),
       ...(query.userId ? { userId: query.userId } : {}),
       ...(query.dateFrom || query.dateTo
@@ -208,8 +257,12 @@ export class OrdersService {
     return this.paginatedList(where, query.page, query.limit);
   }
 
-  async adminGetOrderDetail(orderId: string): Promise<OrderDetailView> {
+  async adminGetOrderDetail(
+    tenantContext: TenantContext,
+    orderId: string,
+  ): Promise<OrderDetailView> {
     const order = await this.findOrderDetailOrThrow(orderId);
+    assertObjectInTenant(order, tenantContext.tenantId);
     return this.toDetailView(order);
   }
 
@@ -219,8 +272,12 @@ export class OrdersService {
    * one findMany, no separate count query since the dashboard has no
    * pagination to report.
    */
-  async adminRecentOrders(limit: number): Promise<OrderListItemView[]> {
+  async adminRecentOrders(
+    tenantContext: TenantContext,
+    limit: number,
+  ): Promise<OrderListItemView[]> {
     const rows = await this.prisma.order.findMany({
+      where: { tenantId: tenantContext.tenantId },
       include: ORDER_LIST_INCLUDE,
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -236,34 +293,58 @@ export class OrdersService {
    * §13.L already specifies for a direct admin transition to REFUNDED.
    */
   async adminTransitionStatus(
-    adminId: string,
+    tenantContext: TenantContext,
+    admin: AuthenticatedUser,
     orderId: string,
     dto: UpdateOrderStatusDto,
   ): Promise<OrderDetailView> {
     const order = await this.findOrderOrThrow(orderId);
+    // W10 hardening (P0) — this lookup was, until now, global: any tenant
+    // with `orders:transition` could cancel/refund/transition ANY other
+    // tenant's order by id, and the resulting TenantAuditLog row would be
+    // written under the ACTOR's tenant, not the order's own.
+    assertObjectInTenant(order, tenantContext.tenantId);
 
     if (order.status === dto.status) {
-      return this.adminGetOrderDetail(orderId);
+      return this.adminGetOrderDetail(tenantContext, orderId);
     }
     assertTransitionAllowed(order.status, dto.status);
 
-    const actor: Actor = { role: Role.ADMIN, actorId: adminId };
+    const actor: Actor = { role: Role.ADMIN, actorId: admin.id };
+    const tenantAudit: TenantAuditContext = { tenantContext, actor: admin };
     if (dto.status === OrderStatus.CANCELLED) {
-      await this.performCancellation(order, actor, dto.reason);
+      await this.performCancellation(order, actor, dto.reason, tenantAudit);
     } else if (dto.status === OrderStatus.REFUNDED) {
-      await this.performRefundRecording(order, actor, dto.reason);
+      await this.performRefundRecording(order, actor, dto.reason, tenantAudit);
     } else {
-      await this.prisma.$transaction((tx) =>
-        this.transitionOrderWithHistory(
+      await this.prisma.$transaction(async (tx) => {
+        await this.transitionOrderWithHistory(
           tx,
           order,
           dto.status,
           actor,
           dto.reason,
-        ),
-      );
+        );
+        const attribution = await resolveTenantAuditActor(
+          tx,
+          tenantContext,
+          admin,
+        );
+        await this.auditService.logTenantAction(tx, {
+          tenantId: tenantContext.tenantId,
+          ...attribution,
+          action: 'order.status_change',
+          targetType: 'Order',
+          targetId: order.id,
+          metadata: {
+            fromStatus: order.status,
+            toStatus: dto.status,
+            orderTenantId: order.tenantId,
+          },
+        });
+      });
     }
-    return this.adminGetOrderDetail(orderId);
+    return this.adminGetOrderDetail(tenantContext, orderId);
   }
 
   // ─── Cancellation + manual-refund flagging ─────────────────────────────
@@ -286,6 +367,7 @@ export class OrdersService {
     order: Order,
     actor: Actor,
     reason: string | undefined,
+    tenantAudit?: TenantAuditContext,
   ): Promise<void> {
     const capturedAttempt = await this.prisma.paymentAttempt.findFirst({
       where: { orderId: order.id, status: PaymentAttemptStatus.CAPTURED },
@@ -314,6 +396,28 @@ export class OrdersService {
         reason,
         needsManualRefund,
       );
+      // Phase 5 W8 — ADMIN-initiated cancellation only (see
+      // TenantAuditContext's own doc comment: absent for the
+      // customer-facing cancelOrder path, which shares this method).
+      if (tenantAudit) {
+        const attribution = await resolveTenantAuditActor(
+          tx,
+          tenantAudit.tenantContext,
+          tenantAudit.actor,
+        );
+        await this.auditService.logTenantAction(tx, {
+          tenantId: tenantAudit.tenantContext.tenantId,
+          ...attribution,
+          action: 'order.cancel',
+          targetType: 'Order',
+          targetId: order.id,
+          metadata: {
+            reason: reason ?? null,
+            needsManualRefund,
+            orderTenantId: order.tenantId,
+          },
+        });
+      }
     });
   }
 
@@ -332,6 +436,7 @@ export class OrdersService {
     order: Order,
     actor: Actor,
     reason: string | undefined,
+    tenantAudit?: TenantAuditContext,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await tx.refund.updateMany({
@@ -348,6 +453,26 @@ export class OrdersService {
         actor,
         reason,
       );
+      // Phase 5 W8 — this path is only ever reached from
+      // adminTransitionStatus (no customer-facing route ever transitions
+      // directly to REFUNDED), but `tenantAudit` is still checked
+      // defensively rather than assumed, for the same reason
+      // performCancellation does.
+      if (tenantAudit) {
+        const attribution = await resolveTenantAuditActor(
+          tx,
+          tenantAudit.tenantContext,
+          tenantAudit.actor,
+        );
+        await this.auditService.logTenantAction(tx, {
+          tenantId: tenantAudit.tenantContext.tenantId,
+          ...attribution,
+          action: 'order.refund_record',
+          targetType: 'Order',
+          targetId: order.id,
+          metadata: { reason: reason ?? null, orderTenantId: order.tenantId },
+        });
+      }
     });
   }
 

@@ -108,4 +108,64 @@ describe('PermissionsGuard (Phase 3)', () => {
       ForbiddenException,
     );
   });
+
+  describe('support-session permission ceiling (Phase 5 W6, decision P5-D8)', () => {
+    it('admits a support session scoped to exactly the required permission', () => {
+      const { context, reflector } = makeContext('orders:read', {
+        tenantId: 't1',
+        source: 'support-session',
+        supportSession: { id: 's1', grantedPermissions: ['orders:read'] },
+      });
+      expect(new PermissionsGuard(reflector).canActivate(context)).toBe(true);
+    });
+
+    it('denies a support session NOT scoped to the required permission', () => {
+      const { context, reflector } = makeContext('orders:read', {
+        tenantId: 't1',
+        source: 'support-session',
+        supportSession: { id: 's1', grantedPermissions: ['customers:read'] },
+      });
+      expect(() =>
+        new PermissionsGuard(reflector).canActivate(context),
+      ).toThrow(ForbiddenException);
+    });
+
+    it('a scope granting orders:read does NOT also grant orders:transition (ceiling, not a role)', () => {
+      const { context, reflector } = makeContext('orders:transition', {
+        tenantId: 't1',
+        source: 'support-session',
+        supportSession: { id: 's1', grantedPermissions: ['orders:read'] },
+      });
+      expect(() =>
+        new PermissionsGuard(reflector).canActivate(context),
+      ).toThrow(ForbiddenException);
+    });
+
+    it('a support-session context is never combined with a role-based membership check, even if (incorrectly) both were present', () => {
+      // Defensive: source alone decides which branch runs. A support
+      // session never has a real membership in practice (the guard that
+      // constructs it never sets one), but this pins that `source` — not
+      // the mere presence of `membership` — is what selects the ceiling
+      // branch, so a future bug can't silently fall through to `can()`.
+      const { context, reflector } = makeContext('members:manage', {
+        tenantId: 't1',
+        source: 'support-session',
+        membership: { role: 'OWNER' },
+        supportSession: { id: 's1', grantedPermissions: ['orders:read'] },
+      });
+      expect(() =>
+        new PermissionsGuard(reflector).canActivate(context),
+      ).toThrow(ForbiddenException);
+    });
+
+    it('denies when the tenant context claims support-session source but carries no supportSession payload (defensive fail-closed)', () => {
+      const { context, reflector } = makeContext('orders:read', {
+        tenantId: 't1',
+        source: 'support-session',
+      });
+      expect(() =>
+        new PermissionsGuard(reflector).canActivate(context),
+      ).toThrow(ForbiddenException);
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { TenantContext } from './tenant-context';
+import { assertTenantActive } from './tenant-lifecycle';
 import { withPlatformRlsBypass } from './tenant-rls';
 
 /**
@@ -50,6 +51,8 @@ export class StorefrontTenantResolver {
   constructor(private readonly prisma: PrismaService) {}
 
   async resolveTenantId(hostname: string | undefined): Promise<string> {
+    let tenantId: string | undefined;
+
     if (hostname) {
       const domain = await withPlatformRlsBypass(this.prisma, (tx) =>
         tx.storeDomain.findUnique({
@@ -58,20 +61,35 @@ export class StorefrontTenantResolver {
         }),
       );
       if (domain) {
-        return domain.store.tenantId;
+        tenantId = domain.store.tenantId;
       }
     }
 
-    const mostRecent = await this.prisma.tenant.findFirst({
-      select: { id: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (mostRecent) {
-      return mostRecent.id;
+    if (!tenantId) {
+      const mostRecent = await this.prisma.tenant.findFirst({
+        select: { id: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      tenantId = mostRecent?.id;
     }
-    throw new ConflictException(
-      'Unable to determine which store this request belongs to',
+
+    if (!tenantId) {
+      throw new ConflictException(
+        'Unable to determine which store this request belongs to',
+      );
+    }
+
+    // Phase 5 W4 (SaaS Master Plan §11) — the actual storefront enforcement
+    // point: a shopper never goes through TenantContextGuard's resolution
+    // branches (no TenantMembership), so TenantLifecycleGuard never sees
+    // them either. This is the one place a brand-new cart/upload's tenant
+    // is genuinely resolved from scratch, so it's the one place to block.
+    await assertTenantActive(
+      this.prisma,
+      tenantId,
+      'This store is currently unavailable',
     );
+    return tenantId;
   }
 
   /**

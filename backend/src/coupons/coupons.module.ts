@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../common/audit/audit.module';
 import { CouponsService } from './coupons.service';
 
 /**
@@ -18,6 +19,7 @@ import { CouponsService } from './coupons.service';
  * CouponsService.validateAndClaim/previewDiscount.
  */
 @Module({
+  imports: [AuditModule],
   providers: [CouponsService],
   exports: [CouponsService],
 })

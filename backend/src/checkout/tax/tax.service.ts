@@ -14,6 +14,9 @@ export type TaxPricingMode = 'INCLUSIVE' | 'EXCLUSIVE';
  *                                    displayed prices already include tax)
  *   tax.ratePercent  -> `ratePercent` (single combined GST %, e.g. "18";
  *                                    "0" until set)
+ *
+ * Phase 5 W9 (decision D11) — all three keys are TENANT-owned, read from
+ * `TenantSetting` (never the old global `app_settings`).
  */
 export interface TaxConfig {
   enabled: boolean;
@@ -58,14 +61,20 @@ export class TaxService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Reads the current config directly from app_settings (same pattern as
+  /** Reads the current config from `TenantSetting` (same pattern as
    * CheckoutService.getShippingFeePaise). Pass the checkout transaction
-   * client so the config read is part of that transaction. */
+   * client so the config read is part of that transaction. `tenantId` is
+   * always the caller's own already server-derived value (an already-
+   * loaded Cart's `tenantId`) — never a client-supplied one. */
   async getConfig(
-    client: Pick<PrismaService, 'appSetting'> = this.prisma,
+    tenantId: string,
+    client: Pick<PrismaService, 'tenantSetting'> = this.prisma,
   ): Promise<TaxConfig> {
-    const rows = await client.appSetting.findMany({
-      where: { key: { in: [TAX_ENABLED_KEY, TAX_MODE_KEY, TAX_RATE_KEY] } },
+    const rows = await client.tenantSetting.findMany({
+      where: {
+        tenantId,
+        key: { in: [TAX_ENABLED_KEY, TAX_MODE_KEY, TAX_RATE_KEY] },
+      },
       select: { key: true, value: true },
     });
     const map = new Map(rows.map((r) => [r.key, r.value]));

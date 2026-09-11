@@ -11,6 +11,11 @@ import {
   decimalToPaise,
   paiseToDecimalString,
 } from '../cart/pricing/money.util';
+import { AuditService } from '../common/audit/audit.service';
+import { resolveTenantAuditActor } from '../common/audit/tenant-actor-attribution';
+import { assertObjectInTenant } from '../common/tenant/object-auth';
+import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { TenantContext } from '../common/tenant/tenant-context';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { UpdateCouponDto } from './dto/update-coupon.dto';
 import { ListAdminCouponsQueryDto } from './dto/list-admin-coupons-query.dto';
@@ -30,6 +35,11 @@ export interface ValidateCouponParams {
   subtotalPaise: bigint;
   shippingFeePaise: bigint;
   lineItems: CouponLineItem[];
+  /** The checkout's own already server-derived tenant (an already-loaded
+   * Cart's `tenantId`) — never a client-supplied value. W10 hardening: a
+   * coupon code is scoped `(storeId/tenant, code)` since W6/W7, not
+   * globally unique, so the lookup below must filter by it too. */
+  tenantId: string;
 }
 
 export interface CouponDiscountResult {
@@ -56,14 +66,25 @@ type PrismaOrTx = Prisma.TransactionClient;
 
 @Injectable()
 export class CouponsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ─── Admin CRUD (GET/POST/PATCH /admin/coupons[/:id]) ───────────────────
 
+  /**
+   * W10 hardening (P0) — this list, and getCoupon below, were
+   * unconditionally global (no `where.tenantId` at all): any tenant with
+   * `coupons:read` could browse every OTHER tenant's coupons (codes,
+   * discount rules, usage limits).
+   */
   async listCoupons(
+    tenantContext: TenantContext,
     query: ListAdminCouponsQueryDto,
   ): Promise<PaginatedResult<CouponView>> {
     const where: Prisma.CouponWhereInput = {
+      tenantId: tenantContext.tenantId,
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.type ? { type: query.type } : {}),
     };
@@ -87,8 +108,12 @@ export class CouponsService {
     };
   }
 
-  async getCoupon(id: string): Promise<CouponView> {
+  async getCoupon(
+    tenantContext: TenantContext,
+    id: string,
+  ): Promise<CouponView> {
     const coupon = await this.getCouponOrThrow(id);
+    assertObjectInTenant(coupon, tenantContext.tenantId);
     return this.toView(coupon);
   }
 
@@ -101,63 +126,108 @@ export class CouponsService {
    * direct-query pattern for User/Order — PHASE-10-PROPOSAL.md §2.3).
    */
   async createCoupon(
-    adminId: string,
-    tenantId: string,
+    tenantContext: TenantContext,
+    actor: AuthenticatedUser,
     dto: CreateCouponDto,
   ): Promise<CouponView> {
     this.assertTypeFieldsConsistent(dto);
-    await this.assertScopeFieldsConsistent(dto);
+    await this.assertScopeFieldsConsistent(tenantContext, dto);
 
-    try {
-      const created = await this.prisma.coupon.create({
-        data: {
-          code: dto.code.trim().toUpperCase(),
-          type: dto.type,
-          percentageOff:
-            dto.type === CouponType.PERCENTAGE ? dto.percentageOff : null,
-          flatAmountOff:
-            dto.type === CouponType.FLAT_AMOUNT ? dto.flatAmountOff : null,
-          scopeType: dto.scopeType,
-          categoryId:
-            dto.scopeType === CouponScopeType.CATEGORY ? dto.categoryId : null,
-          minOrderValue: dto.minOrderValue,
-          usageLimitTotal: dto.usageLimitTotal,
-          usageLimitPerUser: dto.usageLimitPerUser ?? 1,
-          firstOrderOnly: dto.firstOrderOnly ?? false,
-          startsAt: dto.startsAt,
-          expiresAt: dto.expiresAt,
-          description: dto.description,
-          createdByAdminId: adminId,
-          // Server-derived from the caller's own resolved tenant context
-          // (never client-supplied) — Phase 4 W7 / P4-D2.
-          tenantId,
-        },
+    return this.prisma.$transaction(async (tx) => {
+      let created: Coupon;
+      try {
+        created = await tx.coupon.create({
+          data: {
+            code: dto.code.trim().toUpperCase(),
+            type: dto.type,
+            percentageOff:
+              dto.type === CouponType.PERCENTAGE ? dto.percentageOff : null,
+            flatAmountOff:
+              dto.type === CouponType.FLAT_AMOUNT ? dto.flatAmountOff : null,
+            scopeType: dto.scopeType,
+            categoryId:
+              dto.scopeType === CouponScopeType.CATEGORY
+                ? dto.categoryId
+                : null,
+            minOrderValue: dto.minOrderValue,
+            usageLimitTotal: dto.usageLimitTotal,
+            usageLimitPerUser: dto.usageLimitPerUser ?? 1,
+            firstOrderOnly: dto.firstOrderOnly ?? false,
+            startsAt: dto.startsAt,
+            expiresAt: dto.expiresAt,
+            description: dto.description,
+            createdByAdminId: actor.id,
+            // Server-derived from the caller's own resolved tenant context
+            // (never client-supplied) — Phase 4 W7 / P4-D2.
+            tenantId: tenantContext.tenantId,
+          },
+        });
+      } catch (err) {
+        this.mapUniqueConstraintError(
+          err,
+          'A coupon with this code already exists',
+        );
+      }
+      const attribution = await resolveTenantAuditActor(
+        tx,
+        tenantContext,
+        actor,
+      );
+      await this.auditService.logTenantAction(tx, {
+        tenantId: tenantContext.tenantId,
+        ...attribution,
+        action: 'coupon.create',
+        targetType: 'Coupon',
+        targetId: created.id,
+        metadata: { code: created.code, type: dto.type },
       });
       return this.toView(created);
-    } catch (err) {
-      this.mapUniqueConstraintError(
-        err,
-        'A coupon with this code already exists',
-      );
-    }
+    });
   }
 
-  async updateCoupon(id: string, dto: UpdateCouponDto): Promise<CouponView> {
-    await this.getCouponOrThrow(id);
-    const updated = await this.prisma.coupon.update({
-      where: { id },
-      data: {
-        minOrderValue: dto.minOrderValue,
-        usageLimitTotal: dto.usageLimitTotal,
-        usageLimitPerUser: dto.usageLimitPerUser,
-        firstOrderOnly: dto.firstOrderOnly,
-        startsAt: dto.startsAt,
-        expiresAt: dto.expiresAt,
-        isActive: dto.isActive,
-        description: dto.description,
-      },
+  async updateCoupon(
+    tenantContext: TenantContext,
+    actor: AuthenticatedUser,
+    id: string,
+    dto: UpdateCouponDto,
+  ): Promise<CouponView> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.coupon.findUnique({ where: { id } });
+      if (!existing) {
+        throw new NotFoundException('Coupon not found');
+      }
+      // W10 hardening (P0) — this lookup was, until now, global: any
+      // tenant with `coupons:write` could edit ANY other tenant's coupon
+      // (discount amount, usage limits, active status) by id.
+      assertObjectInTenant(existing, tenantContext.tenantId);
+      const updated = await tx.coupon.update({
+        where: { id },
+        data: {
+          minOrderValue: dto.minOrderValue,
+          usageLimitTotal: dto.usageLimitTotal,
+          usageLimitPerUser: dto.usageLimitPerUser,
+          firstOrderOnly: dto.firstOrderOnly,
+          startsAt: dto.startsAt,
+          expiresAt: dto.expiresAt,
+          isActive: dto.isActive,
+          description: dto.description,
+        },
+      });
+      const attribution = await resolveTenantAuditActor(
+        tx,
+        tenantContext,
+        actor,
+      );
+      await this.auditService.logTenantAction(tx, {
+        tenantId: tenantContext.tenantId,
+        ...attribution,
+        action: 'coupon.update',
+        targetType: 'Coupon',
+        targetId: id,
+        metadata: { fields: Object.keys(dto) },
+      });
+      return this.toView(updated);
     });
-    return this.toView(updated);
   }
 
   private assertTypeFieldsConsistent(dto: CreateCouponDto): void {
@@ -194,6 +264,7 @@ export class CouponsService {
   }
 
   private async assertScopeFieldsConsistent(
+    tenantContext: TenantContext,
     dto: CreateCouponDto,
   ): Promise<void> {
     if (dto.scopeType === CouponScopeType.CATEGORY) {
@@ -206,6 +277,14 @@ export class CouponsService {
         where: { id: dto.categoryId },
       });
       if (!category) {
+        throw new BadRequestException(
+          'categoryId does not reference an existing category',
+        );
+      }
+      // W10 hardening (P0) — this existence check never verified the
+      // category belonged to the CREATING tenant: a Tenant A admin could
+      // scope their coupon to Tenant B's category id.
+      if (category.tenantId !== tenantContext.tenantId) {
         throw new BadRequestException(
           'categoryId does not reference an existing category',
         );
@@ -350,8 +429,15 @@ export class CouponsService {
     // `code` is no longer a bare-unique DB column as of W7 (superseded by
     // the composite `(storeId, code)` unique added in W6) — `findFirst`,
     // not `findUnique`, is the correct lookup shape now.
+    //
+    // W10 hardening (P0) — this lookup was, until now, missing the
+    // `tenantId` filter entirely: a customer checking out on tenant A's
+    // storefront could redeem a coupon CODE that actually belongs to
+    // tenant B (wrong discount applied, and tenant B's own usedCount/
+    // usage-limit CAS incremented by a checkout that has nothing to do
+    // with it).
     const coupon = await client.coupon.findFirst({
-      where: { code: normalizedCode },
+      where: { code: normalizedCode, tenantId: params.tenantId },
     });
     if (!coupon) {
       throw new BadRequestException('This coupon code is not valid');

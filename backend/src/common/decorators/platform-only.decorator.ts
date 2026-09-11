@@ -10,9 +10,11 @@ export const PLATFORM_ONLY_KEY = 'platformOnly';
  * Completely separate from `@Roles()` / RolesGuard and from any tenant
  * membership or permission (frozen SaaS invariant 4).
  *
- * Phase 2a FOUNDATION ONLY — NO route in the codebase uses this decorator yet.
- * The platform console (Phase 5) is its first consumer. `grep -r "@PlatformOnly"
- * src` outside this file / its tests should return nothing.
+ * Ratified Phase 2a as a dormant foundation capability (no route used it
+ * yet). Phase 5 W3's platform console (`platform/platform.controller.ts`)
+ * is its first real consumer — `grep -r "@PlatformOnly" src` outside this
+ * file / its tests / `platform.controller.ts` should return nothing;
+ * `common/guards/platform.guard.spec.ts` pins the exact enumerated set.
  */
 export const PlatformOnly = (): ReturnType<typeof SetMetadata> =>
   SetMetadata(PLATFORM_ONLY_KEY, true);

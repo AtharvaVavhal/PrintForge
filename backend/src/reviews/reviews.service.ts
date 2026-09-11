@@ -7,6 +7,11 @@ import {
 import { Prisma, Review, ReviewStatus } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
 import { PaginatedResult } from '../common/types/api-response.interface';
+import { AuditService } from '../common/audit/audit.service';
+import { resolveTenantAuditActor } from '../common/audit/tenant-actor-attribution';
+import { assertObjectInTenant } from '../common/tenant/object-auth';
+import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { TenantContext } from '../common/tenant/tenant-context';
 import { OrdersService } from '../orders/orders.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
@@ -19,6 +24,7 @@ export class ReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ordersService: OrdersService,
+    private readonly auditService: AuditService,
   ) {}
 
   // ─── POST /reviews (§1.1/R1 — verified-purchase gated) ─────────────────
@@ -129,6 +135,8 @@ export class ReviewsService {
    * ReviewStatus to any ReviewStatus is a valid moderation action.
    */
   async adminUpdateStatus(
+    tenantContext: TenantContext,
+    actor: AuthenticatedUser,
     reviewId: string,
     dto: UpdateReviewStatusDto,
   ): Promise<ReviewView> {
@@ -137,6 +145,10 @@ export class ReviewsService {
       if (!review) {
         throw new NotFoundException('Review not found');
       }
+      // W10 hardening (P0) — this lookup was, until now, global: any
+      // tenant with `reviews:moderate` could approve/reject ANY other
+      // tenant's product reviews by id.
+      assertObjectInTenant(review, tenantContext.tenantId);
 
       const updated = await tx.review.update({
         where: { id: reviewId },
@@ -144,6 +156,21 @@ export class ReviewsService {
       });
 
       await this.recomputeProductRating(tx, review.productId);
+
+      const attribution = await resolveTenantAuditActor(
+        tx,
+        tenantContext,
+        actor,
+      );
+      await this.auditService.logTenantAction(tx, {
+        tenantId: tenantContext.tenantId,
+        ...attribution,
+        action: 'review.moderate',
+        targetType: 'Review',
+        targetId: reviewId,
+        metadata: { fromStatus: review.status, toStatus: dto.status },
+      });
+
       return this.toView(updated);
     });
   }

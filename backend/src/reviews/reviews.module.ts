@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../common/audit/audit.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ReviewsController } from './reviews.controller';
 import { ProductReviewsController } from './product-reviews.controller';
@@ -27,7 +28,7 @@ import { ReviewsService } from './reviews.service';
  * `ProductsService`'s business logic.
  */
 @Module({
-  imports: [OrdersModule],
+  imports: [OrdersModule, AuditModule],
   controllers: [ReviewsController, ProductReviewsController],
   providers: [ReviewsService],
   exports: [ReviewsService],

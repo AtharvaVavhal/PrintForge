@@ -58,6 +58,36 @@ export async function promoteToAdmin(
 }
 
 /**
+ * Phase 5 (decision P2-D1/G-12; W3). Promotes an already-registered user
+ * to platform `SUPER_ADMIN` directly via Prisma, the same "update, then
+ * reuse the existing access token" pattern as `promoteToAdmin` —
+ * `JwtStrategy.validate()` re-reads `platformRole` fresh from the DB on
+ * every request, so no re-login is needed. Deliberately independent of
+ * `promoteToAdmin`/`grantOwnerMembership`: a SUPER_ADMIN in production is
+ * never automatically a tenant OWNER (frozen invariant 4), and this
+ * fixture mirrors that — call `grantOwnerMembership` too, separately, only
+ * if a specific test genuinely needs both.
+ */
+export async function promoteToSuperAdmin(
+  prisma: PrismaService,
+  userId: string,
+): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { platformRole: 'SUPER_ADMIN' },
+  });
+}
+
+export async function registerSuperAdmin(
+  app: INestApplication,
+  prisma: PrismaService,
+): Promise<TestUser> {
+  const user = await registerUser(app, 'platform-admin');
+  await promoteToSuperAdmin(prisma, user.id);
+  return user;
+}
+
+/**
  * Phase 3 (decisions P2-D9, G-13, G-20): `/admin/*` is gated by
  * `PermissionsGuard`, which reads `TenantContext.membership.role` — the
  * legacy `role='ADMIN'` column alone (above) is no longer sufficient,
@@ -69,6 +99,35 @@ export async function promoteToAdmin(
  * tenant with no `X-Active-Tenant` header needed — existing tests that
  * call `registerAdmin()` and hit `/admin/*` continue to work unchanged.
  */
+/**
+ * Phase 5 W9 (decision D11) — every real tenant has exactly one primary
+ * Store from the moment it exists (`prisma/seed-tenant-bootstrap.ts`
+ * creates Tenant + Store together; the same pairing every W9-touched
+ * runtime path now depends on: `resolvePrimaryStoreId` throws
+ * `NotFoundException` for a tenant with none, and checkout's shipping-fee
+ * lookup — STORE-owned as of W9 — calls it unconditionally). Test fixtures
+ * that mint a throwaway tenant must pair it with a primary Store the same
+ * way, or every checkout-touching e2e test for that tenant would 404
+ * despite having done nothing wrong. Centralized here so `grantOwner
+ * Membership` and `ensureTenantId` (the two fixture call sites that create
+ * a brand-new Tenant row) can't drift out of sync with each other.
+ */
+async function createPrimaryStore(
+  prisma: PrismaService,
+  tenantId: string,
+): Promise<string> {
+  const store = await prisma.store.create({
+    data: {
+      tenantId,
+      slug: `store-${randomUUID()}`,
+      name: 'Test Store',
+      status: 'ACTIVE',
+      isPrimary: true,
+    },
+  });
+  return store.id;
+}
+
 export async function grantOwnerMembership(
   prisma: PrismaService,
   userId: string,
@@ -76,6 +135,7 @@ export async function grantOwnerMembership(
   const tenant = await prisma.tenant.create({
     data: { slug: `test-tenant-${randomUUID()}` },
   });
+  await createPrimaryStore(prisma, tenant.id);
   await prisma.tenantMembership.create({
     data: {
       userId,
@@ -85,6 +145,24 @@ export async function grantOwnerMembership(
     },
   });
   return { tenantId: tenant.id };
+}
+
+/**
+ * Phase 5 W4 — generalizes `grantOwnerMembership` for a role other than
+ * `OWNER`, on an EXISTING tenant (rather than minting a new one), so a
+ * test can put multiple differently-roled members on the SAME tenant
+ * (e.g. proving OWNER/ADMIN/STAFF/VIEWER are each independently blocked
+ * on one suspended tenant).
+ */
+export async function grantMembership(
+  prisma: PrismaService,
+  userId: string,
+  tenantId: string,
+  role: 'OWNER' | 'ADMIN' | 'STAFF' | 'VIEWER',
+): Promise<void> {
+  await prisma.tenantMembership.create({
+    data: { userId, tenantId, role, status: 'ACTIVE' },
+  });
 }
 
 export async function registerAdmin(
@@ -137,6 +215,9 @@ async function ensureTenantId(
   const tenant = await prisma.tenant.create({
     data: { slug: `fixture-tenant-${randomUUID()}` },
   });
+  // Phase 5 W9 — pair every freshly-minted tenant with a primary Store
+  // (see createPrimaryStore's own comment on grantOwnerMembership above).
+  await createPrimaryStore(prisma, tenant.id);
   return tenant.id;
 }
 
