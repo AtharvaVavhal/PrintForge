@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { IdempotencyModule } from '../checkout/idempotency/idempotency.module';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionOrchestrationService } from './subscription-orchestration.service';
+import { SubscriptionSchedulerService } from './subscription-scheduler.service';
 import { BILLING_PROVIDER } from './billing-provider.token';
 import { FakeBillingProvider } from './fake-billing-provider';
 
@@ -37,12 +38,21 @@ import { FakeBillingProvider } from './fake-billing-provider';
  * first real HTTP routes that need this module wired in — Stage 1 never
  * needed to, per this file's own prior comment, still accurate for
  * `SubscriptionService` considered alone).
+ *
+ * Phase 7 Scheduler Implementation Wave — `SubscriptionSchedulerService`
+ * added as a provider only (not exported — nothing calls it directly,
+ * `@nestjs/schedule`'s `ScheduleModule.forRoot()`, already registered in
+ * `app.module.ts`, discovers its `@Cron` methods automatically once it is
+ * instantiated as part of this module's provider graph). See that
+ * class's own header comment for exactly which two jobs it owns and why
+ * a third (cancellation expiration) is deliberately absent.
  */
 @Module({
   imports: [IdempotencyModule],
   providers: [
     SubscriptionService,
     SubscriptionOrchestrationService,
+    SubscriptionSchedulerService,
     { provide: BILLING_PROVIDER, useClass: FakeBillingProvider },
   ],
   exports: [SubscriptionService, SubscriptionOrchestrationService],

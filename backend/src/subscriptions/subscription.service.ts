@@ -113,6 +113,57 @@ export class SubscriptionService {
     return client.subscription.findUnique({ where: { tenantId } });
   }
 
+  /**
+   * Phase 7 scheduler wave — system-initiated, cross-tenant reads used
+   * ONLY by `SubscriptionSchedulerService`. Never exposed to any
+   * tenant-facing caller, never accepts (or trusts) an externally-supplied
+   * tenantId — the scheduler has no external input at all; eligibility is
+   * derived entirely from what Postgres itself reports. Bounded (`take:
+   * limit`) — same discipline `PaymentReconciliationService.
+   * findReconcileCandidates()` already established ("never query for
+   * every row"). Both are pure reads: no `.update`/`.create` here: the
+   * actual mutation is still `SubscriptionService.exhaustGrace()`/
+   * `SubscriptionOrchestrationService.reconcilePeriod()`'s own job, this
+   * file's own state-machine-owning methods, unduplicated.
+   */
+  async findGraceExhaustedSubscriptions(
+    client: Client,
+    now: Date,
+    limit: number,
+  ): Promise<Subscription[]> {
+    return client.subscription.findMany({
+      where: { status: 'PAST_DUE', graceEndsAt: { lte: now } },
+      orderBy: { graceEndsAt: 'asc' },
+      take: limit,
+    });
+  }
+
+  /**
+   * Candidates for `SubscriptionOrchestrationService.reconcilePeriod()` —
+   * `ACTIVE`, provider-linked, and past their LOCALLY known
+   * `currentPeriodEnd`. This is a cheap local pre-filter only; whether the
+   * period boundary is actually, provider-confirmed reached is
+   * `reconcilePeriod()`'s own job (it re-checks against a fresh
+   * `getSubscription()` call) — this query exists solely so the scheduler
+   * never calls the billing provider for a subscription that plainly
+   * hasn't reached its own recorded period end yet.
+   */
+  async findSubscriptionsNeedingPeriodReconciliation(
+    client: Client,
+    now: Date,
+    limit: number,
+  ): Promise<Subscription[]> {
+    return client.subscription.findMany({
+      where: {
+        status: 'ACTIVE',
+        providerSubscriptionId: { not: null },
+        currentPeriodEnd: { lte: now },
+      },
+      orderBy: { currentPeriodEnd: 'asc' },
+      take: limit,
+    });
+  }
+
   // ─── Creation ───────────────────────────────────────────────────────────
 
   /**
