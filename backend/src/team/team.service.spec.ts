@@ -48,6 +48,17 @@ describe('TeamService', () => {
     };
   }
 
+  /** Phase 6 W5 — defaults to always succeeding (matches "existing
+   * behavior otherwise unchanged" for every test that doesn't specifically
+   * exercise limit enforcement); tests that DO care override
+   * `assertLimit`/`releaseLimit` with their own scripted mock. */
+  function makeLimitEnforcement() {
+    return {
+      assertLimit: jest.fn().mockResolvedValue(undefined),
+      releaseLimit: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
   function makePrisma(options: {
     user?: { id: string } | null;
     existingMembership?: Record<string, unknown> | null;
@@ -128,7 +139,11 @@ describe('TeamService', () => {
   describe('listTeam', () => {
     it('scopes to the given tenantId and paginates', async () => {
       const { prisma } = makePrisma({});
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await service.listTeam('tenant-a', { page: 2, limit: 5 });
       expect(prisma.tenantMembership.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -146,7 +161,11 @@ describe('TeamService', () => {
         actorMembership: { id: 'owner-membership-1' },
       });
       const audit = makeAudit();
-      const service = new TeamService(prisma as never, audit);
+      const service = new TeamService(
+        prisma as never,
+        audit,
+        makeLimitEnforcement() as never,
+      );
 
       const result = await service.inviteMember(ownerTenantContext, actor, {
         email: 'target@example.test',
@@ -177,7 +196,11 @@ describe('TeamService', () => {
     it('attributes via viaSupportSessionId (not a fabricated membership) when the actor is a support session', async () => {
       const { prisma, tx } = makePrisma({ actorMembership: null });
       const audit = makeAudit();
-      const service = new TeamService(prisma as never, audit);
+      const service = new TeamService(
+        prisma as never,
+        audit,
+        makeLimitEnforcement() as never,
+      );
 
       await service.inviteMember(supportSessionTenantContext, actor, {
         email: 'target@example.test',
@@ -192,7 +215,11 @@ describe('TeamService', () => {
 
     it('rejects when no User exists for that email', async () => {
       const { prisma } = makePrisma({ user: null });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.inviteMember(ownerTenantContext, actor, {
           email: 'nobody@example.test',
@@ -205,7 +232,11 @@ describe('TeamService', () => {
       const { prisma } = makePrisma({
         existingMembership: { status: MembershipStatus.SUSPENDED },
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.inviteMember(ownerTenantContext, actor, {
           email: 'target@example.test',
@@ -220,7 +251,11 @@ describe('TeamService', () => {
       });
       const audit = makeAudit();
       audit.logTenantAction.mockRejectedValueOnce(new Error('audit db down'));
-      const service = new TeamService(prisma as never, audit);
+      const service = new TeamService(
+        prisma as never,
+        audit,
+        makeLimitEnforcement() as never,
+      );
 
       await expect(
         service.inviteMember(ownerTenantContext, actor, {
@@ -248,7 +283,11 @@ describe('TeamService', () => {
         actorMembership: { id: 'owner-membership-1' },
       });
       const audit = makeAudit();
-      const service = new TeamService(prisma as never, audit);
+      const service = new TeamService(
+        prisma as never,
+        audit,
+        makeLimitEnforcement() as never,
+      );
 
       const result = await service.updateRole(
         ownerTenantContext,
@@ -276,7 +315,11 @@ describe('TeamService', () => {
           status: MembershipStatus.ACTIVE,
         },
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.updateRole(ownerTenantContext, actor, 'membership-1', {
           role: TenantRole.ADMIN,
@@ -294,7 +337,11 @@ describe('TeamService', () => {
         },
         activeOwnerCount: 1,
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.updateRole(ownerTenantContext, actor, 'membership-owner', {
           role: TenantRole.ADMIN,
@@ -313,7 +360,11 @@ describe('TeamService', () => {
         activeOwnerCount: 2,
         actorMembership: { id: 'owner-membership-1' },
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await service.updateRole(ownerTenantContext, actor, 'membership-owner', {
         role: TenantRole.ADMIN,
       });
@@ -330,7 +381,11 @@ describe('TeamService', () => {
         },
         casCount: 0,
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.updateRole(ownerTenantContext, actor, 'membership-1', {
           role: TenantRole.ADMIN,
@@ -351,7 +406,11 @@ describe('TeamService', () => {
         actorMembership: { id: 'owner-membership-1' },
       });
       const audit = makeAudit();
-      const service = new TeamService(prisma as never, audit);
+      const service = new TeamService(
+        prisma as never,
+        audit,
+        makeLimitEnforcement() as never,
+      );
 
       await service.suspendMember(ownerTenantContext, actor, 'membership-1');
 
@@ -376,7 +435,11 @@ describe('TeamService', () => {
           status: MembershipStatus.SUSPENDED,
         },
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.suspendMember(ownerTenantContext, actor, 'membership-1'),
       ).rejects.toThrow(ConflictException);
@@ -392,7 +455,11 @@ describe('TeamService', () => {
         },
         activeOwnerCount: 1,
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.suspendMember(ownerTenantContext, actor, 'membership-owner'),
       ).rejects.toThrow(ConflictException);
@@ -407,7 +474,11 @@ describe('TeamService', () => {
           status: MembershipStatus.ACTIVE,
         },
       });
-      const service = new TeamService(prisma as never, makeAudit());
+      const service = new TeamService(
+        prisma as never,
+        makeAudit(),
+        makeLimitEnforcement() as never,
+      );
       await expect(
         service.suspendMember(ownerTenantContext, actor, 'membership-1'),
       ).rejects.toThrow('Not Found');

@@ -6,6 +6,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { useAdminCoupons } from '@/hooks/useAdminCoupons'
 import { useCreateCoupon } from '@/hooks/useCreateCoupon'
 import { useUpdateCoupon } from '@/hooks/useUpdateCoupon'
+import { useEntitlements } from '@/hooks/useEntitlements'
 import {
   createCouponSchema,
   editCouponSchema,
@@ -120,6 +121,13 @@ export function AdminCouponsPage() {
   const couponsQuery = useAdminCoupons({ page, limit: DEFAULT_LIMIT, isActive, type })
   const createCoupon = useCreateCoupon()
   const updateCoupon = useUpdateCoupon()
+  const entitlementsQuery = useEntitlements()
+  // Fail OPEN on the frontend while entitlements are loading/unavailable —
+  // the backend (`@RequireFeature('coupons')`) remains the sole real
+  // enforcement point regardless (§: "never rely on UI alone for
+  // authorization"); this only controls whether the button/form render as
+  // available, never whether a submission actually succeeds.
+  const couponsFeatureEnabled = entitlementsQuery.data?.features.coupons ?? true
 
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -160,6 +168,7 @@ export function AdminCouponsPage() {
   }
 
   function openCreate() {
+    if (!couponsFeatureEnabled) return
     setIsAdding(true)
     setEditingId(null)
   }
@@ -217,11 +226,20 @@ export function AdminCouponsPage() {
           type="button"
           variant="secondary"
           onClick={() => (isAdding ? setIsAdding(false) : openCreate())}
+          disabled={!isAdding && !couponsFeatureEnabled}
+          title={!couponsFeatureEnabled ? 'Coupons are not included in your current plan' : undefined}
         >
           {isAdding ? 'Cancel' : 'New coupon'}
         </Button>
       }
     >
+      {!couponsFeatureEnabled && (
+        <Alert variant="info">
+          Coupons are not included in your current plan. Existing coupons remain fully visible and
+          manageable below; creating a new one requires a plan upgrade.
+        </Alert>
+      )}
+
       {isAdding && (
         <AdminCard as="section" title="New coupon">
           {categoriesQuery.isError ? (
@@ -289,11 +307,11 @@ export function AdminCouponsPage() {
               <Button type="button" variant="secondary" onClick={clearFilters}>
                 Clear filters
               </Button>
-            ) : (
+            ) : couponsFeatureEnabled ? (
               <Button type="button" onClick={openCreate}>
                 New coupon
               </Button>
-            )
+            ) : undefined
           }
         />
       ) : data && coupons.length > 0 ? (

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../common/audit/audit.module';
+import { LimitEnforcementModule } from '../limits/limit-enforcement.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
@@ -23,7 +24,7 @@ import { CustomizationValidationService } from './customizations/customization-v
  * cart line and the checkout-level pricing rollup (§11/§17).
  */
 @Module({
-  imports: [UploadsModule, AuditModule],
+  imports: [UploadsModule, AuditModule, LimitEnforcementModule],
   controllers: [ProductsController, CategoriesController],
   providers: [ProductsService, CustomizationValidationService],
   exports: [ProductsService, CustomizationValidationService],

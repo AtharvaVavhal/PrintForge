@@ -68,6 +68,7 @@ describe('ProductsService.reactivateProduct', () => {
       prisma as never,
       uploadsService as never,
       audit as never,
+      {} as never,
     );
     return { service, prisma, audit };
   }
@@ -174,6 +175,7 @@ describe('ProductsService — admin category management', () => {
       prisma as never,
       {} as never,
       audit as never,
+      {} as never,
     );
     return { service, prisma, audit };
   }
@@ -277,6 +279,7 @@ describe('ProductsService — admin product reads', () => {
       prisma as never,
       uploads as never,
       makeAudit() as never,
+      {} as never,
     );
     return {
       service,
@@ -384,10 +387,14 @@ describe('ProductsService.createProduct — audit atomicity (Phase 5 W8)', () =>
         .fn()
         .mockRejectedValueOnce(new Error('audit db down')),
     };
+    const limitEnforcementService = {
+      assertLimit: jest.fn().mockResolvedValue(undefined),
+    };
     const service = new ProductsService(
       prisma as never,
       {} as never,
       audit as never,
+      limitEnforcementService as never,
     );
 
     await expect(

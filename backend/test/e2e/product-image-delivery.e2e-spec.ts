@@ -51,8 +51,39 @@ describe('Product image delivery (uploads.service.ts + products.service.ts fix)'
     await resetDatabase(prisma);
   });
 
+  /** Phase 6 W5 (P6-D4) — `storage_mb` is now enforced at `/uploads`.
+   * `registerAdmin()` creates its own separate tenant (not the baseline
+   * one `resetDatabase` already provisions for the storefront/customer
+   * path), so any test uploading as an admin needs its own capacity —
+   * `limitValue: null` (unlimited), not a commercial value, purely to
+   * unblock these pre-existing tests from a gate they don't exist to
+   * exercise. */
+  async function provisionStorageCapacity(tenantId: string): Promise<void> {
+    const plan = await prisma.plan.create({
+      data: {
+        key: `plan-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: 'Test Plan',
+        isActive: true,
+        sortOrder: 0,
+        isEnterpriseCustom: false,
+      },
+    });
+    await prisma.planLimit.create({
+      data: {
+        planId: plan.id,
+        limitKey: 'storage_mb',
+        limitValue: null,
+        period: 'PERSISTENT',
+      },
+    });
+    await prisma.subscription.create({
+      data: { tenantId, planId: plan.id, status: 'ACTIVE' },
+    });
+  }
+
   it("an admin's upload (purpose=product) is stored with deliveryType 'upload'", async () => {
     const admin = await registerAdmin(app, prisma);
+    await provisionStorageCapacity(admin.tenantId);
 
     const res = await http(app)
       .post(apiPath('/uploads'))
@@ -91,6 +122,7 @@ describe('Product image delivery (uploads.service.ts + products.service.ts fix)'
 
   it('POST /products/:id/images denormalizes resourceType/deliveryType from the upload and returns a working url', async () => {
     const admin = await registerAdmin(app, prisma);
+    await provisionStorageCapacity(admin.tenantId);
     const { productId } = await createProduct(prisma);
 
     const uploadRes = await http(app)
@@ -124,6 +156,7 @@ describe('Product image delivery (uploads.service.ts + products.service.ts fix)'
 
   it('GET /products/:slug includes a working url for every image', async () => {
     const admin = await registerAdmin(app, prisma);
+    await provisionStorageCapacity(admin.tenantId);
     const { productId, slug } = await createProduct(prisma);
 
     const uploadRes = await http(app)
@@ -158,6 +191,7 @@ describe('Product image delivery (uploads.service.ts + products.service.ts fix)'
 
   it('GET /products (list) includes a working url for every image', async () => {
     const admin = await registerAdmin(app, prisma);
+    await provisionStorageCapacity(admin.tenantId);
     const { productId } = await createProduct(prisma);
 
     const uploadRes = await http(app)

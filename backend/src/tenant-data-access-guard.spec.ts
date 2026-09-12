@@ -169,6 +169,22 @@ const ALLOWLIST: ReadonlyArray<{ path: string; category: string }> = [
     category:
       'tenant admin (Phase 5 W8 — shared actor-attribution helper for TenantAuditLog writes)',
   },
+  // "platform admin" — Phase 6 W1's Platform Control Plane catalogue CRUD
+  // (Plan/PlanFeature/PlanLimit/TenantEntitlementOverride), same category
+  // already named above for `platform.service.ts`: cross-tenant by design
+  // (SUPER_ADMIN + audit), gated entirely by `PlatformGuard`/
+  // `@PlatformOnly()` upstream (`platform-plans.controller.ts`), never
+  // reachable by a tenant user. Reads `Tenant` only to validate an
+  // override's target tenant exists, and `Subscription` only via a
+  // `count()` pre-check before a Plan hard-delete (the real FK-level
+  // authority is `Subscription.plan`'s own `onDelete: Restrict`, unchanged
+  // by this file) — never any other tenancy model, never a business/
+  // commerce/customer table anywhere in the file.
+  {
+    path: 'platform/platform-plans/platform-plans.service.ts',
+    category:
+      'platform admin (Phase 6 W1 — SUPER_ADMIN plan/feature/limit/override catalogue CRUD, gated by PlatformGuard)',
+  },
 ];
 
 function stripComments(code: string): string {
@@ -237,7 +253,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
     }
   });
 
-  it('the eight known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, and tenant-actor-attribution.ts', () => {
+  it('the nine known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, tenant-actor-attribution.ts, and platform-plans.service.ts', () => {
     const detectedTodayFiles = ALLOWLIST.filter((a) => {
       try {
         const code = stripComments(readFileSync(join(SRC_DIR, a.path), 'utf8'));
@@ -259,6 +275,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
         'support-sessions/support-session.service.ts',
         'team/team.service.ts',
         'common/audit/tenant-actor-attribution.ts',
+        'platform/platform-plans/platform-plans.service.ts',
       ].sort(),
     );
   });

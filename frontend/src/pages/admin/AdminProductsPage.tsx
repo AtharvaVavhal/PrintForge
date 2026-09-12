@@ -1,6 +1,8 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAdminProducts } from '@/hooks/useAdminProducts'
 import { useCategories } from '@/hooks/useCategories'
+import { useUsage } from '@/hooks/useUsage'
+import { useEntitlements } from '@/hooks/useEntitlements'
 import { getApiErrorMessage } from '@/utils/apiError'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
@@ -15,6 +17,7 @@ import { AdminPageSkeleton } from '@/components/admin/AdminPageSkeleton'
 import { ProductImage } from '@/features/catalog/ProductImage'
 import { adminProductDetailPath, ROUTES } from '@/constants/routes'
 import { formatPrice } from '@/utils/formatPrice'
+import { formatUsageMeter } from '@/utils/formatUsage'
 import styles from './AdminProductsPage.module.css'
 
 const DEFAULT_LIMIT = 20
@@ -47,6 +50,8 @@ export function AdminProductsPage() {
     status,
   })
   const categoriesQuery = useCategories()
+  const usageQuery = useUsage()
+  const entitlementsQuery = useEntitlements()
 
   const categoryNameById = new Map((categoriesQuery.data ?? []).map((c) => [c.id, c.name]))
   const hasActiveFilters = Boolean(categoryId || status)
@@ -103,6 +108,14 @@ export function AdminProductsPage() {
         </>
       }
     >
+      {usageQuery.data && entitlementsQuery.data && (
+        <AdminCard as="section" title="Plan usage">
+          <p className={styles.statValue}>
+            {formatUsageMeter(usageQuery.data.products.count, entitlementsQuery.data.limits.products.value)}
+          </p>
+        </AdminCard>
+      )}
+
       <AdminCard as="section" title="Filters">
         <div className={styles.filters}>
           <AdminSelect

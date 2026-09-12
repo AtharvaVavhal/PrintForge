@@ -6,6 +6,8 @@ import { ReviewsModule } from '../reviews/reviews.module';
 import { CouponsModule } from '../coupons/coupons.module';
 import { AppSettingModule } from '../app-setting/app-setting.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { EntitlementModule } from '../entitlements/entitlement.module';
+import { UsageModule } from '../usage/usage.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -21,6 +23,13 @@ import { AdminService } from './admin.service';
  * CouponsModule has no controller of its own (every coupon route is
  * admin-only), so this import is the only way any coupon HTTP surface
  * exists at all (§2.3).
+ *
+ * Phase 6 W6 — `EntitlementModule`/`UsageModule` imported for
+ * GET /admin/subscription|usage|entitlements, exactly as each module's own
+ * doc comment already anticipated ("W6 ... will import this module into
+ * AdminModule the same way AdminModule already imports CouponsModule/
+ * ReviewsModule/etc."). `AdminService` composes `EntitlementService.
+ * resolve()`/`UsageService.getUsage()` — it does not reimplement either.
  */
 @Module({
   imports: [
@@ -31,6 +40,8 @@ import { AdminService } from './admin.service';
     CouponsModule,
     AppSettingModule,
     InvoicesModule,
+    EntitlementModule,
+    UsageModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

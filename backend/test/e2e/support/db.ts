@@ -122,6 +122,41 @@ export async function resetDatabase(
         isPrimary: true,
       },
     });
+    // Phase 6 W5 (P6-D4) — `storage_mb` is now enforced at the real
+    // `/uploads` boundary (deny-by-default, P6-D2, when no PlanLimit
+    // exists). Several pre-existing e2e suites upload a file via the
+    // storefront/customer path (no explicit tenant of their own — see the
+    // comment above), which resolves to THIS baseline tenant, and were
+    // never written to configure any entitlement — none needed one before
+    // W5. `limitValue: null` (unlimited) rather than any specific number:
+    // this is test infrastructure unblocking unrelated pre-existing tests
+    // from an entitlement gate they don't exist to exercise, not a
+    // commercial/business value (no product-supplied number is invented
+    // here — see docs/saas/DECISIONS.md P6-D2/P6-D3 on why `null` is a
+    // structural, not arbitrary, value). Mirrors the Store-pairing
+    // precedent immediately above: a cross-cutting new requirement is
+    // satisfied once here rather than patched into every affected test
+    // file individually.
+    const baselinePlan = await prisma.plan.create({
+      data: {
+        key: `baseline-plan-${randomUUID()}`,
+        name: 'Baseline Test Plan',
+        isActive: true,
+        sortOrder: 0,
+        isEnterpriseCustom: false,
+      },
+    });
+    await prisma.planLimit.create({
+      data: {
+        planId: baselinePlan.id,
+        limitKey: 'storage_mb',
+        limitValue: null,
+        period: 'PERSISTENT',
+      },
+    });
+    await prisma.subscription.create({
+      data: { tenantId: tenant.id, planId: baselinePlan.id, status: 'ACTIVE' },
+    });
   }
 }
 

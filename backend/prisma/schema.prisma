@@ -171,6 +171,14 @@ model User {
   supportSessionsCreated SupportSession[] @relation("SupportSessionCreatedBy")
   supportSessionsRevoked SupportSession[] @relation("SupportSessionRevokedBy")
 
+  // Phase 6 (W1) — back-relations only; add NO column to `users`. Same
+  // shape/reasoning as the SupportSession pair immediately above:
+  // createdByUserId is a SUPER_ADMIN at creation time (enforced in the
+  // platform service, not a DB constraint); revokedByUserId is nullable
+  // (an override may never be revoked).
+  entitlementOverridesCreated TenantEntitlementOverride[] @relation("TenantEntitlementOverrideCreatedBy")
+  entitlementOverridesRevoked TenantEntitlementOverride[] @relation("TenantEntitlementOverrideRevokedBy")
+
   @@map("users")
 }
 
@@ -1063,6 +1071,9 @@ model Tenant {
   supportSessions   SupportSession[]
   // Phase 5 (W9) — back-relation only; adds NO column to `tenants`.
   tenantSettings    TenantSetting[]
+  // Phase 6 (W1) — back-relations only; add NO column to `tenants`.
+  usage             Usage[]
+  entitlementOverrides TenantEntitlementOverride[]
 
   @@index([status])
   @@map("tenants")
@@ -1182,19 +1193,76 @@ model TenantMembership {
   @@map("tenant_memberships")
 }
 
-// Platform-owned catalogue of subscription plans. Phase 1 shell only. `key`
-// is one of {free, starter, growth, business, enterprise} — a String, not an
-// enum (it is not among the six ratified Phase 1 enums, G-5). PlanFeature /
-// PlanLimit / Usage / entitlement logic are Phase 6.
+// Platform-owned catalogue of subscription plans. Phase 1 shell, expanded by
+// Phase 6 W1 (ratified Phase 6 Design Gate/Ratification — see
+// docs/saas — Plan Lifecycle). `key` is one of {free, starter, growth,
+// business, enterprise} — a String, not an enum (it is not among the six
+// ratified Phase 1 enums, G-5). PlanFeature / PlanLimit / Usage /
+// EntitlementService are Phase 6 W1 (catalogue + schema) and W2
+// (enforcement) — see the two new models below and `platform/platform-plans/`.
+//
+// Phase 6 W1 — plan lifecycle (`isActive`): ACTIVE (`true`, default) is
+// selectable for a NEW subscription, subject to `isPublic`; INACTIVE/
+// ARCHIVED (`false`) is never selectable for a new subscription but an
+// EXISTING `Subscription` referencing it keeps resolving normally —
+// `isActive` is consulted only by "can a NEW subscription pick this plan",
+// never by entitlement resolution itself (that is `EntitlementService`'s
+// own W2 concern, and W2 must not read `Plan.isActive` either — an
+// archived plan's `PlanFeature`/`PlanLimit` rows are themselves untouched
+// by archiving). `isPublic` stays fully independent of `isActive`, exactly
+// as it already was: a plan can be `isActive=true, isPublic=false`
+// (Enterprise-style, SUPER_ADMIN-assigned only) or `isActive=false` (fully
+// retired) — the two flags are never merged into one.
+//
+// Hard delete: unchanged and unextended — `Subscription.plan`'s existing
+// `onDelete: Restrict` (below) already makes a `Plan` referenced by ANY
+// `Subscription` (including a historical/cancelled one — the `Subscription`
+// row itself is never deleted, so the FK reference persists) undeletable at
+// the database level. Deleting a genuinely unused `Plan` (zero
+// `Subscription` rows, ever) is permitted, and Cascades its own
+// `PlanFeature`/`PlanLimit` children (their own `onDelete: Cascade`, since
+// they have no independent meaning once their parent `Plan` is gone) —
+// never a `Subscription`, never any other tenant data.
 model Plan {
   id       String  @id @default(uuid())
   key      String  @unique
   name     String
   isPublic Boolean @default(true)
 
+  // Phase 6 W1 additions. Nullable at the DB level, NOT NULL-with-DEFAULT
+  // at the design/application level — a deliberate, discovered, and now
+  // formally ratified deviation (docs/saas/DECISIONS.md, record P6-D1)
+  // from the ratified spec's literal `Boolean @default(true)` syntax,
+  // forced by `migration-safety.spec.ts`'s G-19 rule: the ONLY permitted
+  // way to add a column to an existing (not-created-in-this-migration)
+  // table is a single, purely nullable ADD COLUMN with no DEFAULT and no
+  // NOT NULL — there is no guard exemption for a defaulted/NOT-NULL
+  // addition, and the one two-phase mechanism this repo already has for
+  // that (P4-D2's CHECK-NOT-VALID/VALIDATE/SET-NOT-NULL trio) is hard-
+  // scoped by name to 20 pre-approved `(table, "tenantId")` pairs from an
+  // already-closed effort — not a general-purpose mechanism to extend.
+  // `null` is therefore a real, reachable value for the sole pre-existing
+  // `Plan` row until the W1 backfill script runs, and application code
+  // MUST coalesce (`?? true` / `?? 0` / `?? false`) everywhere these
+  // fields are read — never assume non-null, including at the query
+  // level: `PlatformPlansService.listPlans()` deliberately does NOT sort
+  // on the raw `sortOrder` column (Postgres's NULLS LAST default for ASC
+  // would misplace a legacy-null row relative to its coalesced `0`
+  // meaning) — it sorts in memory on the coalesced value instead (P6-D1).
+  // Every row created by the W1 platform service, `seed-tenant-bootstrap
+  // .ts`, and `dev-scratch-seed-phase2b-equivalent.ts` writes a real,
+  // non-null value for all three fields explicitly (none of these leaves
+  // them blank), so `null` is only ever a legacy-row artifact, not a
+  // normal state for a plan created through any current code path.
+  isActive           Boolean?
+  sortOrder          Int?
+  isEnterpriseCustom Boolean?
+
   createdAt DateTime @default(now())
 
   subscriptions Subscription[]
+  planFeatures  PlanFeature[]
+  planLimits    PlanLimit[]
 
   @@map("plans")
 }
@@ -1540,5 +1608,147 @@ model StoreSetting {
   @@index([storeId])
   @@index([tenantId])
   @@map("store_settings")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 6 (W1) — Entitlement engine schema + platform catalogue CRUD
+//   Master Plan §12 (Phase 6 — Plans/Features/Limits/Usage); Phase 6 Design
+//   Gate + Design Ratification (docs/saas — SaaS Monetization & Entitlements).
+//
+// W1 scope is schema + platform-side catalogue management ONLY. No
+// enforcement exists yet — `EntitlementService`, `@RequireFeature`,
+// `assertLimit`, and every Usage-incrementing call site are Phase 6 W2, not
+// built here. `Plan.isActive` (added above) is likewise not consulted by
+// anything in this migration's own models — archiving a plan is purely a
+// "not selectable for a NEW subscription" flag until W2 exists to read it
+// (and even then, W2 must not read it for entitlement RESOLUTION, only the
+// platform-facing "can this plan still be assigned" check — see the `Plan`
+// model's own comment above).
+//
+// This migration never writes to, and W1's application code never
+// modifies, `Subscription.planId` or `Subscription.status` — those remain
+// exclusively Phase 7's write surface (ratified Phase 6/Phase 7 boundary).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Feature/limit period split (ratified — never merged). PERSISTENT: a
+// point-in-time count with no period rollover (e.g. how many products
+// exist right now). BILLING_PERIOD: a count that resets to a fresh row
+// every period (e.g. orders created this month) — the OLD period's `Usage`
+// row is never deleted or rewritten, a new period is a new row (§ Usage
+// model comment).
+enum LimitPeriod {
+  PERSISTENT
+  BILLING_PERIOD
+}
+
+// Boolean (can/can't) capability grant for a Plan. Never merged with
+// PlanLimit (ratified — ".. are never merged; both attach to Plan"). The
+// actual feature-key catalogue is code-defined (mirrors
+// `app-setting.constants.ts`'s allowlist pattern), not DB-editable — this
+// table only ever holds a `(planId, featureKey)` -> `enabled` grant for
+// keys the code-level catalogue already recognizes; the platform service
+// validates `featureKey` against that catalogue before every write (W1
+// scope), never accepting an arbitrary string.
+model PlanFeature {
+  id         String  @id @default(uuid())
+  planId     String
+  featureKey String
+  enabled    Boolean @default(false)
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, featureKey])
+  @@map("plan_features")
+}
+
+// Measurable (how much) grant for a Plan. `limitValue = NULL` means
+// unlimited — the same NULL-is-unlimited convention this override model
+// below reuses for `intValue`, so there is exactly one "unlimited"
+// representation across the whole entitlement engine, never two. Same
+// code-defined `limitKey` catalogue discipline as `PlanFeature.featureKey`.
+model PlanLimit {
+  id         String      @id @default(uuid())
+  planId     String
+  limitKey   String
+  limitValue Int?
+  period     LimitPeriod
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, limitKey])
+  @@map("plan_limits")
+}
+
+// Tenant-owned, persisted (never derived) usage counter. `period` is the
+// literal string `"PERSISTENT"` for a PlanLimit of period PERSISTENT, or a
+// period stamp (e.g. `"2026-09"`) for a BILLING_PERIOD limit — so a new
+// billing period is always a brand-new row, never an in-place reset, and
+// historical per-period usage is retained for free. Incremented atomically
+// (`INSERT ... ON CONFLICT (tenantId, limitKey, period) DO UPDATE SET
+// count = count + 1`), the exact pattern already proven by `TenantCounter`
+// (Phase 4 W3/W9) and `CouponsService`'s usedCount CAS — never a
+// SELECT-then-UPDATE. W1 creates this table only; nothing in W1's own
+// application code writes to it — the first real increment/decrement is
+// Phase 6 W2's `assertLimit`.
+model Usage {
+  id       String @id @default(uuid())
+  tenantId String
+  limitKey String
+  period   String
+  count    Int    @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, limitKey, period])
+  @@map("usage")
+}
+
+// Per-tenant override of exactly one PlanFeature or PlanLimit value,
+// REPLACING (never adding to) the plan's own value — the mechanism behind
+// Enterprise custom deals without ever minting a one-off Plan row. Exactly
+// one of `featureKey`/`limitKey` is set (enforced by a `CHECK` constraint
+// hand-added to this model's own migration, the same "Prisma's DSL cannot
+// express this, so it is hand-added to migration.sql and Prisma will never
+// remove it" convention `Store.stores_tenant_primary_unique` and every
+// composite ownership FK in this schema already establish) — a
+// feature-shaped override carries `boolValue` (never `intValue`); a
+// limit-shaped override carries `intValue` (`NULL` = unlimited, same
+// convention as `PlanLimit.limitValue`; never `boolValue`). The
+// application layer (the W1 platform service) additionally validates this
+// before every write, so a caller gets a clean 400, not a raw constraint
+// violation — but the CHECK is the actual authority.
+//
+// Revocation is soft (`revokedAt`/`revokedByUserId`) — an override is
+// NEVER deleted or mutated in place once created; "updating" one means
+// revoking it and creating a fresh replacement row, preserving the exact
+// historical fact "this tenant had this override from X to Y" the same
+// way this codebase's audit logs are append-only by construction. No
+// `expiresAt` in W1 (deliberately deferred — see the Design Ratification's
+// own Gap 2 record); a still-open override never automatically lapses.
+model TenantEntitlementOverride {
+  id       String  @id @default(uuid())
+  tenantId String
+
+  featureKey String?
+  limitKey   String?
+  boolValue  Boolean?
+  intValue   Int?
+
+  reason          String
+  createdByUserId String
+  revokedAt       DateTime?
+  revokedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy User   @relation("TenantEntitlementOverrideCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  revokedBy User?  @relation("TenantEntitlementOverrideRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("tenant_entitlement_overrides")
 }
 

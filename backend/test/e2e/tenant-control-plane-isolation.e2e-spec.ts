@@ -59,6 +59,30 @@ describe('Tenant Control Plane isolation (Phase 5 W10 hardening)', () => {
     return { adminA, adminB };
   }
 
+  /** Phase 6 W8 — `AdminController.createCoupon` now also enforces the
+   * `coupons` FEATURE (`@RequireFeature('coupons')`) in addition to the
+   * pre-existing `coupons:write` PERMISSION. `registerAdmin()`'s tenant has
+   * no Plan/Subscription, so it deny-by-defaults (P6-D2) unless a real
+   * catalogue is provisioned — same pattern already established in
+   * `tenant-audit-wiring.e2e-spec.ts`'s own `provisionFeature` helper. */
+  async function provisionCouponsFeature(tenantId: string): Promise<void> {
+    const plan = await prisma.plan.create({
+      data: {
+        key: `plan-${randomUUID().slice(0, 8)}`,
+        name: 'Test Plan',
+        isActive: true,
+        sortOrder: 0,
+        isEnterpriseCustom: false,
+      },
+    });
+    await prisma.planFeature.create({
+      data: { planId: plan.id, featureKey: 'coupons', enabled: true },
+    });
+    await prisma.subscription.create({
+      data: { tenantId, planId: plan.id, status: 'ACTIVE' },
+    });
+  }
+
   // ─── Orders ─────────────────────────────────────────────────────────────
 
   describe('orders', () => {
@@ -196,6 +220,7 @@ describe('Tenant Control Plane isolation (Phase 5 W10 hardening)', () => {
 
     it("POST /admin/coupons rejects a CATEGORY scope pointing at another tenant's category (P0 regression)", async () => {
       const { adminA, adminB } = await twoTenants();
+      await provisionCouponsFeature(adminA.tenantId);
       const { categoryId: categoryB } = await createProduct(prisma, {
         tenantId: adminB.tenantId,
       });

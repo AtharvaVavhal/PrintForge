@@ -1,3 +1,10 @@
+.statValue {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-strong);
+}
+
 .secondaryAction {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);

@@ -10,15 +10,21 @@ import {
   UPLOAD_ALLOWED_MIME_TYPES,
   UPLOAD_MAX_BYTES,
 } from '../common/constants/app.constants';
+import { LimitEnforcementService } from '../limits/limit-enforcement.service';
 import { CloudinaryService } from './cloudinary/cloudinary.service';
 import { detectFileSignature } from './utils/file-signature.util';
 import { MulterFileLike } from './types/multer-file.interface';
+
+/** P6-D4 — 1 MiB = 1,048,576 bytes, the same unit `UPLOAD_MAX_BYTES`/
+ * `maxFileSizeMb` already use elsewhere in this codebase. */
+const BYTES_PER_MIB = 1_048_576;
 
 @Injectable()
 export class UploadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cloudinary: CloudinaryService,
+    private readonly limitEnforcementService: LimitEnforcementService,
   ) {}
 
   /**
@@ -67,25 +73,59 @@ export class UploadsService {
     const deliveryType: 'upload' | 'authenticated' =
       purpose === 'product' ? 'upload' : 'authenticated';
 
+    // The external Cloudinary upload is deliberately OUTSIDE any DB
+    // transaction (an irreversible network side effect can never be part
+    // of a Postgres transaction) — this is the existing, unavoidable
+    // architecture, unchanged by W5. No storage compensation/rollback
+    // mechanism exists for a Cloudinary object left behind by a failed DB
+    // write below, and none is invented here (W5 authorization §2/§14) —
+    // this matches the exact same pre-existing risk profile every other
+    // upload always had, before storage enforcement existed at all.
     const result = await this.cloudinary.uploadBuffer(file.buffer, {
       purpose,
       userId,
       deliveryType,
     });
 
+    // The authoritative byte count: Cloudinary's own reported size when
+    // present, else the originally-uploaded buffer's size — the exact
+    // same fallback `bytes:` below already used before W5 (unchanged),
+    // just named so the MiB conversion below reads unambiguously (W5
+    // authorization §3 — explicit, not `Math.ceil(result.bytes ?? file
+    // .size / BYTES_PER_MIB)`, which operator precedence would silently
+    // miscompute).
+    const bytes = result.bytes ?? file.size;
+    const storageMiB = Math.ceil(bytes / BYTES_PER_MIB);
+
     const tenantId = await resolveTenantId();
-    return this.prisma.uploadedFile.create({
-      data: {
-        cloudinaryPublicId: result.public_id,
-        uploadedByUserId: userId,
-        format: result.format ?? detectedMime.split('/')[1],
-        bytes: result.bytes ?? file.size,
-        resourceType: result.resource_type,
-        deliveryType,
-        // Server-derived from the caller's own resolved tenant context —
-        // never a client-supplied value (Phase 4 W7 / P4-D2).
+
+    // Phase 6 W5 / P6-D4 — assertLimit's reservation and the UploadedFile
+    // row are created in the SAME transaction: if the DB write fails for
+    // any reason, the reservation rolls back with it. `LimitEnforcement
+    // Service` never opens its own transaction — this `$transaction` call
+    // is the caller's own, exactly matching the `Products`/`Team`
+    // integration convention already established.
+    return this.prisma.$transaction(async (tx) => {
+      await this.limitEnforcementService.assertLimit(
+        tx,
         tenantId,
-      },
+        'storage_mb',
+        storageMiB,
+      );
+
+      return tx.uploadedFile.create({
+        data: {
+          cloudinaryPublicId: result.public_id,
+          uploadedByUserId: userId,
+          format: result.format ?? detectedMime.split('/')[1],
+          bytes,
+          resourceType: result.resource_type,
+          deliveryType,
+          // Server-derived from the caller's own resolved tenant context —
+          // never a client-supplied value (Phase 4 W7 / P4-D2).
+          tenantId,
+        },
+      });
     });
   }
 

@@ -141,6 +141,11 @@ describe('PlatformGuard (Phase 2a)', () => {
         // lifecycle's own SUPER_ADMIN-only route set, the second legitimate
         // @PlatformOnly() consumer after W3's PlatformController.
         'support-sessions/support-session.controller.ts',
+        // Phase 6 W1 — PlatformPlansController is the Platform Control
+        // Plane's catalogue-CRUD route set (Plan/PlanFeature/PlanLimit/
+        // TenantEntitlementOverride), the third legitimate @PlatformOnly()
+        // consumer.
+        'platform/platform-plans/platform-plans.controller.ts',
       ].sort(),
     );
   });

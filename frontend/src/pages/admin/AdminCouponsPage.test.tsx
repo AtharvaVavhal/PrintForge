@@ -78,6 +78,53 @@ describe('AdminCouponsPage', () => {
     mock.restore()
   })
 
+  // Phase 6 W8 — the `coupons` feature gate (GET /admin/entitlements).
+  it('disables "New coupon" and shows an upgrade notice when the coupons feature is disabled', async () => {
+    mock.onGet('/admin/coupons').reply(200, listResponse([buildCoupon()]))
+    mock.onGet('/admin/entitlements').reply(200, {
+      success: true,
+      data: { features: { coupons: false }, limits: {} },
+    })
+
+    renderWithProviders(<AdminCouponsPage />)
+
+    const button = await screen.findByRole('button', { name: 'New coupon' })
+    expect(button).toBeDisabled()
+    expect(
+      await screen.findByText(/Coupons are not included in your current plan/),
+    ).toBeInTheDocument()
+    // Existing coupons remain fully visible (downgrade non-destructive).
+    expect(screen.getByText('SAVE10')).toBeInTheDocument()
+  })
+
+  it('enables "New coupon" (and opens the create form) when the coupons feature is enabled', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/admin/coupons').reply(200, listResponse([]))
+    mock.onGet('/admin/entitlements').reply(200, {
+      success: true,
+      data: { features: { coupons: true }, limits: {} },
+    })
+
+    renderWithProviders(<AdminCouponsPage />)
+
+    await screen.findByText('No coupons yet')
+    for (const button of screen.getAllByRole('button', { name: 'New coupon' })) {
+      expect(button).toBeEnabled()
+    }
+    await openNewCoupon(user)
+    expect(await screen.findByRole('heading', { name: 'New coupon' })).toBeInTheDocument()
+  })
+
+  it('renders the button ENABLED (fail-open) when entitlements are unavailable — the backend remains the real gate', async () => {
+    mock.onGet('/admin/coupons').reply(200, listResponse([buildCoupon()]))
+    // /admin/entitlements deliberately unmocked -> 404.
+
+    renderWithProviders(<AdminCouponsPage />)
+
+    expect(await screen.findByText('SAVE10')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'New coupon' })[0]).toBeEnabled()
+  })
+
   // A
   it('lists coupons with a readable code, discount, scope and usage', async () => {
     mock.onGet('/admin/coupons').reply(

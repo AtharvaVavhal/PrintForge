@@ -46,6 +46,67 @@ describe('Phase 5 W8 — Tenant Control Plane audit wiring', () => {
     return { owner, tenantId };
   }
 
+  /** Phase 6 W5 — `ProductsService.createProduct`/`TeamService.inviteMember`
+   * now enforce `products`/`team_members` respectively
+   * (`LimitEnforcementService.assertLimit`). A tenant with no Plan/
+   * Subscription resolves to the fallback/free entitlement, which (until a
+   * SUPER_ADMIN configures the free plan's catalogue — a real, separate,
+   * flagged operational gap; see the W5 report §33) has no PlanLimit row
+   * for either key and denies by design (P6-D2). The handful of tests
+   * below that need a real product/invite to actually SUCCEED provision a
+   * generous limit first via this helper — every other assertion in this
+   * file is unaffected (audit rows written by non-limit-gated actions:
+   * categories/coupons/orders/reviews/settings). */
+  async function provisionCapacity(
+    tenantId: string,
+    limitKey: 'products' | 'team_members',
+    limitValue: number | null = 100,
+  ): Promise<void> {
+    const plan = await prisma.plan.create({
+      data: {
+        key: `plan-${randomUUID().slice(0, 8)}`,
+        name: 'Test Plan',
+        isActive: true,
+        sortOrder: 0,
+        isEnterpriseCustom: false,
+      },
+    });
+    await prisma.planLimit.create({
+      data: { planId: plan.id, limitKey, limitValue, period: 'PERSISTENT' },
+    });
+    await prisma.subscription.create({
+      data: { tenantId, planId: plan.id, status: 'ACTIVE' },
+    });
+  }
+
+  /** Phase 6 W8 — `AdminController.createCoupon` now also enforces the
+   * `coupons` FEATURE (`@RequireFeature('coupons')`, `EntitlementGuard`) in
+   * addition to the pre-existing `coupons:write` PERMISSION. Same fallback-
+   * plan-has-no-catalogue-rows gap as `provisionCapacity` above, but for a
+   * PlanFeature row rather than a PlanLimit row — the two coupon-creation
+   * tests below that need creation to actually SUCCEED provision it first. */
+  async function provisionFeature(
+    tenantId: string,
+    featureKey: 'coupons',
+    enabled = true,
+  ): Promise<void> {
+    const plan = await prisma.plan.create({
+      data: {
+        key: `plan-${randomUUID().slice(0, 8)}`,
+        name: 'Test Plan',
+        isActive: true,
+        sortOrder: 0,
+        isEnterpriseCustom: false,
+      },
+    });
+    await prisma.planFeature.create({
+      data: { planId: plan.id, featureKey, enabled },
+    });
+    await prisma.subscription.create({
+      data: { tenantId, planId: plan.id, status: 'ACTIVE' },
+    });
+  }
+
   async function ownerMembershipId(
     tenantId: string,
     userId: string,
@@ -92,6 +153,7 @@ describe('Phase 5 W8 — Tenant Control Plane audit wiring', () => {
   describe('A. products', () => {
     it('create: full matrix — audit created, correct tenant/actor, cross-tenant parent rejected with no audit, suspended tenant blocked', async () => {
       const { owner, tenantId } = await setupOwner();
+      await provisionCapacity(tenantId, 'products');
       const { categoryId } = await createProduct(prisma, { tenantId });
 
       const res = await http(app)
@@ -330,6 +392,7 @@ describe('Phase 5 W8 — Tenant Control Plane audit wiring', () => {
   describe('D. coupons', () => {
     it('create: full matrix — audited, correct tenant/actor, no secrets, unauthorized creates no audit', async () => {
       const { owner, tenantId } = await setupOwner();
+      await provisionFeature(tenantId, 'coupons');
 
       const res = await http(app)
         .post(apiPath('/admin/coupons'))
@@ -378,6 +441,7 @@ describe('Phase 5 W8 — Tenant Control Plane audit wiring', () => {
 
     it('update is audited', async () => {
       const { owner, tenantId } = await setupOwner();
+      await provisionFeature(tenantId, 'coupons');
       const createRes = await http(app)
         .post(apiPath('/admin/coupons'))
         .set(...authHeader(owner))
@@ -587,6 +651,7 @@ describe('Phase 5 W8 — Tenant Control Plane audit wiring', () => {
   describe('H. team regression', () => {
     it('W7 invite/role-change/suspend each still produce exactly one audit row — W8 introduces no duplicate', async () => {
       const { owner, tenantId } = await setupOwner();
+      await provisionCapacity(tenantId, 'team_members');
       const target = await registerUser(app, 'target');
 
       const inviteRes = await http(app)

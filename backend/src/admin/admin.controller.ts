@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from '../common/decorators/current-user.decora
 import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
 import type { TenantContext } from '../common/tenant/tenant-context';
 import { RequirePermission } from '../auth/permissions/require-permission.decorator';
+import { RequireFeature } from '../entitlements/require-feature.decorator';
 import { OrdersService } from '../orders/orders.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { UpdateReviewStatusDto } from '../reviews/dto/update-review-status.dto';
@@ -119,6 +120,33 @@ export class AdminController {
     return this.adminService.getDashboard(tenant);
   }
 
+  // ─── Phase 6 W6 — read-only SaaS entitlement APIs ───────────────────────
+  //
+  // Same `dashboard:read` permission as the dashboard above (ratified —
+  // G-13, docs/saas/DECISIONS.md; no new permission introduced). Three
+  // separate endpoints, deliberately never merged into one (§8): each is a
+  // thin pass-through to its own AdminService method, which in turn
+  // composes EntitlementService/UsageService rather than reimplementing
+  // either.
+
+  @RequirePermission('dashboard:read')
+  @Get('subscription')
+  async subscription(@CurrentTenant() tenant: TenantContext) {
+    return this.adminService.getSubscription(tenant);
+  }
+
+  @RequirePermission('dashboard:read')
+  @Get('usage')
+  async usage(@CurrentTenant() tenant: TenantContext) {
+    return this.adminService.getUsage(tenant);
+  }
+
+  @RequirePermission('dashboard:read')
+  @Get('entitlements')
+  async entitlements(@CurrentTenant() tenant: TenantContext) {
+    return this.adminService.getEntitlements(tenant);
+  }
+
   @RequirePermission('customers:read')
   @Get('customers')
   async listCustomers(
@@ -166,7 +194,25 @@ export class AdminController {
     return this.couponsService.getCoupon(tenant, id);
   }
 
+  // Phase 6 W8 — the `coupons` feature gate is deliberately applied to
+  // CREATION only, never to read (`listCoupons`/`couponDetail` above) or
+  // update below. This matches the ratified "downgrade non-destructive"
+  // exit criterion: a tenant who loses the `coupons` feature keeps full
+  // visibility into and management of coupons they already created (e.g.
+  // deactivating one before it causes a problem) — only making brand-NEW
+  // coupons is blocked. `PermissionsGuard` (`coupons:write`, RBAC — "is
+  // this role allowed to touch coupons at all") and `EntitlementGuard`
+  // (`coupons` feature — "does this tenant's plan include coupons at all")
+  // are independent, composing guards; a denial from either one is
+  // sufficient, and `PermissionsGuard` always runs first (app.module.ts's
+  // fixed guard order), so a permission failure is never reported as
+  // upgrade_required or vice versa. The ratified Free plan currently sets
+  // `coupons: true`, so this introduces no behavior change for any tenant
+  // on the plan catalogue as it exists today — it activates only once a
+  // future plan sets `coupons: false` (a business/product decision, not
+  // made here).
   @RequirePermission('coupons:write')
+  @RequireFeature('coupons')
   @Post('coupons')
   async createCoupon(
     @CurrentUser() admin: AuthenticatedUser,

@@ -1,5 +1,11 @@
 import cookieParser from 'cookie-parser';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  DynamicModule,
+  ForwardReference,
+  INestApplication,
+  Type,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../../../src/app.module';
 import { API_PREFIX } from '../../../src/common/constants/app.constants';
@@ -34,6 +40,46 @@ export interface TestApp {
 export async function createTestApp(): Promise<TestApp> {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
+  })
+    .overrideProvider(CloudinaryService)
+    .useClass(FakeCloudinaryService)
+    .compile();
+
+  const app = moduleRef.createNestApplication({ rawBody: true });
+  app.setGlobalPrefix(API_PREFIX);
+  app.use(cookieParser());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  await app.init();
+
+  const prisma = app.get(PrismaService);
+  return { app, prisma };
+}
+
+/**
+ * Phase 6 W4 — identical to `createTestApp()` above (same overrides, same
+ * pipes/prefix/cookie setup) but additionally compiles one or more
+ * test-only modules alongside the real `AppModule`. Every `APP_GUARD`/
+ * `APP_FILTER`/`APP_INTERCEPTOR` Nest global enhancer `AppModule` registers
+ * (`ThrottlerGuard` through `EntitlementGuard` to `PlatformGuard`,
+ * `HttpExceptionFilter`, `ResponseInterceptor`) applies application-wide
+ * regardless of which module a controller is declared in — this is how a
+ * test-only controller (e.g. `EntitlementTestController`) can exercise the
+ * REAL, globally-registered guard chain end-to-end without mocking any
+ * guard, while never being wired into the real shipped `app.module.ts`.
+ * `createTestApp()` itself is untouched — every other e2e file's behavior
+ * is unaffected by this addition.
+ */
+export async function createTestAppWithExtraModules(
+  extraModules: Array<Type<unknown> | DynamicModule | ForwardReference>,
+): Promise<TestApp> {
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule, ...extraModules],
   })
     .overrideProvider(CloudinaryService)
     .useClass(FakeCloudinaryService)

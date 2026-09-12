@@ -10,6 +10,7 @@ import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { assertObjectInTenant } from '../common/tenant/object-auth';
 import { TenantContext } from '../common/tenant/tenant-context';
 import { PaginatedResult } from '../common/types/api-response.interface';
+import { LimitEnforcementService } from '../limits/limit-enforcement.service';
 import { InviteTeamMemberDto } from './dto/invite-team-member.dto';
 import { ListTeamQueryDto } from './dto/list-team-query.dto';
 import { TeamMemberView } from './dto/team-member-view.interface';
@@ -46,6 +47,7 @@ export class TeamService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly limitEnforcementService: LimitEnforcementService,
   ) {}
 
   // ─── GET /admin/team ─────────────────────────────────────────────────
@@ -116,6 +118,17 @@ export class TeamService {
           `This user already has a membership in this tenant (status: ${existing.status})`,
         );
       }
+
+      // Phase 6 W5 — team_members usage counts ACTIVE + INVITED (excludes
+      // SUSPENDED); an invitation is exactly the event that adds a new
+      // INVITED row, so it is the one and only increment point for this
+      // key. Same transaction as the create below (the core W5 invariant).
+      await this.limitEnforcementService.assertLimit(
+        tx,
+        tenantId,
+        'team_members',
+        1,
+      );
 
       const created = await tx.tenantMembership.create({
         data: {
@@ -231,6 +244,16 @@ export class TeamService {
           'Membership status changed concurrently — retry',
         );
       }
+
+      // Phase 6 W5 — decrement only after the CAS above actually succeeded
+      // (never speculatively, never if the transition failed/conflicted).
+      // Same transaction as the CAS update itself.
+      await this.limitEnforcementService.releaseLimit(
+        tx,
+        tenantId,
+        'team_members',
+        1,
+      );
 
       await this.writeAudit(tx, tenantContext, actor, {
         action: 'team.suspend',

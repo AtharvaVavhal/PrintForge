@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../common/audit/audit.module';
+import { LimitEnforcementModule } from '../limits/limit-enforcement.module';
 import { TeamController } from './team.controller';
 import { TeamService } from './team.service';
 
@@ -14,7 +15,7 @@ import { TeamService } from './team.service';
  * `AdminModule`/`AdminController`/`AdminService` are untouched by W7.
  */
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, LimitEnforcementModule],
   controllers: [TeamController],
   providers: [TeamService],
 })

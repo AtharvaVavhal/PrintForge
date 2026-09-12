@@ -67,6 +67,42 @@ describe('Phase 5 W7 — Team Management', () => {
     return m.id;
   }
 
+  /** Phase 6 W5 — `inviteMember` now enforces the `team_members` limit
+   * (`LimitEnforcementService.assertLimit`). A tenant with no Plan/
+   * Subscription resolves to the fallback/free entitlement, which (until a
+   * SUPER_ADMIN configures the free plan's catalogue — a real, separate,
+   * flagged operational gap; see the W5 report §33) has no `team_members`
+   * `PlanLimit` row and therefore denies by design (P6-D2). Every "D.
+   * invite" test that expects a real invite to SUCCEED provisions a
+   * generous limit first via this helper — the pre-existing tests'
+   * behavior is otherwise completely unchanged; this only satisfies a
+   * genuinely new precondition the system now correctly requires. */
+  async function provisionTeamMembersCapacity(
+    tenantId: string,
+    limitValue: number | null = 100,
+  ): Promise<void> {
+    const plan = await prisma.plan.create({
+      data: {
+        key: `plan-${randomUUID().slice(0, 8)}`,
+        name: 'Test Plan',
+        isActive: true,
+        sortOrder: 0,
+        isEnterpriseCustom: false,
+      },
+    });
+    await prisma.planLimit.create({
+      data: {
+        planId: plan.id,
+        limitKey: 'team_members',
+        limitValue,
+        period: 'PERSISTENT',
+      },
+    });
+    await prisma.subscription.create({
+      data: { tenantId, planId: plan.id, status: 'ACTIVE' },
+    });
+  }
+
   // ─── A. AUTHORIZATION ───────────────────────────────────────────────────
 
   describe('A. authorization', () => {
@@ -278,6 +314,7 @@ describe('Phase 5 W7 — Team Management', () => {
     it('a valid OWNER invite succeeds and creates an INVITED membership', async () => {
       const owner = await registerUser(app, 'owner');
       const { tenantId } = await grantOwnerMembership(prisma, owner.id);
+      await provisionTeamMembersCapacity(tenantId);
       const target = await registerUser(app, 'target');
 
       const res = await http(app)
@@ -297,7 +334,8 @@ describe('Phase 5 W7 — Team Management', () => {
 
     it('a duplicate active membership is rejected', async () => {
       const owner = await registerUser(app, 'owner');
-      await grantOwnerMembership(prisma, owner.id);
+      const { tenantId } = await grantOwnerMembership(prisma, owner.id);
+      await provisionTeamMembersCapacity(tenantId);
       const target = await registerUser(app, 'target');
       await http(app)
         .post(apiPath('/admin/team/invite'))
@@ -346,6 +384,7 @@ describe('Phase 5 W7 — Team Management', () => {
     it("the tenant is server-derived — the created membership belongs to the caller's own tenant, never a client-influenced one", async () => {
       const owner = await registerUser(app, 'owner');
       const { tenantId } = await grantOwnerMembership(prisma, owner.id);
+      await provisionTeamMembersCapacity(tenantId);
       const target = await registerUser(app, 'target');
       await http(app)
         .post(apiPath('/admin/team/invite'))
@@ -361,6 +400,7 @@ describe('Phase 5 W7 — Team Management', () => {
     it('invitation produces a TenantAuditLog row with correct tenantId and actorMembershipId', async () => {
       const owner = await registerUser(app, 'owner');
       const { tenantId } = await grantOwnerMembership(prisma, owner.id);
+      await provisionTeamMembersCapacity(tenantId);
       const target = await registerUser(app, 'target');
       const res = await http(app)
         .post(apiPath('/admin/team/invite'))

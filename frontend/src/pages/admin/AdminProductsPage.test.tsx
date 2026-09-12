@@ -57,6 +57,49 @@ describe('AdminProductsPage', () => {
     mock.restore()
   })
 
+  // Phase 6 W8 — usage meter (GET /admin/usage + GET /admin/entitlements).
+  it('shows a "X / Y" usage meter using real backend usage and limit values', async () => {
+    mock.onGet('/products/admin').reply(200, productsResponse([buildProduct()]))
+    mock.onGet('/admin/usage').reply(200, {
+      success: true,
+      data: { products: { count: 42, period: 'PERSISTENT' } },
+    })
+    mock.onGet('/admin/entitlements').reply(200, {
+      success: true,
+      data: { features: {}, limits: { products: { value: 100, period: 'PERSISTENT' } } },
+    })
+
+    renderWithProviders(<AdminProductsPage />)
+
+    expect(await screen.findByText('42 / 100')).toBeInTheDocument()
+  })
+
+  it('shows "unlimited" rather than a fabricated cap when the resolved limit is null', async () => {
+    mock.onGet('/products/admin').reply(200, productsResponse([buildProduct()]))
+    mock.onGet('/admin/usage').reply(200, {
+      success: true,
+      data: { products: { count: 7, period: 'PERSISTENT' } },
+    })
+    mock.onGet('/admin/entitlements').reply(200, {
+      success: true,
+      data: { features: {}, limits: { products: { value: null, period: 'PERSISTENT' } } },
+    })
+
+    renderWithProviders(<AdminProductsPage />)
+
+    expect(await screen.findByText(/7 used \(unlimited\)/)).toBeInTheDocument()
+  })
+
+  it('renders normally with no usage meter when usage/entitlements are unavailable (never blocks the page)', async () => {
+    mock.onGet('/products/admin').reply(200, productsResponse([buildProduct()]))
+    // /admin/usage and /admin/entitlements deliberately unmocked -> 404.
+
+    renderWithProviders(<AdminProductsPage />)
+
+    expect(await screen.findByText('Ceramic Mug')).toBeInTheDocument()
+    expect(screen.queryByText('Plan usage')).not.toBeInTheDocument()
+  })
+
   it('lists products (via GET /products/admin) and links each into the admin product detail route', async () => {
     mock.onGet('/products/admin').reply(200, productsResponse([buildProduct()]))
 

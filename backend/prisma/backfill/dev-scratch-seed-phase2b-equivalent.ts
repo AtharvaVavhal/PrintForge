@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { seedFreePlanCatalogue } from '../free-plan-catalogue';
 
 /**
  * LOCAL DRY-RUN PREREQUISITE ONLY — NOT PART OF W4, NOT FOR PRODUCTION.
@@ -61,8 +62,32 @@ async function main(): Promise<void> {
   const plan = await prisma.plan.upsert({
     where: { key: 'free' },
     update: {},
-    create: { key: 'free', name: 'Free' },
+    // P6-D1 — isActive/sortOrder/isEnterpriseCustom are nullable at the DB
+    // level (G-19 forces this on the pre-existing `plans` table) with no
+    // DB-level default, so a create() that omits them would silently
+    // insert NULL rather than their intended default. Explicit here for
+    // the same reason PlatformPlansService.createPlan() is explicit.
+    create: {
+      key: 'free',
+      name: 'Free',
+      // Explicit here to match the approved Free-plan spec
+      // (docs/saas/DECISIONS.md) and seed-tenant-bootstrap.ts's own
+      // Plan.create — `isPublic` already defaults to `true` at the DB
+      // level (schema.prisma), so this changes no runtime behavior for a
+      // freshly-created row; it only makes both canonical bootstrap paths
+      // consistent with each other and with the approved spec.
+      isPublic: true,
+      isActive: true,
+      sortOrder: 0,
+      isEnterpriseCustom: false,
+    },
   });
+
+  // Phase 6 W5 — business-approved Free-plan PlanFeature/PlanLimit
+  // catalogue (docs/saas/DECISIONS.md). Idempotent upsert, safe on every
+  // run, converges the catalogue to the approved values regardless of
+  // whether `plan` above was just created or already existed.
+  const catalogue = await seedFreePlanCatalogue(prisma, plan.id);
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: TENANT_SLUG },
@@ -145,6 +170,7 @@ async function main(): Promise<void> {
         tenantId: tenant.id,
         storeId: store.id,
         subscriptionId: subscription.id,
+        planCatalogue: catalogue,
         adminsSeen: admins.length,
         membershipsCreated,
         customersSeen: customersUsers.length,

@@ -18,6 +18,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { resolveTenantAuditActor } from '../common/audit/tenant-actor-attribution';
 import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { TenantContext } from '../common/tenant/tenant-context';
+import { LimitEnforcementService } from '../limits/limit-enforcement.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { CategoryTreeNode } from './dto/category-tree.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -54,6 +55,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
     private readonly auditService: AuditService,
+    private readonly limitEnforcementService: LimitEnforcementService,
   ) {}
 
   // ─── Categories ──────────────────────────────────────────────────────
@@ -397,6 +399,20 @@ export class ProductsService {
         throw new NotFoundException('Category not found');
       }
       assertObjectInTenant(category, tenantContext.tenantId);
+
+      // Phase 6 W5 — same transaction as the actual create below (the
+      // core W5 invariant: reservation + resource creation atomic
+      // together). `products` counts ALL Product rows regardless of
+      // `isActive` and is never decremented (deletion isn't supported —
+      // deactivation only), so this is the only usage touchpoint this
+      // resource ever needs.
+      await this.limitEnforcementService.assertLimit(
+        tx,
+        tenantContext.tenantId,
+        'products',
+        1,
+      );
+
       let created: Product;
       try {
         created = await tx.product.create({

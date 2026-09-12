@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { seedFreePlanCatalogue } from './free-plan-catalogue';
 
 /**
  * SaaS Master Plan Phase 1 — dev/test tenant bootstrap (spec §B.8 item 6,
@@ -81,8 +82,26 @@ async function main(): Promise<void> {
   const plan = await prisma.plan.upsert({
     where: { key: 'free' },
     update: {},
-    create: { key: 'free', name: 'Free', isPublic: true },
+    // P6-D1 — isActive/sortOrder/isEnterpriseCustom are nullable at the DB
+    // level (G-19 forces this on the pre-existing `plans` table) with no
+    // DB-level default, so a create() that omits them would silently
+    // insert NULL rather than their intended default. Explicit here for
+    // the same reason PlatformPlansService.createPlan() is explicit.
+    create: {
+      key: 'free',
+      name: 'Free',
+      isPublic: true,
+      isActive: true,
+      sortOrder: 0,
+      isEnterpriseCustom: false,
+    },
   });
+
+  // Phase 6 W5 — business-approved Free-plan PlanFeature/PlanLimit
+  // catalogue (docs/saas/DECISIONS.md). Idempotent upsert, safe on every
+  // run, converges the catalogue to the approved values regardless of
+  // whether `plan` above was just created or already existed.
+  const catalogue = await seedFreePlanCatalogue(prisma, plan.id);
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: tenantSlug },
@@ -126,7 +145,9 @@ async function main(): Promise<void> {
   });
 
   console.log('Phase 1 tenant bootstrap complete:');
-  console.log(`  plan         ${plan.key} (${plan.id})`);
+  console.log(
+    `  plan         ${plan.key} (${plan.id}) catalogue: ${catalogue.featuresWritten} feature(s), ${catalogue.limitsWritten} limit(s)`,
+  );
   console.log(`  tenant       ${tenant.slug} (${tenant.id}) status=${tenant.status}`);
   console.log(`  store        ${store.slug} "${store.name}" (${store.id}) isPrimary=${store.isPrimary}`);
   console.log(`  membership   OWNER user=${ownerId} status=${membership.status} (${membership.id})`);

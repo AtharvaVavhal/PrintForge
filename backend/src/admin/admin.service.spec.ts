@@ -39,6 +39,9 @@ interface BuildServiceOptions {
   groupBy?: { status: OrderStatus; _count: { _all: number } }[];
   aggregateSum?: Prisma.Decimal | null;
   recentOrders?: unknown[];
+  subscriptionFindUnique?: unknown;
+  resolveResult?: unknown;
+  usageResult?: { count: number };
 }
 
 function buildService({
@@ -48,7 +51,21 @@ function buildService({
   groupBy = [],
   aggregateSum = null,
   recentOrders = [],
+  subscriptionFindUnique = null,
+  resolveResult = { features: {}, limits: {} },
+  usageResult = { count: 0 },
 }: BuildServiceOptions = {}) {
+  // Phase 6 W6 — `getSubscription` calls `getTenantScopedClient(this.prisma,
+  // tenantId)`, which calls `this.prisma.$extends(...)` internally — mocked
+  // exactly the way `entitlement.service.spec.ts`/`app-setting.service.spec
+  // .ts` already establish for the same D4 tenant-scoped-client mechanism:
+  // `$extends` returns a plain object exposing just the delegate the
+  // middleware forwards calls through to. The real scoping behavior itself
+  // is exercised for real in `test/e2e/entitlement-engine.e2e-spec.ts`-style
+  // Postgres e2e coverage, not here.
+  const subscriptionDelegate = {
+    findUnique: jest.fn().mockResolvedValue(subscriptionFindUnique),
+  };
   const prisma = {
     user: {
       findMany: jest.fn().mockResolvedValue(findMany),
@@ -61,6 +78,7 @@ function buildService({
         .fn<Promise<{ _sum: { total: Prisma.Decimal | null } }>, [unknown]>()
         .mockResolvedValue({ _sum: { total: aggregateSum } }),
     },
+    $extends: jest.fn().mockReturnValue({ subscription: subscriptionDelegate }),
   };
   const ordersService = {
     adminRecentOrders: jest.fn().mockResolvedValue(recentOrders),
@@ -68,8 +86,26 @@ function buildService({
       .fn()
       .mockResolvedValue({ items: recentOrders, meta: {} }),
   };
-  const service = new AdminService(prisma as never, ordersService as never);
-  return { service, prisma, ordersService };
+  const entitlementService = {
+    resolve: jest.fn().mockResolvedValue(resolveResult),
+  };
+  const usageService = {
+    getUsage: jest.fn().mockResolvedValue(usageResult),
+  };
+  const service = new AdminService(
+    prisma as never,
+    ordersService as never,
+    entitlementService as never,
+    usageService as never,
+  );
+  return {
+    service,
+    prisma,
+    ordersService,
+    entitlementService,
+    usageService,
+    subscriptionDelegate,
+  };
 }
 
 describe('AdminService.getDashboard — aggregation against seeded fixtures', () => {
@@ -303,5 +339,153 @@ describe('AdminService.getCustomerDetail', () => {
       'user-1',
       expect.objectContaining({ page: 1 }),
     );
+  });
+});
+
+/**
+ * Phase 6 W6 — GET /admin/subscription|usage|entitlements. Mocked-Prisma/
+ * mocked-service unit tests, same convention as every `describe` block
+ * above. Real-Postgres HTTP-boundary coverage (guard chain, tenant
+ * isolation, spoofed-tenantId rejection, permission matrix) lives in
+ * `test/e2e/tenant-entitlement-api.e2e-spec.ts`.
+ */
+describe('AdminService — GET /admin/subscription|usage|entitlements (Phase 6 W6)', () => {
+  describe('getSubscription', () => {
+    it('returns the tenant-scoped subscription state, shaped to the view contract only — no internal ids', async () => {
+      const { service, subscriptionDelegate } = buildService({
+        subscriptionFindUnique: {
+          status: 'ACTIVE',
+          currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+          currentPeriodEnd: null,
+          plan: { key: 'free', name: 'Free' },
+        },
+      });
+
+      const result = await service.getSubscription(tenantContext);
+
+      expect(result).toEqual({
+        status: 'ACTIVE',
+        plan: { key: 'free', name: 'Free' },
+        currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+        currentPeriodEnd: null,
+      });
+      expect(result).not.toHaveProperty('id');
+      expect(result).not.toHaveProperty('tenantId');
+      expect(result).not.toHaveProperty('planId');
+      expect(subscriptionDelegate.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { tenantId: TENANT_ID } }),
+      );
+    });
+
+    it('never queries any tenant other than the server-derived one', async () => {
+      const { service, prisma, subscriptionDelegate } = buildService({
+        subscriptionFindUnique: {
+          status: 'ACTIVE',
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+          plan: { key: 'free', name: 'Free' },
+        },
+      });
+
+      await service.getSubscription(tenantContext);
+
+      // `getTenantScopedClient` is invoked (proving the D4 scoping
+      // mechanism is used, not a raw unscoped query), and the delegate it
+      // hands back is queried with exactly this tenant's id — never a
+      // second, different tenant id from anywhere else.
+      expect(prisma.$extends).toHaveBeenCalledTimes(1);
+      const [callArgs] = subscriptionDelegate.findUnique.mock.calls[0] as [
+        { where: { tenantId: string } },
+      ];
+      expect(callArgs.where.tenantId).toBe(TENANT_ID);
+    });
+
+    it('a missing Subscription row 404s rather than fabricating a response', async () => {
+      const { service } = buildService({ subscriptionFindUnique: null });
+
+      await expect(service.getSubscription(tenantContext)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getUsage', () => {
+    it('reads every PERSISTENT limit key through UsageService.getUsage with the server-derived tenantId and the fixed PERSISTENT period', async () => {
+      const { service, usageService } = buildService({
+        usageResult: { count: 7 },
+      });
+
+      const result = await service.getUsage(tenantContext);
+
+      for (const limitKey of [
+        'products',
+        'team_members',
+        'storage_mb',
+        'custom_domains',
+      ]) {
+        expect(usageService.getUsage).toHaveBeenCalledWith(
+          expect.anything(),
+          TENANT_ID,
+          limitKey,
+          'persistent',
+        );
+        expect(result[limitKey as keyof typeof result]).toEqual({
+          count: 7,
+          period: 'PERSISTENT',
+        });
+      }
+    });
+
+    it('never queries orders_per_month through UsageService — no billing-period identifier exists to pass it (P6-D3 Part B) — and reports count: null, never a fabricated 0', async () => {
+      const { service, usageService } = buildService({
+        usageResult: { count: 0 },
+      });
+
+      const result = await service.getUsage(tenantContext);
+
+      expect(usageService.getUsage).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'orders_per_month',
+        expect.anything(),
+      );
+      expect(result.orders_per_month).toEqual({
+        count: null,
+        period: 'BILLING_PERIOD',
+      });
+    });
+
+    it('never calls a Usage-mutating method — the mock exposes only getUsage, so any write attempt would throw, not merely go unasserted', async () => {
+      const { service, usageService } = buildService();
+
+      await service.getUsage(tenantContext);
+
+      expect(usageService.getUsage).toHaveBeenCalled();
+      // No `reserve`/`decrement` exists on the mock at all — if getUsage()
+      // ever called through to one, this test would already have thrown a
+      // TypeError before reaching this assertion.
+      expect(usageService).not.toHaveProperty('reserve');
+      expect(usageService).not.toHaveProperty('decrement');
+    });
+  });
+
+  describe('getEntitlements', () => {
+    it('returns EXACTLY what EntitlementService.resolve() resolves, for the server-derived tenantId — no reshaping, no duplicated resolution logic', async () => {
+      const resolveResult = {
+        features: { coupons: true, team_members: false },
+        limits: {
+          products: { value: 100, period: 'PERSISTENT' },
+          storage_mb: { value: null, period: 'PERSISTENT' }, // unlimited
+          custom_domains: { value: 0, period: 'PERSISTENT' }, // missing/denied
+        },
+      };
+      const { service, entitlementService } = buildService({ resolveResult });
+
+      const result = await service.getEntitlements(tenantContext);
+
+      expect(result).toBe(resolveResult); // reference equality — zero transformation
+      expect(entitlementService.resolve).toHaveBeenCalledWith(TENANT_ID);
+      expect(entitlementService.resolve).toHaveBeenCalledTimes(1);
+    });
   });
 });

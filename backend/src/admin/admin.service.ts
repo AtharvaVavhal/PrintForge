@@ -3,11 +3,20 @@ import { OrderStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
 import { PaginatedResult } from '../common/types/api-response.interface';
 import { TenantContext } from '../common/tenant/tenant-context';
+import { getTenantScopedClient } from '../common/tenant/tenant-prisma';
 import {
   decimalToPaise,
   paiseToDecimalString,
 } from '../cart/pricing/money.util';
 import { OrdersService } from '../orders/orders.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
+import { EntitlementResolution } from '../entitlements/entitlement.types';
+import { UsageService } from '../usage/usage.service';
+import { PERSISTENT_PERIOD } from '../usage/usage-period';
+import {
+  LIMIT_KEY_PERIODS,
+  LIMIT_KEYS,
+} from '../platform/platform-plans/catalogue.constants';
 import { ListAdminCustomersQueryDto } from './dto/list-admin-customers-query.dto';
 import {
   AdminCustomerDetailView,
@@ -17,6 +26,8 @@ import {
   AdminDashboardView,
   OrderStatusCount,
 } from './dto/dashboard-view.interface';
+import { AdminSubscriptionView } from './dto/subscription-view.interface';
+import { AdminUsageView } from './dto/usage-view.interface';
 
 /** §19/§32: "paid-or-later" — everything from PAID onward in the lifecycle
  * except the two terminal statuses where the money isn't kept. Read off
@@ -62,6 +73,8 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ordersService: OrdersService,
+    private readonly entitlementService: EntitlementService,
+    private readonly usageService: UsageService,
   ) {}
 
   // ─── GET /admin/dashboard (§19, minimal — no charts) ───────────────────
@@ -222,5 +235,85 @@ export class AdminService {
       createdAt: user.createdAt,
       orderCount: user._count.orders,
     };
+  }
+
+  // ─── Phase 6 W6 — GET /admin/subscription|usage|entitlements ───────────
+  //
+  // Composes EntitlementService/UsageService; reimplements neither's own
+  // resolution logic (§6/§8/§10 of the W6 authorization). Read-only — no
+  // method below ever calls a `.create`/`.update`/`.delete`/`.upsert` on
+  // Subscription/Plan/PlanFeature/PlanLimit/TenantEntitlementOverride/Usage.
+
+  /**
+   * Subscription is one of `tenant-prisma.ts`'s own scoped models (the
+   * same mechanism `EntitlementService.resolveEffectivePlanId` already
+   * uses) — scoped by the server-derived `tenantContext.tenantId`, never a
+   * client-supplied value. A tenant with no `Subscription` row at all is a
+   * deployment-configuration defect (every tenant gets one at bootstrap —
+   * `seed-tenant-bootstrap.ts`), reported as 404 rather than silently
+   * fabricating a response.
+   */
+  async getSubscription(
+    tenantContext: TenantContext,
+  ): Promise<AdminSubscriptionView> {
+    const scoped = getTenantScopedClient(this.prisma, tenantContext.tenantId);
+    const subscription = await scoped.subscription.findUnique({
+      where: { tenantId: tenantContext.tenantId },
+      select: {
+        status: true,
+        currentPeriodStart: true,
+        currentPeriodEnd: true,
+        plan: { select: { key: true, name: true } },
+      },
+    });
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+    return {
+      status: subscription.status,
+      plan: subscription.plan,
+      currentPeriodStart: subscription.currentPeriodStart,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+    };
+  }
+
+  /**
+   * One `UsageService.getUsage()` read per PERSISTENT-classified limit key
+   * (never a duplicated query — `UsageService` remains the sole `Usage`
+   * reader) — read-only by construction (`getUsage` itself never creates a
+   * row; see its own doc comment). `orders_per_month` (the sole
+   * BILLING_PERIOD key) is never queried at all: there is no valid
+   * `period` string to pass it (P6-D3 Part B, `usage/usage-period.ts`), so
+   * inventing one here would be exactly the "calendar-month logic" §5
+   * forbids. Its entry is `count: null` — never a real query, never a
+   * fabricated 0.
+   */
+  async getUsage(tenantContext: TenantContext): Promise<AdminUsageView> {
+    const result = {} as AdminUsageView;
+    for (const limitKey of LIMIT_KEYS) {
+      const period = LIMIT_KEY_PERIODS[limitKey];
+      if (period === 'BILLING_PERIOD') {
+        result[limitKey] = { count: null, period };
+        continue;
+      }
+      const { count } = await this.usageService.getUsage(
+        this.prisma,
+        tenantContext.tenantId,
+        limitKey,
+        PERSISTENT_PERIOD,
+      );
+      result[limitKey] = { count, period };
+    }
+    return result;
+  }
+
+  /**
+   * `EntitlementService.resolve()` IS the response — no reshaping, no
+   * reimplementation of PlanFeature/PlanLimit/override resolution (§6).
+   */
+  async getEntitlements(
+    tenantContext: TenantContext,
+  ): Promise<EntitlementResolution> {
+    return this.entitlementService.resolve(tenantContext.tenantId);
   }
 }

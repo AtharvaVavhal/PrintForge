@@ -15,10 +15,12 @@ import { SupportSessionContextGuard } from './common/tenant/support-session-cont
 import { TenantContextGuard } from './common/tenant/tenant-context.guard';
 import { TenantLifecycleGuard } from './common/tenant/tenant-lifecycle.guard';
 import { PermissionsGuard } from './auth/permissions/permissions.guard';
+import { EntitlementGuard } from './entitlements/entitlement.guard';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 import { AdminModule } from './admin/admin.module';
 import { AppSettingModule } from './app-setting/app-setting.module';
+import { EntitlementModule } from './entitlements/entitlement.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { AuthModule } from './auth/auth.module';
 import { CartModule } from './cart/cart.module';
@@ -96,6 +98,15 @@ import { UsersModule } from './users/users.module';
  *      that session's own `grantedPermissions` ceiling (P5-D8) — see that
  *      guard's own header comment. Deny-by-default; no context + a
  *      declared permission requirement = 403.
+ *   5. `EntitlementGuard` (Phase 6 W4) — checks `@RequireFeature(...)`
+ *      against the tenant's effective plan entitlement, resolved through
+ *      `EntitlementService.resolve()` (W2) — deny-by-default (403
+ *      `upgrade_required`); a pure no-op for any route with no
+ *      `@RequireFeature(...)` metadata, so this addition changes nothing
+ *      about any existing route's authorization behavior. Runs strictly
+ *      AFTER `PermissionsGuard`, so a permission failure is always thrown
+ *      before this guard ever executes — the two layers compose, neither
+ *      replaces the other.
  *
  * PlatformGuard (Phase 2a; decision P2-D1/G-11) remains global, independent
  * of all four above (frozen SaaS invariant 4) — it only acts on
@@ -141,6 +152,7 @@ import { UsersModule } from './users/users.module';
     CouponsModule,
     AppSettingModule,
     PlatformModule,
+    EntitlementModule,
     InvoicesModule,
     ProductsModule,
     CartModule,
@@ -161,6 +173,7 @@ import { UsersModule } from './users/users.module';
     { provide: APP_GUARD, useClass: TenantContextGuard },
     { provide: APP_GUARD, useClass: TenantLifecycleGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: EntitlementGuard },
     { provide: APP_GUARD, useClass: PlatformGuard },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
