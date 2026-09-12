@@ -43,6 +43,19 @@ export interface BillingProviderSubscription {
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
   trialEndsAt?: Date;
+  /**
+   * Phase 7 Stage 2 (P7-D2 Part E) addition — the provider's own opaque
+   * plan/price reference currently in effect, as of whenever this value
+   * was produced. Optional: a provider adapter that genuinely cannot
+   * report this may omit it. Added specifically so
+   * `getSubscription()`-based timeout reconciliation (P7-D2 Part E) has
+   * something to compare an upgrade/downgrade against — without it,
+   * reconciling a plan-change timeout would have no signal to check at
+   * all. Never assumed to equal a real `Plan.id`; always an opaque,
+   * provider-defined string (the same `planRef` shape `createSubscription`/
+   * `changeSubscription` already accept).
+   */
+  planRef?: string;
 }
 
 export interface NormalizedBillingEvent {

@@ -1,14 +1,13 @@
-import { FakeBillingProvider } from '../../test/e2e/support/fake-billing-provider';
+import { FakeBillingProvider } from './fake-billing-provider';
 
 /**
- * Phase 7 Stage 1 (docs/saas/DECISIONS.md P7-D1, Part G). Deliberately
- * colocated under `src/subscriptions/` rather than next to
- * `test/e2e/support/fake-billing-provider.ts` itself — same reasoning,
- * same precedent, as `phase6-w1-plan-backfill.spec.ts`/`free-plan
- * -catalogue.spec.ts`: `package.json`'s jest config sets `rootDir: "src"`,
- * so nothing under `test/` is ever discovered by `npx jest` (the unit
- * runner). The module is imported here via relative path; `rootDir` only
- * gates *test discovery*, not what a discovered test may import.
+ * Phase 7 Stage 1 (docs/saas/DECISIONS.md P7-D1, Part G); the module under
+ * test relocated to `src/subscriptions/fake-billing-provider.ts` in Phase
+ * 7 Stage 2 (P7-D2 Part G — see that file's own updated header comment).
+ * This spec was already colocated under `src/subscriptions/` for
+ * `package.json`'s jest `rootDir: "src"` unit-test discovery — the import
+ * below is now a same-directory relative path rather than a reach into
+ * `test/e2e/support/`.
  */
 describe('FakeBillingProvider (Phase 7 Stage 1 test double)', () => {
   it('createCustomer returns a deterministic-shaped, unique providerCustomerId', async () => {

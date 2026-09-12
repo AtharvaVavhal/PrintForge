@@ -551,6 +551,94 @@ describe('SubscriptionService', () => {
     });
   });
 
+  describe('scheduleCancellation (Stage 2, P7-D2 Part C)', () => {
+    it('sets ONLY cancelAtPeriodEnd — status and planId are untouched', async () => {
+      const { client, updateMany, eventCreate } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: null,
+      });
+
+      const result = await service.scheduleCancellation(
+        client as never,
+        subscription,
+      );
+
+      expect(result.applied).toBe(true);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: SUB_ID, status: 'ACTIVE', cancelAtPeriodEnd: null },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({ cancelAtPeriodEnd: true }),
+      });
+      const dataArg =
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        (updateMany.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      expect(dataArg).not.toHaveProperty('status');
+      expect(dataArg).not.toHaveProperty('planId');
+      expect(eventCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // toStatus stays 'ACTIVE' (unchanged) — this is scheduling, not
+          // an actual cancellation; metadata.scheduled disambiguates it
+          // from a real cancelled event, both of which share this type.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          data: expect.objectContaining({
+            type: 'cancelled',
+            toStatus: 'ACTIVE',
+            metadata: { scheduled: true },
+          }),
+        }),
+      );
+    });
+
+    it('is idempotent: cancelAtPeriodEnd already true is a safe no-op', async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: true,
+      });
+
+      const result = await service.scheduleCancellation(
+        client as never,
+        subscription,
+      );
+
+      expect(result.applied).toBe(false);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the subscription is not currently ACTIVE', async () => {
+      const { client } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'PENDING',
+        cancelAtPeriodEnd: null,
+      });
+
+      await expect(
+        service.scheduleCancellation(client as never, subscription),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('a lost CAS race is a safe no-op, never an error', async () => {
+      const { client, updateMany } = makeClient({ updateManyCount: 0 });
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: null,
+      });
+
+      const result = await service.scheduleCancellation(
+        client as never,
+        subscription,
+      );
+
+      expect(result.applied).toBe(false);
+      expect(updateMany).toHaveBeenCalled();
+    });
+  });
+
   describe('cancel / reactivate / expire', () => {
     it('PAST_DUE -> CANCELLED is allowed', async () => {
       const { client, updateMany } = makeClient();
@@ -580,14 +668,24 @@ describe('SubscriptionService', () => {
       });
     });
 
-    it('ACTIVE -> CANCELLED is REJECTED (not a ratified edge)', async () => {
-      const { client } = makeClient();
+    it('ACTIVE -> CANCELLED is allowed (P7-D2 Part B — immediate cancellation, amends P7-D1)', async () => {
+      const { client, updateMany, eventCreate } = makeClient();
       const service = new SubscriptionService(client as never);
       const subscription = makeSubscription({ status: 'ACTIVE' });
 
-      await expect(
-        service.cancel(client as never, subscription, {}),
-      ).rejects.toThrow(ConflictException);
+      await service.cancel(client as never, subscription, {});
+
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: SUB_ID, status: 'ACTIVE' },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({ status: 'CANCELLED' }),
+      });
+      expect(eventCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          data: expect.objectContaining({ type: 'cancelled' }),
+        }),
+      );
     });
 
     it('CANCELLED -> ACTIVE reactivation is allowed', async () => {

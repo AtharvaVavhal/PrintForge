@@ -17,7 +17,9 @@ const ALL_STATUSES: SubscriptionStatus[] = [
 ];
 
 /** Every edge the ratification gate's own Step 5 explicitly lists as
- * "at minimum" — the single source of truth this spec verifies against. */
+ * "at minimum" (P7-D1), PLUS `ACTIVE -> CANCELLED` (P7-D2 Part B's
+ * ratified amendment, Phase 7 Stage 2) — the single source of truth this
+ * spec verifies against. */
 const RATIFIED_ALLOWED_EDGES: [SubscriptionStatus, SubscriptionStatus][] = [
   ['PENDING', 'TRIALING'],
   ['PENDING', 'ACTIVE'],
@@ -25,6 +27,7 @@ const RATIFIED_ALLOWED_EDGES: [SubscriptionStatus, SubscriptionStatus][] = [
   ['TRIALING', 'PAST_DUE'],
   ['ACTIVE', 'ACTIVE'],
   ['ACTIVE', 'PAST_DUE'],
+  ['ACTIVE', 'CANCELLED'],
   ['PAST_DUE', 'ACTIVE'],
   ['PAST_DUE', 'PAUSED'],
   ['PAST_DUE', 'CANCELLED'],
@@ -73,15 +76,18 @@ describe('SUBSCRIPTION_STATE_TRANSITIONS / isSubscriptionTransitionAllowed (Phas
     expect(SUBSCRIPTION_STATE_TRANSITIONS.EXPIRED).toEqual([]);
   });
 
-  it('rejects transitions never listed for a given source (e.g. PENDING -> PAST_DUE, ACTIVE -> CANCELLED directly, ACTIVE -> EXPIRED)', () => {
+  it('rejects transitions never listed for a given source (e.g. PENDING -> PAST_DUE, ACTIVE -> EXPIRED, TRIALING -> CANCELLED)', () => {
     expect(isSubscriptionTransitionAllowed('PENDING', 'PAST_DUE')).toBe(false);
-    expect(isSubscriptionTransitionAllowed('ACTIVE', 'CANCELLED')).toBe(false);
     expect(isSubscriptionTransitionAllowed('ACTIVE', 'EXPIRED')).toBe(false);
     expect(isSubscriptionTransitionAllowed('TRIALING', 'CANCELLED')).toBe(
       false,
     );
     expect(isSubscriptionTransitionAllowed('CANCELLED', 'PAUSED')).toBe(false);
   });
+
+  // ACTIVE -> CANCELLED moved from "rejected" to "ratified" in Phase 7
+  // Stage 2 (P7-D2 Part B) — see the RATIFIED_ALLOWED_EDGES
+  // parameterization above, which now covers it explicitly.
 
   it('rejects a same-state transition for a status with no self-loop (e.g. PENDING -> PENDING)', () => {
     expect(isSubscriptionTransitionAllowed('PENDING', 'PENDING')).toBe(false);
@@ -100,7 +106,15 @@ describe('assertSubscriptionTransitionAllowed', () => {
       assertSubscriptionTransitionAllowed('EXPIRED', 'ACTIVE'),
     ).toThrow(ConflictException);
     expect(() =>
+      // TRIALING -> CANCELLED remains illegal even after P7-D2 Part B
+      // (which ratified only ACTIVE -> CANCELLED, no other new edge).
+      assertSubscriptionTransitionAllowed('TRIALING', 'CANCELLED'),
+    ).toThrow('Illegal subscription transition: TRIALING -> CANCELLED');
+  });
+
+  it('does not throw for the P7-D2 Part B amendment edge (ACTIVE -> CANCELLED)', () => {
+    expect(() =>
       assertSubscriptionTransitionAllowed('ACTIVE', 'CANCELLED'),
-    ).toThrow('Illegal subscription transition: ACTIVE -> CANCELLED');
+    ).not.toThrow();
   });
 });

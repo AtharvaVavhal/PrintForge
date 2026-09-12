@@ -86,13 +86,31 @@ export class SubscriptionService {
     client: Client,
     tenantId: string,
   ): Promise<Subscription> {
-    const subscription = await client.subscription.findUnique({
-      where: { tenantId },
-    });
+    const subscription = await this.findSubscriptionForTenant(client, tenantId);
     if (!subscription) {
       throw new NotFoundException('Subscription not found');
     }
     return subscription;
+  }
+
+  /**
+   * Phase 7 Stage 2 (docs/saas/DECISIONS.md P7-D2, Step 5) addition — same
+   * tenant-scoping as `getSubscriptionForTenant` above, but returns `null`
+   * instead of throwing when none exists. Added specifically so
+   * `SubscriptionOrchestrationService.createSubscription()` can check
+   * "does this tenant already have a subscription?" without a raw
+   * `this.prisma.subscription...` call of its own — every tenancy-model
+   * access still goes through THIS file's own `client.subscription...`
+   * calls (the same generic-`Client`-parameter pattern every other method
+   * here already uses, which `tenant-data-access-guard.spec.ts`'s
+   * allowlist detector does not flag, unlike a literal
+   * `this.prisma.<tenancyModel>...` call from an unlisted file).
+   */
+  async findSubscriptionForTenant(
+    client: Client,
+    tenantId: string,
+  ): Promise<Subscription | null> {
+    return client.subscription.findUnique({ where: { tenantId } });
   }
 
   // ─── Creation ───────────────────────────────────────────────────────────
@@ -481,13 +499,104 @@ export class SubscriptionService {
     };
   }
 
+  // ─── Cancellation scheduling (Stage 2, docs/saas/DECISIONS.md P7-D2 Part C) ──
+
+  /**
+   * ACTIVE -> ACTIVE, cancellation SCHEDULING only — `status`/`planId` are
+   * NEVER touched here, only `cancelAtPeriodEnd` (P7-D2 Part C: "the
+   * local subscription remains ACTIVE... no immediate entitlement
+   * reduction and no immediate transition to CANCELLED"). Mirrors
+   * `scheduleDowngrade`'s own shape exactly. Applying a scheduled
+   * cancellation at the confirmed period boundary is NOT a separate
+   * method — per P7-D2 Part B, that is the ordinary `cancel()` transition
+   * below (now legal from `ACTIVE` too), called by the orchestration
+   * layer once the provider confirms the boundary has been reached;
+   * `cancelAtPeriodEnd` itself is left as `true` afterward (a harmless,
+   * historically-accurate flag on an already-`CANCELLED` row — this
+   * method never needs to clear it, and `cancel()` never touches it
+   * either, exactly as `applyScheduledDowngrade` leaves `pendingPlanId`
+   * cleared but `cancel()`/every other method leaves fields it doesn't
+   * own alone). No provider confirmation is required to persist THIS
+   * scheduling step at the local-state-machine layer (same reasoning as
+   * `scheduleDowngrade`: the request itself is the confirmed local
+   * action) — P7-D2 Part D's "require provider acceptance before
+   * persisting" requirement is an ORCHESTRATION-layer sequencing rule
+   * (call the provider first, only call this method after it accepts),
+   * not a parameter this persistence method itself needs to accept.
+   * Idempotent if `cancelAtPeriodEnd` is already `true`.
+   *
+   * **Event type: reuses `cancelled`, not a dedicated
+   * `cancellation_scheduled` value.** A new enum value would need
+   * `ALTER TYPE "SubscriptionEventType" ADD VALUE ...` on a type created
+   * by an EARLIER migration — `migration-safety.spec.ts`'s additive-only
+   * guard (G-10) rejects that shape outright for any non-legacy
+   * migration (confirmed empirically: the one existing
+   * `WebhookEventStatus ADD VALUE 'FAILED'` precedent is grandfathered
+   * by filename, not permitted by a general rule). Extending the guard
+   * to allow it is a separate, not-yet-ratified architectural decision
+   * (the same weight P4-D2/P4-D3's own dedicated guard-extension records
+   * carried), out of scope here — so this event reuses the existing
+   * `cancelled` type instead of adding a new one, disambiguated from an
+   * ACTUAL cancellation by `toStatus` staying equal to the current
+   * (unchanged) `status` and by `metadata.scheduled: true`. A real
+   * cancellation (via `cancel()` below) always has `toStatus:
+   * 'CANCELLED'`; this scheduling event never does.
+   */
+  async scheduleCancellation(
+    client: Client,
+    subscription: Subscription,
+  ): Promise<TransitionResult<Subscription>> {
+    if (subscription.cancelAtPeriodEnd === true) {
+      return { applied: false, subscription, eventType: null };
+    }
+    this.assertCurrentlyActive(subscription);
+
+    const cas = await client.subscription.updateMany({
+      where: {
+        id: subscription.id,
+        status: subscription.status,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      },
+      data: { cancelAtPeriodEnd: true, updatedAt: new Date() },
+    });
+    if (cas.count !== 1) {
+      return { applied: false, subscription, eventType: null };
+    }
+
+    await client.subscriptionEvent.create({
+      data: {
+        subscriptionId: subscription.id,
+        tenantId: subscription.tenantId,
+        type: 'cancelled',
+        fromStatus: subscription.status,
+        toStatus: subscription.status,
+        metadata: { scheduled: true },
+      },
+    });
+    const updated = await client.subscription.findUniqueOrThrow({
+      where: { id: subscription.id },
+    });
+    return {
+      applied: true,
+      subscription: updated,
+      eventType: 'cancelled',
+    };
+  }
+
   // ─── Cancellation / reactivation / expiry ────────────────────────────────
 
-  /** PAST_DUE|PAUSED -> CANCELLED (the ratified matrix's exact source set
-   * — `ACTIVE -> CANCELLED` is deliberately NOT allowed here; it is
-   * absent from the ratification gate's own "at minimum" transition list
-   * and this file does not invent it). Retains all tenant data — no
-   * deletion of any kind. Idempotent if already `CANCELLED`. */
+  /** PAST_DUE|PAUSED|ACTIVE -> CANCELLED. `ACTIVE -> CANCELLED` (immediate
+   * tenant-requested cancellation) was added to the ratified matrix by
+   * docs/saas/DECISIONS.md P7-D2 Part B — an explicit, intentional
+   * amendment to P7-D1 Part B, which originally allowed only
+   * `PAST_DUE`/`PAUSED` as sources (see `subscription-state-machine.ts`'s
+   * own updated comment). This same method also serves as "apply a
+   * previously-scheduled at-period-end cancellation" — see
+   * `scheduleCancellation` above; the orchestration layer calls this
+   * method for BOTH an immediate cancellation and a scheduled one reaching
+   * its confirmed boundary, since both are the identical `ACTIVE ->
+   * CANCELLED` transition. Retains all tenant data — no deletion of any
+   * kind. Idempotent if already `CANCELLED`. */
   async cancel(
     client: Client,
     subscription: Subscription,

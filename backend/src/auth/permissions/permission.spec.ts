@@ -6,12 +6,14 @@ import {
 } from './permission';
 
 /**
- * Permission catalogue — ratified G-13 (docs/saas/DECISIONS.md, 2026-09-07).
- * These tests pin the exact ratified catalogue and role map so a future
- * change requires touching this file deliberately, not by accident.
+ * Permission catalogue — ratified G-13 (docs/saas/DECISIONS.md, 2026-09-07)
+ * plus P7-D2 Part A (2026-09-12 — adds `billing:manage`, the 14th
+ * permission). These tests pin the exact ratified catalogue and role map
+ * so a future change requires touching this file deliberately, not by
+ * accident.
  */
-describe('permission catalogue (G-13)', () => {
-  it('has exactly the 13 ratified permission strings', () => {
+describe('permission catalogue (G-13, extended by P7-D2 Part A)', () => {
+  it('has exactly the 14 ratified permission strings', () => {
     expect([...PERMISSIONS].sort()).toEqual(
       [
         'dashboard:read',
@@ -27,21 +29,28 @@ describe('permission catalogue (G-13)', () => {
         'products:write',
         'members:manage',
         'payment-account:manage',
+        'billing:manage',
       ].sort(),
     );
   });
 
-  it('OWNER holds all 13 permissions', () => {
-    expect(ROLE_PERMISSIONS.OWNER.size).toBe(13);
+  it('OWNER holds all 14 permissions', () => {
+    expect(ROLE_PERMISSIONS.OWNER.size).toBe(14);
     for (const p of PERMISSIONS) {
       expect(ROLE_PERMISSIONS.OWNER.has(p)).toBe(true);
     }
   });
 
-  it('ADMIN holds every permission except members:manage and payment-account:manage', () => {
+  it('ADMIN holds every permission except members:manage and payment-account:manage (billing:manage included, P7-D2 Part A)', () => {
     expect(ROLE_PERMISSIONS.ADMIN.has('members:manage')).toBe(false);
     expect(ROLE_PERMISSIONS.ADMIN.has('payment-account:manage')).toBe(false);
-    expect(ROLE_PERMISSIONS.ADMIN.size).toBe(11);
+    expect(ROLE_PERMISSIONS.ADMIN.has('billing:manage')).toBe(true);
+    expect(ROLE_PERMISSIONS.ADMIN.size).toBe(12);
+  });
+
+  it('STAFF and VIEWER do not hold billing:manage (P7-D2 Part A — admin-tier only)', () => {
+    expect(ROLE_PERMISSIONS.STAFF.has('billing:manage')).toBe(false);
+    expect(ROLE_PERMISSIONS.VIEWER.has('billing:manage')).toBe(false);
   });
 
   it('STAFF holds the ratified operational set only', () => {

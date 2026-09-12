@@ -7,7 +7,7 @@ import { ProductsModule } from '../products/products.module';
 import { UsersModule } from '../users/users.module';
 import { CheckoutController } from './checkout.controller';
 import { CheckoutService } from './checkout.service';
-import { IdempotencyService } from './idempotency/idempotency.service';
+import { IdempotencyModule } from './idempotency/idempotency.module';
 import { PricingService } from './pricing/pricing.service';
 import { TaxService } from './tax/tax.service';
 
@@ -21,6 +21,12 @@ import { TaxService } from './tax/tax.service';
  * CouponsService.validateAndClaim inside its own order-creation
  * transaction, and CouponsService.previewDiscount for POST
  * /checkout/validate.
+ *
+ * Phase 7 Stage 2 — `IdempotencyService` moved out of this module's own
+ * `providers` array into the new, shared `IdempotencyModule` (see that
+ * module's own comment); `SubscriptionModule` now imports it too. No
+ * behavior change for checkout — same class, same instance shape, just a
+ * different (now shared) `@Module` home.
  */
 @Module({
   imports: [
@@ -30,9 +36,10 @@ import { TaxService } from './tax/tax.service';
     OrdersModule,
     PaymentsModule,
     CouponsModule,
+    IdempotencyModule,
   ],
   controllers: [CheckoutController],
-  providers: [CheckoutService, PricingService, IdempotencyService, TaxService],
+  providers: [CheckoutService, PricingService, TaxService],
   exports: [CheckoutService],
 })
 export class CheckoutModule {}

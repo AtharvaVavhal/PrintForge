@@ -1,10 +1,11 @@
 import { randomUUID } from 'crypto';
+import { Injectable } from '@nestjs/common';
 import {
   BillingProvider,
   BillingProviderCustomer,
   BillingProviderSubscription,
   NormalizedBillingEvent,
-} from '../../../src/subscriptions/billing-provider.interface';
+} from './billing-provider.interface';
 
 /** A fixed, clearly test-oriented period length — this is a FAKE
  * provider's own deterministic simulation of "how long until the next
@@ -32,9 +33,34 @@ interface FakeSubscriptionRecord {
  * Stripe, or any other specific vendor's concepts; `planRef` is an opaque
  * string, never assumed to be a real `Plan.id` or a vendor price id.
  *
+ * **Relocated from `test/e2e/support/` to `src/subscriptions/` in Phase 7
+ * Stage 2 (P7-D2 Part G).** Unlike `FakeCloudinaryService` (whose real
+ * counterpart, `CloudinaryService`, already exists and is what production
+ * actually binds — the fake is purely a test-time DI override), no real
+ * `BillingProvider` adapter exists yet and Stage 2 is explicitly
+ * forbidden from building one (production billing-provider selection,
+ * P7-D1 Part G, remains OPEN). `SubscriptionModule` therefore binds the
+ * `BILLING_PROVIDER` DI token (`billing-provider.token.ts`) to THIS class
+ * for the real, running application too, not only for tests — exactly
+ * what P7-D2 Part G ratifies ("Stage 2 will bind BillingProvider ->
+ * FakeBillingProvider ... to make the vendor-independent Stage 2
+ * implementation executable and testable... NOT ... selecting
+ * FakeBillingProvider as the production billing provider"). Living under
+ * `src/` (rather than `test/`) is what makes that real-module binding
+ * possible at all — a file under `test/` is excluded from
+ * `tsconfig.build.json` and cannot be imported by real `nest build`
+ * output. `@Injectable()` is added (Stage 1's copy had none, since it was
+ * only ever constructed directly by tests) so Nest's DI container can
+ * instantiate it as an ordinary provider.
+ *
  * In-memory only; state resets whenever a new instance is constructed
  * (one per test, matching this repo's own `beforeEach` reset convention
- * — never a module-level singleton relied on across tests).
+ * — never a module-level singleton relied on across tests). In the real
+ * running app, `SubscriptionModule` provides exactly one instance (Nest's
+ * default singleton scope) — acceptable ONLY because this remains a fake
+ * with no real billing consequence; a real adapter replacing this binding
+ * would not inherit this in-memory-singleton shape, since it would hold
+ * no local state at all (every call would be a genuine network request).
  *
  * Test-control hooks beyond the bare `BillingProvider` interface:
  *   - `advancePeriod(providerSubscriptionId)` — deterministically moves a
@@ -47,6 +73,7 @@ interface FakeSubscriptionRecord {
  *     same target state) is what a test actually asserts against, this
  *     class only needs to make replay trivial to express.
  */
+@Injectable()
 export class FakeBillingProvider implements BillingProvider {
   private readonly subscriptions = new Map<string, FakeSubscriptionRecord>();
   private readonly emittedEvents: NormalizedBillingEvent[] = [];
@@ -179,6 +206,7 @@ export class FakeBillingProvider implements BillingProvider {
       providerSubscriptionId: record.providerSubscriptionId,
       currentPeriodStart: record.currentPeriodStart,
       currentPeriodEnd: record.currentPeriodEnd,
+      planRef: record.planRef,
     };
   }
 }

@@ -8,6 +8,7 @@ import { AppSettingModule } from '../app-setting/app-setting.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { EntitlementModule } from '../entitlements/entitlement.module';
 import { UsageModule } from '../usage/usage.module';
+import { SubscriptionModule } from '../subscriptions/subscription.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -30,6 +31,16 @@ import { AdminService } from './admin.service';
  * AdminModule the same way AdminModule already imports CouponsModule/
  * ReviewsModule/etc."). `AdminService` composes `EntitlementService.
  * resolve()`/`UsageService.getUsage()` — it does not reimplement either.
+ *
+ * Phase 7 Stage 2 (docs/saas/DECISIONS.md P7-D2) — `SubscriptionModule`
+ * imported for the four new mutation routes (`POST
+ * /admin/subscription/upgrade|downgrade|cancel|resume`), delegating to
+ * `SubscriptionOrchestrationService` the same way order/review/coupon
+ * mutation already delegates to their own domain services from this
+ * controller — `AdminController` does not reimplement any orchestration
+ * logic itself. This is also the first module import that brings
+ * `SubscriptionModule` into the running `app.module.ts` graph at all
+ * (Stage 1 never needed to — see that module's own comment).
  */
 @Module({
   imports: [
@@ -42,6 +53,7 @@ import { AdminService } from './admin.service';
     InvoicesModule,
     EntitlementModule,
     UsageModule,
+    SubscriptionModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

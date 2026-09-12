@@ -1043,6 +1043,25 @@ enum SubscriptionStatus {
 // `resumed`, or `reactivated` depending on which state it came from and
 // why). A brand-new table (`subscription_events`), so this enum and the
 // model below carry no G-19 restriction — see that model's own comment.
+//
+// Phase 7 Stage 2 (P7-D2 Part C) considered, and deliberately did NOT
+// add, a dedicated `cancellation_scheduled` value here: extending this
+// enum requires `ALTER TYPE ... ADD VALUE` on a type created by an
+// EARLIER migration, which `migration-safety.spec.ts`'s additive-only
+// guard (G-10) rejects outright for any non-legacy migration (its final
+// fallback rule accepts only `CREATE ...`/`ALTER TABLE` in the shapes it
+// already recognizes — `ALTER TYPE` matches neither and is rejected as
+// "Unexpected non-additive statement"). The one existing
+// `WebhookEventStatus` `ADD VALUE 'FAILED'` precedent predates that
+// guard's rule and is grandfathered by filename, not by a general
+// allowance — extending the guard to permit this shape is a separate,
+// significant, not-yet-ratified architectural decision (the same kind of
+// dedicated guard extension P4-D2/P4-D3 each required their own record
+// for), out of scope for this stage. `SubscriptionService
+// .scheduleCancellation()` therefore reuses the EXISTING `cancelled`
+// value for its own scheduling-moment event (disambiguated by
+// `toStatus` staying unchanged and a `metadata.scheduled: true` flag) —
+// see that method's own comment.
 enum SubscriptionEventType {
   created
   activated

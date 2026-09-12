@@ -2,15 +2,32 @@ import { TenantRole } from '@prisma/client';
 
 /**
  * Permission catalogue — SaaS Master Plan §8/§9; decisions P2-D8 (typed
- * constant representation, frozen) and G-13 (ratified 2026-09-07,
- * docs/saas/DECISIONS.md). This is the exact, ratified 13-permission set —
- * do not add, remove, or rename a permission without a recorded ratification
- * the same way this set was ratified (G-13's own "future addition" norm).
+ * constant representation, frozen), G-13 (ratified 2026-09-07,
+ * docs/saas/DECISIONS.md — the original 13-permission set), and P7-D2
+ * Part A (ratified 2026-09-12 — adds `billing:manage`, the 14th
+ * permission). Do not add, remove, or rename a permission without a
+ * recorded ratification the same way this set was ratified (G-13's own
+ * "future addition" norm, exercised here by P7-D2).
  *
  * `members:manage` and `payment-account:manage` are reserved: no current
  * route uses them (no team-management or payment-account-linkage surface
  * exists yet — Phase 5 / Phase 8 respectively). They are ratified now so
  * that future work does not need to reopen this catalogue.
+ *
+ * `billing:manage` (P7-D2 Part A) is NOT reserved — it is live from this
+ * change, gating the four new Stage 2 tenant subscription-mutation routes
+ * (`POST /admin/subscription/upgrade|downgrade|cancel|resume`). Not the
+ * same concern as `payment-account:manage` (Phase 8 — a tenant linking
+ * its OWN merchant Razorpay credentials) or `dashboard:read` (read-only) —
+ * P7-D2 Part A explicitly ratified a distinct permission rather than
+ * reusing either. Role grant (this file's own decision, since P7-D2 only
+ * ratified "not CUSTOMER" — `CUSTOMER` is in any case not a `TenantRole`
+ * value here at all): `OWNER`/`ADMIN` only, matching every other
+ * financially-consequential write in this catalogue (`coupons:write`,
+ * `settings:write`) — `STAFF`/`VIEWER` do not receive it, since changing
+ * or cancelling the tenant's own SaaS subscription is at least as
+ * consequential as those, and no route currently expects a non-admin
+ * membership to hold it.
  */
 export const PERMISSIONS = [
   'dashboard:read',
@@ -26,6 +43,7 @@ export const PERMISSIONS = [
   'products:write',
   'members:manage',
   'payment-account:manage',
+  'billing:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

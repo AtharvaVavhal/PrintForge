@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -14,6 +16,7 @@ import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
 import type { TenantContext } from '../common/tenant/tenant-context';
 import { RequirePermission } from '../auth/permissions/require-permission.decorator';
 import { RequireFeature } from '../entitlements/require-feature.decorator';
+import { IDEMPOTENCY_KEY_HEADER } from '../common/constants/app.constants';
 import { OrdersService } from '../orders/orders.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { UpdateReviewStatusDto } from '../reviews/dto/update-review-status.dto';
@@ -24,6 +27,10 @@ import { ListAdminCouponsQueryDto } from '../coupons/dto/list-admin-coupons-quer
 import { AppSettingService } from '../app-setting/app-setting.service';
 import { UpdateSettingDto } from '../app-setting/dto/update-setting.dto';
 import { InvoicesService } from '../invoices/invoices.service';
+import { SubscriptionOrchestrationService } from '../subscriptions/subscription-orchestration.service';
+import { UpgradeSubscriptionDto } from '../subscriptions/dto/upgrade-subscription.dto';
+import { DowngradeSubscriptionDto } from '../subscriptions/dto/downgrade-subscription.dto';
+import { CancelSubscriptionDto } from '../subscriptions/dto/cancel-subscription.dto';
 import { AdminService } from './admin.service';
 import { ListAdminOrdersQueryDto } from './dto/list-admin-orders-query.dto';
 import { ListAdminCustomersQueryDto } from './dto/list-admin-customers-query.dto';
@@ -67,7 +74,22 @@ export class AdminController {
     private readonly couponsService: CouponsService,
     private readonly appSettingService: AppSettingService,
     private readonly invoicesService: InvoicesService,
+    private readonly subscriptionOrchestrationService: SubscriptionOrchestrationService,
   ) {}
+
+  /** Every Stage 2 mutation route requires this header — same convention,
+   * same constant, as `checkout.controller.ts`'s own required-header
+   * check (`POST /checkout/orders`). Kept here rather than in the
+   * orchestration service so `SubscriptionOrchestrationService` never
+   * needs to know about HTTP headers/exceptions at all. */
+  private requireIdempotencyKey(idempotencyKey: string | undefined): string {
+    if (!idempotencyKey || idempotencyKey.trim().length === 0) {
+      throw new BadRequestException(
+        `${IDEMPOTENCY_KEY_HEADER} header is required`,
+      );
+    }
+    return idempotencyKey;
+  }
 
   @RequirePermission('orders:read')
   @Get('orders')
@@ -145,6 +167,84 @@ export class AdminController {
   @Get('entitlements')
   async entitlements(@CurrentTenant() tenant: TenantContext) {
     return this.adminService.getEntitlements(tenant);
+  }
+
+  // ─── Phase 7 Stage 2 (docs/saas/DECISIONS.md P7-D2) — subscription
+  // mutation APIs ────────────────────────────────────────────────────────
+  //
+  // `billing:manage` (P7-D2 Part A), NOT `dashboard:read` — these are
+  // writes, not reads, and a distinct permission was ratified specifically
+  // so they are NOT gated by the same permission the read-only routes
+  // above use. Every route below delegates entirely to
+  // `SubscriptionOrchestrationService` — this controller performs no
+  // orchestration, provider-calling, or state-machine logic itself, the
+  // same delegation discipline `OrdersService`/`ReviewsService`/
+  // `CouponsService` already established above. `tenant.tenantId` is
+  // always server-derived via `@CurrentTenant()`, `admin.id` via
+  // `@CurrentUser()` — never accepted from the request body (no route
+  // below has a `tenantId`/`userId`/`providerCustomerId`/
+  // `providerSubscriptionId` field in its DTO).
+
+  @RequirePermission('billing:manage')
+  @Post('subscription/upgrade')
+  async upgradeSubscription(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: UpgradeSubscriptionDto,
+    @Headers(IDEMPOTENCY_KEY_HEADER) idempotencyKey: string | undefined,
+  ) {
+    return this.subscriptionOrchestrationService.upgrade(
+      tenant.tenantId,
+      admin.id,
+      dto,
+      this.requireIdempotencyKey(idempotencyKey),
+    );
+  }
+
+  @RequirePermission('billing:manage')
+  @Post('subscription/downgrade')
+  async downgradeSubscription(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: DowngradeSubscriptionDto,
+    @Headers(IDEMPOTENCY_KEY_HEADER) idempotencyKey: string | undefined,
+  ) {
+    return this.subscriptionOrchestrationService.downgrade(
+      tenant.tenantId,
+      admin.id,
+      dto,
+      this.requireIdempotencyKey(idempotencyKey),
+    );
+  }
+
+  @RequirePermission('billing:manage')
+  @Post('subscription/cancel')
+  async cancelSubscription(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: CancelSubscriptionDto,
+    @Headers(IDEMPOTENCY_KEY_HEADER) idempotencyKey: string | undefined,
+  ) {
+    return this.subscriptionOrchestrationService.cancel(
+      tenant.tenantId,
+      admin.id,
+      dto,
+      this.requireIdempotencyKey(idempotencyKey),
+    );
+  }
+
+  @RequirePermission('billing:manage')
+  @Post('subscription/resume')
+  async resumeSubscription(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Headers(IDEMPOTENCY_KEY_HEADER) idempotencyKey: string | undefined,
+  ) {
+    return this.subscriptionOrchestrationService.resume(
+      tenant.tenantId,
+      admin.id,
+      this.requireIdempotencyKey(idempotencyKey),
+    );
   }
 
   @RequirePermission('customers:read')

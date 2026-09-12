@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { PrismaClient, SubscriptionStatus } from '@prisma/client';
 import { resetDatabase } from './support/db';
-import { FakeBillingProvider } from './support/fake-billing-provider';
+import { FakeBillingProvider } from '../../src/subscriptions/fake-billing-provider';
 import { SubscriptionService } from '../../src/subscriptions/subscription.service';
 import { EntitlementService } from '../../src/entitlements/entitlement.service';
 import { deriveBillingPeriodIdentifier } from '../../src/usage/usage-period';
