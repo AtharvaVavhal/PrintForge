@@ -17,29 +17,25 @@
 export const PERSISTENT_PERIOD = 'persistent';
 
 /**
- * Phase 6 W3/P6-D3 — the `BILLING_PERIOD` period-key question is FORMALLY
+ * Phase 6 W3/P6-D3 — the `BILLING_PERIOD` period-key question was FORMALLY
  * RECORDED AS AN UNRESOLVED PHASE 7 DEPENDENCY (`docs/saas/DECISIONS.md`,
  * record P6-D3, part B) — not merely an implementation gap, a ratified
- * "this is not yet decided" status. No helper exists here to compute "the
- * current billing period" for `orders_per_month` (the sole
- * `BILLING_PERIOD`-classified limit key) — see the W3 implementation
- * report §4/§29 and the P6-D3 record for the full investigation. In
- * summary: `Subscription.currentPeriodStart`/
- * `currentPeriodEnd` are the only schema fields that could plausibly carry
- * this, but (1) `currentPeriodEnd` is never set anywhere in this
- * repository (grepped in full — only `currentPeriodStart` is set, once, by
- * `seed-tenant-bootstrap.ts`, to the seed run's own `new Date()`), (2)
- * nothing anywhere recomputes/rolls either field over, and (3) Phase 7
- * (billing) — the phase that would own period-rollover logic — has not
- * been implemented. Inventing a derivation now (a calendar month string, a
- * fixed-duration window from `currentPeriodStart`, or anything else) would
- * be fabricating billing semantics this repository does not yet
- * authoritatively define, which the W3 authorization explicitly forbids
- * ("Do not invent currentPeriodStart/currentPeriodEnd behavior if it is
- * not already established... STOP and report the ambiguity"). No helper
- * function is provided here for it — `UsageService` itself is fully
- * period-format-agnostic (it accepts whatever `period` string its caller
- * supplies and never derives one internally), so this gap blocks only
- * "what string should a future caller pass for `orders_per_month`", not
- * the usage/CAS engine itself.
+ * "this is not yet decided" status at the time. See the W3 implementation
+ * report §4/§29 and the P6-D3 record for the full original investigation.
+ *
+ * **Phase 7 Stage 1 (P7-D1, Part E) resolves the STAMP FORMAT question**
+ * (not the enforcement wiring — `orders_per_month` limit enforcement
+ * itself remains unimplemented; only "what string identifies a billing
+ * period, once one exists" is now ratified): the canonical representation
+ * is the ISO-8601 timestamp of the provider-confirmed
+ * `Subscription.currentPeriodStart`, at the moment it was last set by a
+ * confirmed billing event (`SubscriptionService.confirmActivation`/
+ * `applyScheduledDowngrade`, Phase 7 Stage 1) — never a calendar month,
+ * never a timezone-local date, never derived from `createdAt`. See
+ * `deriveBillingPeriodIdentifier` below.
  */
+export function deriveBillingPeriodIdentifier(
+  currentPeriodStart: Date,
+): string {
+  return currentPeriodStart.toISOString();
+}

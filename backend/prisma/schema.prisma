@@ -1036,6 +1036,27 @@ enum SubscriptionStatus {
   EXPIRED
 }
 
+// Phase 7 Stage 1 (docs/saas/DECISIONS.md P7-D1) — `SubscriptionEvent.type`.
+// One value per semantic action the ratified transition matrix requires;
+// NOT a 1:1 mirror of `SubscriptionStatus` (several statuses are reached
+// by more than one kind of event, e.g. `ACTIVE` via `activated`,
+// `resumed`, or `reactivated` depending on which state it came from and
+// why). A brand-new table (`subscription_events`), so this enum and the
+// model below carry no G-19 restriction — see that model's own comment.
+enum SubscriptionEventType {
+  created
+  activated
+  upgraded
+  downgrade_scheduled
+  downgrade_applied
+  payment_failed
+  paused
+  resumed
+  cancelled
+  expired
+  reactivated
+}
+
 // The top-level isolation and billing boundary — one merchant business on the
 // shared platform. Every tenant-owned row (Phase 4 onward) will resolve to
 // exactly one Tenant. A Tenant.id is NEVER an authorization boundary on its
@@ -1282,13 +1303,108 @@ model Subscription {
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
 
+  // Phase 7 (Stage 1, docs/saas/DECISIONS.md P7-D1) additions below.
+  // `subscriptions` is a table created by an EARLIER migration, so
+  // migration-safety.spec.ts's G-19 rule applies exactly as it already did
+  // to `Plan.isActive`/`sortOrder`/`isEnterpriseCustom` (P6-D1): the ONLY
+  // permitted change is a single, purely nullable `ADD COLUMN`, no
+  // `DEFAULT`, no `NOT NULL` — one column per statement. P7-D1's literal
+  // schema text (`cancelAtPeriodEnd Boolean @default(false)`, `updatedAt
+  // DateTime @updatedAt`) is therefore implemented here as nullable-with-
+  // no-DB-default, application-level-coalesced, exactly mirroring P6-D1's
+  // own resolution of the identical conflict — NOT a new decision, the
+  // same already-ratified pattern applied to a new table. Application code
+  // reading these fields MUST coalesce (`?? false` for
+  // `cancelAtPeriodEnd`) and MUST NOT assume non-null.
+  providerCustomerId     String? @unique
+  providerSubscriptionId String? @unique
+  // Nullable, no DB default (G-19) — coalesce to `false` at every read
+  // site, same discipline as Plan.isActive/etc. (P6-D1).
+  cancelAtPeriodEnd Boolean?
+  trialEndsAt       DateTime?
+  // Plain column, deliberately NO Prisma `@relation` / DB foreign key.
+  // P7-D1 ratifies "pendingPlanId references Plan… via an explicit,
+  // distinctly-named Prisma relation… restrictive deletion" — but a real
+  // FK is `ALTER TABLE "subscriptions" ADD CONSTRAINT … FOREIGN KEY`,
+  // which migration-safety.spec.ts rejects outright for a pre-existing
+  // table (only a bare nullable ADD COLUMN, an RLS toggle, or the
+  // already-closed, byname-scoped P4-D3 composite-ownership-FK exemption
+  // are permitted — there is no general "add a new FK to an existing
+  // table" mechanism, and extending the guard to add one is a separate,
+  // out-of-scope architectural decision, not made here). The referential
+  // integrity P7-D1 asks for is therefore enforced at the APPLICATION
+  // layer instead (`SubscriptionService` validates `pendingPlanId` against
+  // a real `Plan.id` — same `assertPlanExists`-style check
+  // `platform-plans.service.ts` already uses — before ever writing it),
+  // not at the database layer, for Stage 1. Flagged explicitly in the W1
+  // (Stage 1) implementation report as a deviation from P7-D1's literal
+  // text, not a silent decision. A future record could add the real FK
+  // via its own P4-D3-style guard extension if that's ever required.
+  pendingPlanId String?
+  graceEndsAt   DateTime?
+  // Nullable, no DB default, no `@updatedAt` magic (Prisma's `@updatedAt`
+  // combined with a genuinely additive nullable column is unverified
+  // against this repo's own migration-safety guard output — not risked;
+  // see Step 3's generated SQL). `SubscriptionService`/the state machine
+  // explicitly sets this on every write it makes; a row this code has
+  // never touched remains `null`, exactly like a legacy `Plan` row's
+  // nullable columns before the P6-D1 backfill ran.
+  updatedAt DateTime?
+
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
 
+  events SubscriptionEvent[]
+
   @@index([planId])
   @@map("subscriptions")
+}
+
+// Phase 7 Stage 1 (docs/saas/DECISIONS.md P7-D1) — append-only subscription
+// lifecycle history. A brand-new table: unlike `Subscription` above, this
+// carries NO G-19 restriction at all — `ALTER TABLE "subscription_events"
+// ADD CONSTRAINT …` targets a table created in THIS SAME migration, which
+// migration-safety.spec.ts's guard explicitly permits (`newInThisFile`),
+// so real foreign keys are used here without the `pendingPlanId` workaround
+// `Subscription` needed.
+//
+// `fromPlanId`/`toPlanId` are deliberately PLAIN denormalized snapshot
+// columns (no `@relation` to `Plan`) — same precedent as
+// `OrderStatusHistory.fromStatus`/`toStatus` (plain enum values, no
+// relation) and `OrderStatusHistory.tenantId` (plain indexed column, no
+// `Tenant` relation): a historical audit row records what a plan id WAS at
+// the moment of the event, and must remain valid/readable even in the
+// hypothetical future where that Plan row's own lifecycle diverges — an
+// audit trail is a snapshot, not a live reference.
+//
+// `providerEventId` is explicitly NOT unique (P7-D1 Part F) — provider-
+// event deduplication belongs to the future `BillingWebhookEvent` boundary
+// (D7, still OPEN), never to this table. This model is domain history
+// only: no update/delete method is ever exposed for it (append-only by
+// construction, same discipline as `PlatformAuditLog`/`TenantAuditLog`),
+// and no code anywhere may use it as an idempotency/dedup store.
+model SubscriptionEvent {
+  id             String                @id @default(uuid())
+  subscriptionId String
+  tenantId       String
+  type           SubscriptionEventType
+  fromStatus     SubscriptionStatus?
+  toStatus       SubscriptionStatus
+  fromPlanId     String?
+  toPlanId       String?
+  providerEventId String?
+  metadata       Json                  @default("{}")
+
+  createdAt DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+
+  @@index([subscriptionId])
+  @@index([tenantId])
+  @@index([providerEventId])
+  @@map("subscription_events")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
