@@ -13,6 +13,9 @@
   --color-primary-active: #a30606;
   --color-primary-foreground: #ffffff;
   --color-primary-ring: rgb(229 11 11 / 22%);
+  --gradient-primary: linear-gradient(135deg, #e50b0b 0%, #dc2626 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #c90808 0%, #b91c1c 100%);
+  --color-primary-glow: rgba(229, 11, 11, 0.4);
 
   /* Historical alias. `--color-accent*` has always meant "the primary
    * interactive colour" across the storefront and the (frozen) admin —

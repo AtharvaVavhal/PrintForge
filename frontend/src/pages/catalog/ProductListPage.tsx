@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronDown, SlidersHorizontal, X } from 'lucide-react'
+import { ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useProducts } from '@/hooks/useProducts'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
@@ -81,9 +81,42 @@ export function ProductListPage() {
   }, [categoryId, categoryParam, minPrice, maxPrice, minRating, sort])
 
   const { data: categoryTree = [] } = useCategoryTree()
+
+  const matchedCategoryNode = useMemo(() => {
+    if (categoryId || !categoryParam) return undefined
+    const p = categoryParam.toLowerCase().trim()
+    function findNode(nodes: typeof categoryTree): (typeof categoryTree)[0] | undefined {
+      for (const node of nodes) {
+        const nName = node.name.toLowerCase()
+        const nSlug = node.slug.toLowerCase()
+        if (
+          nSlug === p ||
+          node.id === p ||
+          nName === p ||
+          (p.includes('business') && nName.includes('business')) ||
+          (p.includes('logo') && nName.includes('logo')) ||
+          (p.includes('mug') && nName.includes('mug')) ||
+          (p.includes('name') && (nName.includes('name') || nName.includes('plat'))) ||
+          (p.includes('plat') && (nName.includes('name') || nName.includes('plat'))) ||
+          (p.includes('shirt') && nName.includes('shirt'))
+        ) {
+          return node
+        }
+        if (node.children?.length) {
+          const found = findNode(node.children)
+          if (found) return found
+        }
+      }
+      return undefined
+    }
+    return findNode(categoryTree)
+  }, [categoryId, categoryParam, categoryTree])
+
+  const effectiveCategoryId = categoryId ?? matchedCategoryNode?.id
+
   const categoryPath = useMemo(
-    () => findCategoryPath(categoryTree, categoryId),
-    [categoryTree, categoryId],
+    () => findCategoryPath(categoryTree, effectiveCategoryId),
+    [categoryTree, effectiveCategoryId],
   )
   const activeCategory = categoryPath.at(-1)
 
@@ -103,10 +136,10 @@ export function ProductListPage() {
         search.toLowerCase().includes('apparel'))),
   )
 
-  const pageTitle = activeCategory
-    ? activeCategory.name
-    : isCoreCategoryMatch
-      ? coreCategory.title
+  const pageTitle = isCoreCategoryMatch
+    ? coreCategory.title
+    : activeCategory
+      ? activeCategory.name
       : search
         ? 'Search results'
         : 'All products'
@@ -117,13 +150,13 @@ export function ProductListPage() {
       ? { label: 'All products', to: ROUTES.PRODUCTS }
       : { label: 'All products' },
     ...categoryPath.map((node, index) => ({
-      label: node.name,
+      label: isCoreCategoryMatch && index === categoryPath.length - 1 ? coreCategory.title : node.name,
       to:
         index === categoryPath.length - 1
           ? undefined
           : `${ROUTES.PRODUCTS}?categoryId=${node.id}`,
     })),
-    ...(isCoreCategoryMatch && !activeCategory
+    ...(isCoreCategoryMatch && categoryPath.length === 0
       ? [{ label: coreCategory.title }]
       : search && !activeCategory
         ? [{ label: `“${search}”` }]
@@ -156,8 +189,8 @@ export function ProductListPage() {
       : 'Browse every product in the PrintForge catalog. Personalize and order custom prints made to order.'
 
   const productsQuery = useProducts({
-    categoryId,
-    search: search || (categoryParam ? coreCategory.title : undefined),
+    categoryId: effectiveCategoryId,
+    search,
     page,
     limit: DEFAULT_LIMIT,
     minPrice,
@@ -222,12 +255,7 @@ export function ProductListPage() {
         {/* Dedicated Panoramic Hero Banner according to page heading */}
         <CategoryHeroBanner data={coreCategory} />
 
-        {/* Dedicated Showcase Cards with 40% OFF badges & Personalize buttons */}
-        <CategoryShowcaseGrid cards={coreCategory.cards} categoryTitle={coreCategory.title} />
-
-        <ActiveFilterChips />
-
-        {/* Expandable Filter Toolbar right before products */}
+        {/* Expandable Filter Toolbar placed before featured selection */}
         <div className={styles.filterSection}>
           <div className={styles.filterToolbar}>
             <button
@@ -281,7 +309,7 @@ export function ProductListPage() {
             <div className={styles.verticalFilterInner}>
               <FilterSidebar
                 variant="panel"
-                activeCategoryId={categoryId}
+                activeCategoryId={effectiveCategoryId}
                 hasActiveFilters={hasProductFilters}
                 onClearAll={handleClearAllFilters}
                 onClose={() => setIsFilterPanelOpen(false)}
@@ -289,6 +317,11 @@ export function ProductListPage() {
             </div>
           </div>
         </div>
+
+        <ActiveFilterChips />
+
+        {/* Dedicated Showcase Cards with 40% OFF badges & Personalize buttons */}
+        <CategoryShowcaseGrid cards={coreCategory.cards} categoryTitle={coreCategory.title} />
 
         <div className={styles.catalogLayout}>
 
@@ -305,12 +338,20 @@ export function ProductListPage() {
               </p>
             )}
 
-            {productsQuery.data && productsQuery.data.items.length === 0 && (
-              <EmptyCatalog hasFilter={hasResultFilters} />
+            {productsQuery.data && productsQuery.data.items.length === 0 && !hasResultFilters && (
+              <EmptyCatalog hasFilter={false} />
             )}
 
             {productsQuery.data && productsQuery.data.items.length > 0 && (
               <>
+                <div className={styles.catalogSectionHeader}>
+                  <div className={styles.catalogEyebrow}>
+                    <Sparkles size={14} aria-hidden="true" />
+                    <span>Complete {pageTitle} Catalogue</span>
+                  </div>
+                  <p className={styles.catalogSectionTitle}>All Available Products & Options</p>
+                </div>
+
                 <div className={gridStyles.grid}>
                   {productsQuery.data.items.map((product) => (
                     <ProductCard key={product.id} product={product} headingLevel={2} />
@@ -331,7 +372,7 @@ export function ProductListPage() {
         <MobileFilterDrawer
           isOpen={isFilterDrawerOpen}
           onClose={() => setIsFilterDrawerOpen(false)}
-          activeCategoryId={categoryId}
+          activeCategoryId={effectiveCategoryId}
           hasActiveFilters={hasProductFilters}
           onClearAll={handleClearAllFilters}
         />

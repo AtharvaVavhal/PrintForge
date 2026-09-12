@@ -98,10 +98,18 @@
 }
 
 .categoryButtonActive {
-  background: var(--color-craft-bg);
-  border-color: rgba(245, 158, 11, 0.45);
-  color: var(--color-craft);
+  background: #e50b0b;
+  border-color: #e50b0b;
+  color: #ffffff;
   font-weight: var(--font-weight-bold);
+  box-shadow: 0 3px 12px rgba(229, 11, 11, 0.4);
+}
+
+.categoryButtonActive:hover {
+  background: #c90808;
+  border-color: #c90808;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(229, 11, 11, 0.5);
 }
 
 .helperText {
@@ -337,15 +345,18 @@
 }
 
 .panel .categoryButtonActive {
-  background: var(--gradient-primary);
-  border-color: transparent;
+  background: #e50b0b;
+  border-color: #e50b0b;
   color: #ffffff;
-  box-shadow: 0 2px 8px var(--color-primary-glow);
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 4px 14px rgba(229, 11, 11, 0.45);
 }
 
 .panel .categoryButtonActive:hover {
-  background: var(--gradient-primary-hover);
+  background: #c90808;
+  border-color: #c90808;
   color: #ffffff;
+  box-shadow: 0 4px 16px rgba(229, 11, 11, 0.55);
 }
 
 .panel .subCategoryPills {
@@ -363,10 +374,17 @@
 }
 
 .panel .subPillActive {
-  background: var(--gradient-primary);
-  border-color: transparent;
+  background: #e50b0b;
+  border-color: #e50b0b;
   color: #ffffff;
-  box-shadow: 0 2px 8px var(--color-primary-glow);
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 3px 10px rgba(229, 11, 11, 0.4);
+}
+
+.panel .subPillActive:hover {
+  background: #c90808;
+  border-color: #c90808;
+  color: #ffffff;
 }
 
 .panel .ratingOptions {

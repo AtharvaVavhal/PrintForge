@@ -75,7 +75,18 @@ export function FilterSidebar({
   }
 
   function selectCategory(categoryId?: string) {
-    patchSearchParams({ categoryId })
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('category')
+      if (categoryId) {
+        next.set('categoryId', categoryId)
+      } else {
+        next.delete('categoryId')
+      }
+      next.delete('page')
+      return next
+    })
+    onFiltersChange?.()
   }
 
   // Price inputs are typed into a local draft for instant feedback; the URL

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { ROUTES } from '@/constants/routes'
+import { cn } from '@/utils/cn'
 import type { CoreCategoryData } from './categoryData'
 import styles from './CategoryHeroBanner.module.css'
 
@@ -33,10 +34,19 @@ export function CategoryHeroBanner({ data }: CategoryHeroBannerProps) {
           <div className={styles.chipsRow} role="list">
             {data.featureChips.map((chip, idx) => {
               const toUrl = chip.query
-                ? `${ROUTES.PRODUCTS}?search=${encodeURIComponent(chip.query)}`
+                ? `${ROUTES.PRODUCTS}?category=${encodeURIComponent(chip.query)}`
                 : ROUTES.PRODUCTS
+              const isActive =
+                data.key === chip.query ||
+                (data.key === 'all' && chip.query === '')
               return (
-                <Link key={idx} to={toUrl} className={styles.chip} role="listitem">
+                <Link
+                  key={idx}
+                  to={toUrl}
+                  className={cn(styles.chip, isActive && styles.chipActive)}
+                  role="listitem"
+                  aria-current={isActive ? 'page' : undefined}
+                >
                   <span>{chip.label}</span>
                   {chip.badge && <span className={styles.chipBadge}>{chip.badge}</span>}
                 </Link>

@@ -127,6 +127,26 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+.chipActive {
+  background: #e50b0b;
+  color: #ffffff;
+  border-color: #e50b0b;
+  box-shadow: 0 4px 16px rgba(229, 11, 11, 0.5);
+  font-weight: 700;
+}
+
+.chipActive:hover {
+  background: #c90808;
+  border-color: #c90808;
+  color: #ffffff;
+  box-shadow: 0 6px 20px rgba(229, 11, 11, 0.6);
+}
+
+.chipActive .chipBadge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
 .chipBadge {
   font-size: 0.65rem;
   font-weight: 700;

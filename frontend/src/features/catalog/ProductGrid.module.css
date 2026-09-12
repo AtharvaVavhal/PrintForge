@@ -1,54 +1,47 @@
 .grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: var(--space-6) var(--space-4);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
 }
 
 .skeletonCard {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 1.25rem;
 }
 
 .skeletonImage {
   aspect-ratio: 1 / 1;
   width: 100%;
+  border-radius: 12px;
 }
 
 .skeletonLine {
   height: 1rem;
   width: 80%;
+  border-radius: 4px;
 }
 
 .skeletonLineShort {
   height: 1rem;
   width: 40%;
-}
-
-/* Progressive column count. Breakpoints follow the canonical scale in
-   tokens.css: xl (1023 = below desktop), lg (768), sm (480). 1280 is a
-   grid-only "widest step" and is intentionally not a shared breakpoint. */
-@media (max-width: 1280px) {
-  .grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
+  border-radius: 4px;
 }
 
 @media (max-width: 1023px) {
   .grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-4);
+    gap: 1rem;
   }
 }

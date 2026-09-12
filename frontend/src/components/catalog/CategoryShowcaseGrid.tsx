@@ -12,6 +12,10 @@ interface CategoryShowcaseGridProps {
 export function CategoryShowcaseGrid({ cards, categoryTitle }: CategoryShowcaseGridProps) {
   if (!cards || cards.length === 0) return null
 
+  // Ensure full rows of 3 so no single orphaned card dangles on a line alone
+  const fullRowCount = Math.floor(cards.length / 3) * 3
+  const displayCards = fullRowCount > 0 ? cards.slice(0, fullRowCount) : cards
+
   return (
     <section className={styles.section} aria-label={`Featured ${categoryTitle} Options`}>
       <div className={styles.header}>
@@ -28,7 +32,7 @@ export function CategoryShowcaseGrid({ cards, categoryTitle }: CategoryShowcaseG
       </div>
 
       <div className={styles.grid}>
-        {cards.map((card) => (
+        {displayCards.map((card) => (
           <div key={card.id} className={styles.card}>
             <Link
               to={`${ROUTES.PRODUCTS}?category=${encodeURIComponent(card.categorySlug)}`}
