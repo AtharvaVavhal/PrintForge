@@ -2,7 +2,6 @@ import { HeroCarousel } from '@/components/home/HeroCarousel'
 import { BannerGrid } from '@/components/home/BannerGrid'
 import { CategoryShowcase } from '@/components/home/CategoryShowcase'
 import { HomeHero } from '@/components/home/HomeHero'
-import { CategoryRail } from '@/components/home/CategoryRail'
 import { CategoryStoryBar } from '@/components/home/CategoryStoryBar'
 import { OccasionBar } from '@/components/home/OccasionBar'
 import { OccasionShowcase } from '@/components/home/OccasionShowcase'
@@ -66,10 +65,8 @@ export function HomePage() {
 
       {banners.length > 0 && <BannerGrid banners={banners} />}
 
-      {showcaseCategories.length > 0 ? (
+      {showcaseCategories.length > 0 && (
         <CategoryShowcase categories={showcaseCategories} />
-      ) : (
-        <CategoryRail />
       )}
 
       <ProductRail

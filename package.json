@@ -1,0 +1,17 @@
+{
+  "name": "printforge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PrintForge - Custom Merchandise & Printing Monorepo",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run start:dev",
+    "start": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "npm --prefix backend run build",
+    "test": "npm --prefix frontend test",
+    "install:all": "npm --prefix frontend install && npm --prefix backend install"
+  }
+}

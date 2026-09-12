@@ -45,22 +45,33 @@
   --color-amber-glow: rgb(245 158 11 / 20%);
 
   /* ---- Surfaces (Warm Studio Gallery Paper + Pure White Cards) ----- */
-  --color-canvas: #fafaf9;         /* warm studio gallery canvas */
-  --color-bg: #ffffff;             /* default surface: cards, inputs, header, modals, toasts */
-  --color-surface: #f4f4f5;        /* muted fill: subtle bands, skeletons, chips */
-  --color-surface-muted: var(--color-surface);   /* spec-name alias */
-  --color-surface-elevated: var(--color-bg);     /* spec-name alias */
+  --color-canvas: #fafaf9;
+  /* warm studio gallery canvas */
+  --color-bg: #ffffff;
+  /* default surface: cards, inputs, header, modals, toasts */
+  --color-surface: #f4f4f5;
+  /* muted fill: subtle bands, skeletons, chips */
+  --color-surface-muted: var(--color-surface);
+  /* spec-name alias */
+  --color-surface-elevated: var(--color-bg);
+  /* spec-name alias */
 
   /* ---- Text (Deep Obsidian Ink & Refined Neutrals) ---------------- */
-  --color-text-strong: #090d16;    /* headings, prices, primary content: deep ink */
-  --color-text: #27272a;           /* body text */
-  --color-text-muted: #52525b;     /* supporting content */
-  --color-text-subtle: #71717a;    /* least emphasis: timestamps, counts, hints */
-  --color-text-inverse: #ffffff;   /* text on primary / dark surfaces */
+  --color-text-strong: #090d16;
+  /* headings, prices, primary content: deep ink */
+  --color-text: #27272a;
+  /* body text */
+  --color-text-muted: #52525b;
+  /* supporting content */
+  --color-text-subtle: #71717a;
+  /* least emphasis: timestamps, counts, hints */
+  --color-text-inverse: #ffffff;
+  /* text on primary / dark surfaces */
 
   /* ---- Borders ----------------------------------------------- */
   --color-border: #e4e4e7;
-  --color-border-strong: #cbd5e1;  /* input hover, dividers that need weight */
+  --color-border-strong: #cbd5e1;
+  /* input hover, dividers that need weight */
 
   /* ---- Semantic status ------------------------------------------
    * `-bg` is the spec tint. The base colour is pulled a shade darker
@@ -82,8 +93,10 @@
   --color-danger-solid: #dc2626;
   --color-danger-bg: #fef2f2;
   --color-danger-ring: rgb(220 38 38 / 30%);
-  --color-error: var(--color-danger);            /* spec-name alias */
-  --color-error-bg: var(--color-danger-bg);      /* spec-name alias */
+  --color-error: var(--color-danger);
+  /* spec-name alias */
+  --color-error-bg: var(--color-danger-bg);
+  /* spec-name alias */
 
   --color-info: #1d4ed8;
   --color-info-solid: #2563eb;
@@ -91,7 +104,8 @@
   --color-info-ring: rgb(29 78 216 / 22%);
 
   /* ---- Non-semantic accents -------------------------------- */
-  --color-rating: #f59e0b;         /* star fills — warm gold */
+  --color-rating: #f59e0b;
+  /* star fills — warm gold */
 
   /* ---- Radii ------------------------------------------------ */
   --radius-sm: 6px;
@@ -115,14 +129,22 @@
   --space-8: 64px;
 
   /* rem, same convention as --container-padding — 1rem = 16px body default */
-  --text-xs: 0.75rem; /* 12px */
-  --text-sm: 0.8125rem; /* 13px */
-  --text-base: 1rem; /* 16px — matches body's default font-size */
-  --text-md: 1.125rem; /* 18px */
-  --text-lg: 1.25rem; /* 20px */
-  --text-xl: 1.5rem; /* 24px */
-  --text-2xl: 2rem; /* 32px */
-  --text-3xl: 2.5rem; /* 40px */
+  --text-xs: 0.75rem;
+  /* 12px */
+  --text-sm: 0.8125rem;
+  /* 13px */
+  --text-base: 1rem;
+  /* 16px — matches body's default font-size */
+  --text-md: 1.125rem;
+  /* 18px */
+  --text-lg: 1.25rem;
+  /* 20px */
+  --text-xl: 1.5rem;
+  /* 24px */
+  --text-2xl: 2rem;
+  /* 32px */
+  --text-3xl: 2.5rem;
+  /* 40px */
 
   /* Multi-layered soft ambient shadows with studio depth */
   --shadow-xs: 0 1px 2px rgb(15 23 42 / 4%);

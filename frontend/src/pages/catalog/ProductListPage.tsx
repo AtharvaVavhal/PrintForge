@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { ChevronDown, SlidersHorizontal, X } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import { useProducts } from '@/hooks/useProducts'
 import { useCategoryTree } from '@/hooks/useCategoryTree'
 import { getApiErrorMessage } from '@/utils/apiError'
@@ -8,7 +10,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Breadcrumbs, type Crumb } from '@/components/ui/Breadcrumbs'
 import { Pagination } from '@/components/ui/Pagination'
 import { FilterSidebar } from '@/components/layout/FilterSidebar'
-import { FilterTrigger, MobileFilterDrawer } from '@/components/layout/MobileFilterDrawer'
+import { MobileFilterDrawer } from '@/components/layout/MobileFilterDrawer'
 import { ActiveFilterChips } from '@/features/catalog/ActiveFilterChips'
 import { findCategoryPath } from '@/features/catalog/categoryTree'
 import { Seo } from '@/seo/Seo'
@@ -49,6 +51,7 @@ function getSort(value: string | null): ListProductsParams['sort'] {
 export function ProductListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false)
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false)
   const categoryParam = searchParams.get('category') ?? undefined
   const categoryId = searchParams.get('categoryId') ?? undefined
   const search = searchParams.get('search') ?? undefined
@@ -60,13 +63,22 @@ export function ProductListPage() {
 
   const hasProductFilters = Boolean(
     categoryId ||
-      categoryParam ||
-      minPrice !== undefined ||
-      maxPrice !== undefined ||
-      minRating !== undefined ||
-      sort,
+    categoryParam ||
+    minPrice !== undefined ||
+    maxPrice !== undefined ||
+    minRating !== undefined ||
+    sort,
   )
   const hasResultFilters = Boolean(search || hasProductFilters)
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (categoryId || categoryParam) count++
+    if (minPrice !== undefined || maxPrice !== undefined) count++
+    if (minRating !== undefined) count++
+    if (sort) count++
+    return count
+  }, [categoryId, categoryParam, minPrice, maxPrice, minRating, sort])
 
   const { data: categoryTree = [] } = useCategoryTree()
   const categoryPath = useMemo(
@@ -81,14 +93,14 @@ export function ProductListPage() {
 
   const isCoreCategoryMatch = Boolean(
     categoryParam ||
-      (search &&
-        (search.toLowerCase().includes('business') ||
-          search.toLowerCase().includes('logo') ||
-          search.toLowerCase().includes('mug') ||
-          search.toLowerCase().includes('name') ||
-          search.toLowerCase().includes('plat') ||
-          search.toLowerCase().includes('shirt') ||
-          search.toLowerCase().includes('apparel'))),
+    (search &&
+      (search.toLowerCase().includes('business') ||
+        search.toLowerCase().includes('logo') ||
+        search.toLowerCase().includes('mug') ||
+        search.toLowerCase().includes('name') ||
+        search.toLowerCase().includes('plat') ||
+        search.toLowerCase().includes('shirt') ||
+        search.toLowerCase().includes('apparel'))),
   )
 
   const pageTitle = activeCategory
@@ -125,12 +137,12 @@ export function ProductListPage() {
   // combinatorial filter space (§4/§14).
   const isFilteredVariant = Boolean(
     categoryParam ||
-      search ||
-      minPrice !== undefined ||
-      maxPrice !== undefined ||
-      minRating !== undefined ||
-      sort ||
-      page > 1,
+    search ||
+    minPrice !== undefined ||
+    maxPrice !== undefined ||
+    minRating !== undefined ||
+    sort ||
+    page > 1,
   )
   const canonicalPath = categoryId
     ? `${ROUTES.PRODUCTS}?categoryId=${categoryId}`
@@ -215,22 +227,70 @@ export function ProductListPage() {
 
         <ActiveFilterChips />
 
-        <div className={styles.mobileFilterBar}>
-          <FilterTrigger
-            isOpen={isFilterDrawerOpen}
-            onClick={() => setIsFilterDrawerOpen(true)}
-            hasActiveFilters={hasProductFilters}
-          />
+        {/* Expandable Filter Toolbar right before products */}
+        <div className={styles.filterSection}>
+          <div className={styles.filterToolbar}>
+            <button
+              type="button"
+              className={cn(
+                styles.filterToggleBtn,
+                isFilterPanelOpen && styles.filterToggleBtnActive,
+              )}
+              onClick={() => setIsFilterPanelOpen((prev) => !prev)}
+              aria-expanded={isFilterPanelOpen}
+              aria-controls="vertical-filter-panel"
+            >
+              <SlidersHorizontal size={17} aria-hidden="true" />
+              <span>{isFilterPanelOpen ? 'Hide Filters' : 'Filter Products'}</span>
+              {activeFilterCount > 0 && (
+                <span className={styles.filterBadge}>{activeFilterCount}</span>
+              )}
+              <ChevronDown
+                size={17}
+                className={cn(styles.chevronIcon, isFilterPanelOpen && styles.chevronRotated)}
+                aria-hidden="true"
+              />
+            </button>
+
+            <div className={styles.filterToolbarMeta}>
+              {hasProductFilters && (
+                <button
+                  type="button"
+                  onClick={handleClearAllFilters}
+                  className={styles.clearAllInline}
+                >
+                  <X size={14} aria-hidden="true" />
+                  Clear filters
+                </button>
+              )}
+              {productsQuery.data && (
+                <span className={styles.resultCountText} aria-live="polite">
+                  {productsQuery.data.meta.total} {productsQuery.data.meta.total === 1 ? 'product' : 'products'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div
+            id="vertical-filter-panel"
+            className={cn(
+              styles.verticalFilterContainer,
+              isFilterPanelOpen && styles.verticalFilterContainerOpen,
+            )}
+          >
+            <div className={styles.verticalFilterInner}>
+              <FilterSidebar
+                variant="panel"
+                activeCategoryId={categoryId}
+                hasActiveFilters={hasProductFilters}
+                onClearAll={handleClearAllFilters}
+                onClose={() => setIsFilterPanelOpen(false)}
+              />
+            </div>
+          </div>
         </div>
 
         <div className={styles.catalogLayout}>
-          <div className={styles.desktopSidebar}>
-            <FilterSidebar
-              activeCategoryId={categoryId}
-              hasActiveFilters={hasProductFilters}
-              onClearAll={handleClearAllFilters}
-            />
-          </div>
 
           <div className={styles.results}>
             {productsQuery.isPending && <ProductGridSkeleton label="Loading products" />}
