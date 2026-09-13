@@ -90,6 +90,27 @@ export interface BillingProvider {
     mode: 'immediate' | 'at_period_end',
   ): Promise<void>;
 
+  /**
+   * Phase 7 — Cancellation Retention + Unscheduling wave
+   * (docs/saas/DECISIONS.md P7-D3 Part E). Remove a previously scheduled
+   * at-period-end cancellation while leaving the current plan and billing
+   * period otherwise unchanged. Distinct from `resumeSubscription` below:
+   * `resumeSubscription` revives a subscription that has already left its
+   * normal active billing state (`PAST_DUE`/`PAUSED`/`CANCELLED`, in this
+   * repository's own state-machine terms); a subscription with a merely
+   * *scheduled* at-period-end cancellation is still fully `ACTIVE` the
+   * whole time — there is nothing to "resume," only a pending instruction
+   * to withdraw. Provisional name/shape only — no real adapter implements
+   * this yet (production provider selection, P7-D1 Part G, remains
+   * OPEN); this method exists so the vendor-independent orchestration
+   * layer has a defined contract to call once a real provider is chosen.
+   * Whether, and exactly how, a specific vendor supports withdrawing a
+   * scheduled cancellation is not assumed or invented here.
+   */
+  unscheduleCancellation(
+    providerSubscriptionId: string,
+  ): Promise<BillingProviderSubscription>;
+
   resumeSubscription(
     providerSubscriptionId: string,
   ): Promise<BillingProviderSubscription>;

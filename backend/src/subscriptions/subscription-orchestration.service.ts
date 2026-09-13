@@ -32,6 +32,8 @@ const UPGRADE_ENDPOINT_ID = 'subscription:upgrade';
 const DOWNGRADE_ENDPOINT_ID = 'subscription:downgrade';
 const CANCEL_ENDPOINT_ID = 'subscription:cancel';
 const RESUME_ENDPOINT_ID = 'subscription:resume';
+const UNSCHEDULE_CANCELLATION_ENDPOINT_ID =
+  'subscription:unschedule-cancellation';
 
 /**
  * Phase 7 Stage 2 (docs/saas/DECISIONS.md P7-D2) — the tenant-facing
@@ -407,6 +409,82 @@ export class SubscriptionOrchestrationService {
     await this.attemptReconciliationRead(subscription);
     throw new ServiceUnavailableException(
       'Could not confirm the cancellation with the billing provider; no local change was made — please retry',
+    );
+  }
+
+  // ─── Cancel-at-period-end unscheduling (docs/saas/DECISIONS.md P7-D3 Part E) ──
+
+  /**
+   * Withdraws a previously-scheduled at-period-end cancellation. Only
+   * meaningful while `ACTIVE` and only while `cancelAtPeriodEnd === true`
+   * — both idempotent no-op conditions, matching `scheduleCancellation`'s
+   * own inverse. Provider-first: `BillingProvider.unscheduleCancellation`
+   * must succeed before `SubscriptionService.unscheduleCancellation` ever
+   * runs, so `cancelAtPeriodEnd` is never optimistically cleared.
+   */
+  async unscheduleCancellation(
+    tenantId: string,
+    userId: string,
+    idempotencyKey: string,
+  ): Promise<SubscriptionMutationView> {
+    return this.withIdempotency(
+      tenantId,
+      userId,
+      UNSCHEDULE_CANCELLATION_ENDPOINT_ID,
+      idempotencyKey,
+      async () => {
+        const subscription =
+          await this.subscriptionService.getSubscriptionForTenant(
+            this.prisma,
+            tenantId,
+          );
+        if (subscription.cancelAtPeriodEnd !== true) {
+          return subscription; // idempotent — nothing scheduled to unschedule
+        }
+        if (subscription.status !== 'ACTIVE') {
+          throw new ConflictException(
+            `Subscription must be ACTIVE to unschedule a cancellation (currently ${subscription.status})`,
+          );
+        }
+        this.assertHasProviderLink(subscription);
+
+        try {
+          await this.billingProvider.unscheduleCancellation(
+            subscription.providerSubscriptionId,
+          );
+        } catch (err) {
+          if (err instanceof BillingProviderTimeoutError) {
+            return this.reconcileUnscheduleCancelTimeout(subscription);
+          }
+          throw this.classifyProviderError(err);
+          // Provider rejection: cancelAtPeriodEnd is never cleared.
+        }
+
+        const result = await this.subscriptionService.unscheduleCancellation(
+          this.prisma,
+          subscription,
+        );
+        return result.subscription;
+      },
+    );
+  }
+
+  private async reconcileUnscheduleCancelTimeout(
+    subscription: Subscription,
+  ): Promise<Subscription> {
+    // Same disclosed limitation as scheduling a cancellation/downgrade:
+    // `BillingProviderSubscription` exposes no field indicating whether an
+    // at-period-end cancellation is currently scheduled, so this specific
+    // outcome can never be positively confirmed through
+    // `getSubscription()` alone. Reachability is confirmed; the specific
+    // operation's outcome is not — never auto-clear cancelAtPeriodEnd on
+    // an unresolved timeout. No provider-specific confirmation field is
+    // invented here to work around this (docs/saas/DECISIONS.md P7-D3
+    // Part E/§6 — explicitly expected and acceptable with the current
+    // interface/FakeBillingProvider).
+    await this.attemptReconciliationRead(subscription);
+    throw new ServiceUnavailableException(
+      'Could not confirm the unscheduling with the billing provider; no local change was made — please retry',
     );
   }
 

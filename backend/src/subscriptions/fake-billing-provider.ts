@@ -21,6 +21,16 @@ interface FakeSubscriptionRecord {
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
   cancelled: boolean;
+  /** Phase 7 — Cancellation Retention + Unscheduling wave. Distinct from
+   * `cancelled` above: this tracks an at-period-end cancellation that has
+   * been requested but not yet taken effect (the subscription remains
+   * otherwise fully active) — never surfaced via `getSubscription()`'s
+   * own `BillingProviderSubscription` return shape (deliberately; see
+   * `unscheduleCancellation`'s own interface doc comment and P7-D2/P7-D3's
+   * "do not invent a provider-specific confirmation field" instruction),
+   * purely internal bookkeeping so this fake can model
+   * `unscheduleCancellation` meaningfully for tests. */
+  cancellationScheduled: boolean;
 }
 
 /**
@@ -95,6 +105,7 @@ export class FakeBillingProvider implements BillingProvider {
       currentPeriodStart: now,
       currentPeriodEnd: new Date(now.getTime() + FAKE_PERIOD_MS),
       cancelled: false,
+      cancellationScheduled: false,
     };
     this.subscriptions.set(record.providerSubscriptionId, record);
     return Promise.resolve(this.toProviderSubscription(record));
@@ -125,9 +136,30 @@ export class FakeBillingProvider implements BillingProvider {
     providerSubscriptionId: string,
     mode: 'immediate' | 'at_period_end',
   ): Promise<void> {
-    void mode; // interface-required; this fake cancels the same way regardless
     const record = this.getOrThrow(providerSubscriptionId);
-    record.cancelled = true;
+    if (mode === 'at_period_end') {
+      record.cancellationScheduled = true;
+    } else {
+      record.cancelled = true;
+    }
+  }
+
+  /** Phase 7 — Cancellation Retention + Unscheduling wave. Withdraws a
+   * scheduled at-period-end cancellation; a no-op (never throws) if
+   * nothing was scheduled, matching this fake's own general tolerance
+   * elsewhere (e.g. `resumeSubscription` unconditionally clears
+   * `cancelled` regardless of whether it was set). The orchestration
+   * layer's own local check (`cancelAtPeriodEnd === true`) is what
+   * normally prevents this from being called needlessly in the first
+   * place — this fake does not depend on that caller discipline to stay
+   * correct. */
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async unscheduleCancellation(
+    providerSubscriptionId: string,
+  ): Promise<BillingProviderSubscription> {
+    const record = this.getOrThrow(providerSubscriptionId);
+    record.cancellationScheduled = false;
+    return this.toProviderSubscription(record);
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -178,6 +210,18 @@ export class FakeBillingProvider implements BillingProvider {
 
   getEmittedEvents(): readonly NormalizedBillingEvent[] {
     return this.emittedEvents;
+  }
+
+  /** Test-control hook (Phase 7 — Cancellation Retention + Unscheduling
+   * wave) — lets a test assert on the PROVIDER's own internal
+   * bookkeeping directly (e.g. "did `cancelSubscription(..., 'at_period_
+   * end')` actually schedule it, and did `unscheduleCancellation`
+   * actually clear it"), without needing a corresponding field on the
+   * public `BillingProviderSubscription` shape (which deliberately does
+   * not expose this — see `FakeSubscriptionRecord.cancellationScheduled`'s
+   * own comment). */
+  isCancellationScheduled(providerSubscriptionId: string): boolean {
+    return this.getOrThrow(providerSubscriptionId).cancellationScheduled;
   }
 
   /** Re-delivers the exact same event object — a fake "duplicate webhook."

@@ -43,6 +43,7 @@ describe('SubscriptionOrchestrationService', () => {
       trialEndsAt: null,
       pendingPlanId: null,
       graceEndsAt: null,
+      retentionEndsAt: null,
       updatedAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
       ...overrides,
@@ -106,6 +107,14 @@ describe('SubscriptionOrchestrationService', () => {
           eventType: 'cancelled', // reused type, disambiguated by metadata — see subscription.service.ts
         });
       }),
+      unscheduleCancellation: jest.fn().mockImplementation(() => {
+        callOrder.push('unscheduleCancellation');
+        return Promise.resolve({
+          applied: true,
+          subscription: makeSubscription({ cancelAtPeriodEnd: false }),
+          eventType: 'cancelled', // reused type, disambiguated by metadata
+        });
+      }),
       recoverPayment: jest.fn().mockResolvedValue({
         applied: true,
         subscription: makeSubscription({ status: 'ACTIVE' }),
@@ -136,6 +145,11 @@ describe('SubscriptionOrchestrationService', () => {
         });
       }),
       cancelSubscription: jest.fn().mockResolvedValue(undefined),
+      unscheduleCancellation: jest.fn().mockResolvedValue({
+        providerSubscriptionId: PROVIDER_SUB_ID,
+        currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+        currentPeriodEnd: new Date('2026-02-01T00:00:00Z'),
+      }),
       resumeSubscription: jest.fn().mockResolvedValue({
         providerSubscriptionId: PROVIDER_SUB_ID,
         currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
@@ -425,6 +439,128 @@ describe('SubscriptionOrchestrationService', () => {
         ),
       ).rejects.toThrow(ConflictException);
       expect(deps.subscriptionService.cancel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unscheduleCancellation (Cancellation Retention + Unscheduling wave, P7-D3 Part E)', () => {
+    it('calls the provider BEFORE SubscriptionService.unscheduleCancellation (provider-first)', async () => {
+      const callOrder: string[] = [];
+      const deps = makeDeps(callOrder);
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ cancelAtPeriodEnd: true }),
+      );
+      deps.billingProvider.unscheduleCancellation.mockImplementation(() => {
+        callOrder.push('provider.unscheduleCancellation');
+        return Promise.resolve({
+          providerSubscriptionId: PROVIDER_SUB_ID,
+          currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+          currentPeriodEnd: new Date('2026-02-01T00:00:00Z'),
+        });
+      });
+      const service = makeService(deps);
+
+      await service.unscheduleCancellation(TENANT_ID, USER_ID, IDEMPOTENCY_KEY);
+
+      expect(callOrder).toEqual([
+        'provider.unscheduleCancellation',
+        'unscheduleCancellation',
+      ]);
+    });
+
+    it('already unscheduled (cancelAtPeriodEnd false/null) is an idempotent no-op — no provider call', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ cancelAtPeriodEnd: null }),
+      );
+      const service = makeService(deps);
+
+      await service.unscheduleCancellation(TENANT_ID, USER_ID, IDEMPOTENCY_KEY);
+
+      expect(
+        deps.billingProvider.unscheduleCancellation,
+      ).not.toHaveBeenCalled();
+      expect(
+        deps.subscriptionService.unscheduleCancellation,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('provider rejection leaves local cancelAtPeriodEnd unchanged', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ cancelAtPeriodEnd: true }),
+      );
+      deps.billingProvider.unscheduleCancellation.mockRejectedValue(
+        new BillingProviderRejectedError('cannot unschedule'),
+      );
+      const service = makeService(deps);
+
+      await expect(
+        service.unscheduleCancellation(TENANT_ID, USER_ID, IDEMPOTENCY_KEY),
+      ).rejects.toThrow(ConflictException);
+      expect(
+        deps.subscriptionService.unscheduleCancellation,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('successful provider confirmation clears the local flag', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ cancelAtPeriodEnd: true }),
+      );
+      const service = makeService(deps);
+
+      await service.unscheduleCancellation(TENANT_ID, USER_ID, IDEMPOTENCY_KEY);
+
+      expect(
+        deps.subscriptionService.unscheduleCancellation,
+      ).toHaveBeenCalled();
+    });
+
+    it('rejects when the subscription is not ACTIVE, without calling the provider', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ status: 'PAST_DUE', cancelAtPeriodEnd: true }),
+      );
+      const service = makeService(deps);
+
+      await expect(
+        service.unscheduleCancellation(TENANT_ID, USER_ID, IDEMPOTENCY_KEY),
+      ).rejects.toThrow(ConflictException);
+      expect(
+        deps.billingProvider.unscheduleCancellation,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('timeout reconciliation: cannot positively confirm the outcome -> recoverable error, no local mutation', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ cancelAtPeriodEnd: true }),
+      );
+      deps.billingProvider.unscheduleCancellation.mockRejectedValue(
+        new BillingProviderTimeoutError('timed out'),
+      );
+      deps.billingProvider.getSubscription.mockResolvedValue({
+        providerSubscriptionId: PROVIDER_SUB_ID,
+        currentPeriodStart: new Date('2026-01-01T00:00:00Z'),
+        currentPeriodEnd: new Date('2026-02-01T00:00:00Z'),
+        // No field exists anywhere on this shape indicating "is a
+        // cancellation scheduled" — this IS the disclosed, expected
+        // limitation (docs/saas/DECISIONS.md P7-D3 Part E/§6); the
+        // outcome can never be positively confirmed through this
+        // response, by design.
+      });
+      const service = makeService(deps);
+
+      await expect(
+        service.unscheduleCancellation(TENANT_ID, USER_ID, IDEMPOTENCY_KEY),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(
+        deps.subscriptionService.unscheduleCancellation,
+      ).not.toHaveBeenCalled();
+      // Exactly one attempt — no blind retry of the mutation.
+      expect(deps.billingProvider.unscheduleCancellation).toHaveBeenCalledTimes(
+        1,
+      );
     });
   });
 

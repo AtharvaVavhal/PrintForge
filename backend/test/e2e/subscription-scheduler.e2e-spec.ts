@@ -9,15 +9,15 @@ import type { BillingProvider } from '../../src/subscriptions/billing-provider.i
 import { seedFreePlanCatalogue } from '../../prisma/free-plan-catalogue';
 
 /**
- * Phase 7 — Scheduler Implementation Wave. Real Postgres, real
- * `FakeBillingProvider` singleton, real `SubscriptionService`/
- * `SubscriptionOrchestrationService` — `SubscriptionSchedulerService`'s
- * `@Cron` methods are invoked directly (the standard way to test a
- * `@nestjs/schedule` job without waiting on a real timer), never through
- * HTTP (nothing here is a route). Covers exactly the two implemented
- * jobs; deliberately contains NO cancellation-expiration coverage — that
- * job does not exist (see `subscription-scheduler.service.ts`'s own
- * header comment for why).
+ * Phase 7 — Scheduler Implementation Wave, extended by the Cancellation
+ * Retention + Unscheduling wave. Real Postgres, real `FakeBillingProvider`
+ * singleton, real `SubscriptionService`/`SubscriptionOrchestrationService`
+ * — `SubscriptionSchedulerService`'s `@Cron` methods are invoked directly
+ * (the standard way to test a `@nestjs/schedule` job without waiting on a
+ * real timer), never through HTTP (nothing here is a route). Covers all
+ * three jobs, including `runCancellationExpiration` (added once
+ * `retentionEndsAt` existed as a persisted, authoritative field —
+ * docs/saas/DECISIONS.md P7-D3 Part D).
  */
 describe('Phase 7 — Subscription Scheduler (real Postgres, real FakeBillingProvider)', () => {
   let app: INestApplication;
@@ -61,11 +61,12 @@ describe('Phase 7 — Subscription Scheduler (real Postgres, real FakeBillingPro
    * string, matching the lesson learned in subscription-operations
    * .e2e-spec.ts's own fixture). */
   async function makeRegisteredSubscription(
-    status: 'ACTIVE' | 'PAST_DUE' = 'ACTIVE',
+    status: 'ACTIVE' | 'PAST_DUE' | 'CANCELLED' = 'ACTIVE',
     extra: {
       graceEndsAt?: Date;
       pendingPlanId?: string;
       cancelAtPeriodEnd?: boolean;
+      retentionEndsAt?: Date;
     } = {},
   ) {
     const { tenant, plan } = await makeTenantAndPlan();
@@ -291,6 +292,149 @@ describe('Phase 7 — Subscription Scheduler (real Postgres, real FakeBillingPro
         where: { subscriptionId: subscription.id, type: 'downgrade_applied' },
       });
       expect(events).toHaveLength(1); // the second run no longer matches the eligibility query at all (planId already applied, currentPeriodEnd refreshed)
+    });
+  });
+
+  // ─── Cancellation expiration (Cancellation Retention + Unscheduling wave, P7-D3 Part D) ──
+
+  describe('runCancellationExpiration', () => {
+    it('CANCELLED with an elapsed retentionEndsAt transitions to EXPIRED and writes an expired event', async () => {
+      const { subscription } = await makeRegisteredSubscription('CANCELLED', {
+        retentionEndsAt: new Date(Date.now() - 60_000),
+      });
+
+      await scheduler.runCancellationExpiration();
+
+      const updated = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(updated.status).toBe('EXPIRED');
+      const events = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'expired' },
+      });
+      expect(events).toHaveLength(1);
+    });
+
+    it('CANCELLED with a future retentionEndsAt is left untouched', async () => {
+      const { subscription } = await makeRegisteredSubscription('CANCELLED', {
+        retentionEndsAt: new Date(Date.now() + 60 * 60_000),
+      });
+
+      await scheduler.runCancellationExpiration();
+
+      const unchanged = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(unchanged.status).toBe('CANCELLED');
+    });
+
+    it('processes multiple eligible subscriptions across different tenants in one run, each independently', async () => {
+      const { subscription: a } = await makeRegisteredSubscription(
+        'CANCELLED',
+        { retentionEndsAt: new Date(Date.now() - 60_000) },
+      );
+      const { subscription: b } = await makeRegisteredSubscription(
+        'CANCELLED',
+        { retentionEndsAt: new Date(Date.now() - 60_000) },
+      );
+
+      await scheduler.runCancellationExpiration();
+
+      const rowA = await prisma.subscription.findUniqueOrThrow({
+        where: { id: a.id },
+      });
+      const rowB = await prisma.subscription.findUniqueOrThrow({
+        where: { id: b.id },
+      });
+      expect(rowA.status).toBe('EXPIRED');
+      expect(rowB.status).toBe('EXPIRED');
+      expect(rowA.tenantId).not.toBe(rowB.tenantId);
+    });
+
+    it('repeated execution is idempotent — a second run writes no duplicate event and does not reprocess an already-expired subscription', async () => {
+      const { subscription } = await makeRegisteredSubscription('CANCELLED', {
+        retentionEndsAt: new Date(Date.now() - 60_000),
+      });
+
+      await scheduler.runCancellationExpiration();
+      await scheduler.runCancellationExpiration();
+
+      const events = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'expired' },
+      });
+      expect(events).toHaveLength(1);
+      const row = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(row.status).toBe('EXPIRED');
+    });
+
+    it('does not delete any tenant/store/order/user data', async () => {
+      const { subscription, tenant } = await makeRegisteredSubscription(
+        'CANCELLED',
+        { retentionEndsAt: new Date(Date.now() - 60_000) },
+      );
+      const category = await prisma.category.create({
+        data: {
+          tenantId: tenant.id,
+          name: 'Still here after expiration',
+          slug: `still-here-${randomUUID()}`,
+        },
+      });
+
+      await scheduler.runCancellationExpiration();
+
+      const updated = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(updated.status).toBe('EXPIRED');
+      const stillThere = await prisma.category.findUnique({
+        where: { id: category.id },
+      });
+      expect(stillThere).not.toBeNull();
+      const tenantStillThere = await prisma.tenant.findUnique({
+        where: { id: tenant.id },
+      });
+      expect(tenantStillThere).not.toBeNull();
+    });
+  });
+
+  // ─── Cancellation lifecycle — retentionEndsAt establishment (P7-D3 Part D) ──
+
+  describe('cancellation lifecycle — retentionEndsAt establishment', () => {
+    it('scheduled cancellation applied at the confirmed boundary establishes retentionEndsAt only at that moment, not at scheduling time', async () => {
+      const { subscription } = await makeRegisteredSubscription('ACTIVE', {
+        cancelAtPeriodEnd: true,
+      });
+      // Confirm the invariant BEFORE the boundary is reached: nothing has
+      // been established yet.
+      const beforeBoundary = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(beforeBoundary.retentionEndsAt).toBeNull();
+
+      // Simulate "the provider's period has already moved past our stale
+      // local record" — the same technique the period-reconciliation
+      // tests above already use.
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          currentPeriodStart: new Date(Date.now() - 60 * 24 * 60 * 60_000),
+          currentPeriodEnd: new Date(Date.now() - 30 * 24 * 60 * 60_000),
+        },
+      });
+
+      await scheduler.runPeriodReconciliation();
+
+      const afterBoundary = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(afterBoundary.status).toBe('CANCELLED');
+      expect(afterBoundary.retentionEndsAt).not.toBeNull();
+      const expectedMs = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      expect(
+        Math.abs(afterBoundary.retentionEndsAt!.getTime() - expectedMs),
+      ).toBeLessThan(10_000);
     });
   });
 });

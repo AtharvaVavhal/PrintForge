@@ -233,6 +233,24 @@ export class AdminController {
     );
   }
 
+  /** Phase 7 — Cancellation Retention + Unscheduling wave
+   * (docs/saas/DECISIONS.md P7-D3 Part E). Same route family, same
+   * `billing:manage` permission, same idempotency-key requirement as
+   * every other mutation route above — no new permission introduced. */
+  @RequirePermission('billing:manage')
+  @Post('subscription/cancel/unschedule')
+  async unscheduleCancellation(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Headers(IDEMPOTENCY_KEY_HEADER) idempotencyKey: string | undefined,
+  ) {
+    return this.subscriptionOrchestrationService.unscheduleCancellation(
+      tenant.tenantId,
+      admin.id,
+      this.requireIdempotencyKey(idempotencyKey),
+    );
+  }
+
   @RequirePermission('billing:manage')
   @Post('subscription/resume')
   async resumeSubscription(

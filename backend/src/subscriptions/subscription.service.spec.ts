@@ -31,6 +31,7 @@ describe('SubscriptionService', () => {
       trialEndsAt: null,
       pendingPlanId: null,
       graceEndsAt: null,
+      retentionEndsAt: null,
       updatedAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
       ...overrides,
@@ -639,6 +640,91 @@ describe('SubscriptionService', () => {
     });
   });
 
+  describe('unscheduleCancellation (Cancellation Retention + Unscheduling wave, P7-D3 Part E)', () => {
+    it('sets ONLY cancelAtPeriodEnd back to false — status and planId are untouched', async () => {
+      const { client, updateMany, eventCreate } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: true,
+      });
+
+      const result = await service.unscheduleCancellation(
+        client as never,
+        subscription,
+      );
+
+      expect(result.applied).toBe(true);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: SUB_ID, status: 'ACTIVE', cancelAtPeriodEnd: true },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({ cancelAtPeriodEnd: false }),
+      });
+      const dataArg =
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        (updateMany.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      expect(dataArg).not.toHaveProperty('status');
+      expect(dataArg).not.toHaveProperty('planId');
+      expect(eventCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          data: expect.objectContaining({
+            type: 'cancelled',
+            toStatus: 'ACTIVE',
+            metadata: { unscheduled: true },
+          }),
+        }),
+      );
+    });
+
+    it('is idempotent: cancelAtPeriodEnd already false/null is a safe no-op', async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: null,
+      });
+
+      const result = await service.unscheduleCancellation(
+        client as never,
+        subscription,
+      );
+
+      expect(result.applied).toBe(false);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the subscription is not currently ACTIVE', async () => {
+      const { client } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'PAST_DUE',
+        cancelAtPeriodEnd: true,
+      });
+
+      await expect(
+        service.unscheduleCancellation(client as never, subscription),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('a lost CAS race is a safe no-op, never an error', async () => {
+      const { client, updateMany } = makeClient({ updateManyCount: 0 });
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: true,
+      });
+
+      const result = await service.unscheduleCancellation(
+        client as never,
+        subscription,
+      );
+
+      expect(result.applied).toBe(false);
+      expect(updateMany).toHaveBeenCalled();
+    });
+  });
+
   describe('cancel / reactivate / expire', () => {
     it('PAST_DUE -> CANCELLED is allowed', async () => {
       const { client, updateMany } = makeClient();
@@ -686,6 +772,44 @@ describe('SubscriptionService', () => {
           data: expect.objectContaining({ type: 'cancelled' }),
         }),
       );
+    });
+
+    it('cancel() writes retentionEndsAt ~30 days in the future, in the SAME CAS update as status (P7-D3 Part D)', async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({ status: 'ACTIVE' });
+      const before = Date.now();
+
+      await service.cancel(client as never, subscription, {});
+
+      const dataArg =
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        (updateMany.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      expect(dataArg.status).toBe('CANCELLED');
+      const retentionEndsAt = dataArg.retentionEndsAt as Date;
+      expect(retentionEndsAt).toBeInstanceOf(Date);
+      const expectedMs = before + 30 * 24 * 60 * 60 * 1000;
+      // Allow a small window for test execution time.
+      expect(Math.abs(retentionEndsAt.getTime() - expectedMs)).toBeLessThan(
+        5000,
+      );
+    });
+
+    it('scheduleCancellation() does NOT set retentionEndsAt (retention starts only when cancellation actually becomes effective)', async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        cancelAtPeriodEnd: null,
+      });
+
+      await service.scheduleCancellation(client as never, subscription);
+
+      const dataArg =
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        (updateMany.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      expect(dataArg).not.toHaveProperty('retentionEndsAt');
+      expect(dataArg).not.toHaveProperty('status');
     });
 
     it('CANCELLED -> ACTIVE reactivation is allowed', async () => {

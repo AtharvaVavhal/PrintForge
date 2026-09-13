@@ -1370,6 +1370,24 @@ model Subscription {
   // nullable columns before the P6-D1 backfill ran.
   updatedAt DateTime?
 
+  // Phase 7 — Cancellation Retention + Unscheduling wave (docs/saas/DECISIONS.md
+  // P7-D3 Part D). Same G-19-nullable-additive shape as `graceEndsAt` above —
+  // no DEFAULT, no NOT NULL, one column, one action. Set ONLY by
+  // `SubscriptionService.cancel()`, at the exact moment a subscription
+  // actually becomes `CANCELLED` (never by `scheduleCancellation()` — P7-D3
+  // Part D: "do not start retention during merely scheduling cancellation").
+  // This single write site automatically covers both an immediate
+  // cancellation and an at-period-end cancellation applied later by
+  // `reconcilePeriod()` (both call the same `cancel()`). Never cleared by
+  // any code path today (a `CANCELLED -> ACTIVE` reactivation leaves it
+  // stale-but-inert, since the row no longer matches the expiration
+  // scheduler's own `status = 'CANCELLED'` filter — see that scheduler's
+  // own comment). Consumed by `SubscriptionSchedulerService
+  // .runCancellationExpiration()` to find rows eligible for
+  // `SubscriptionService.expire()`; `expire()` itself does not read this
+  // field at all, exactly as `exhaustGrace()` never reads `graceEndsAt`.
+  retentionEndsAt DateTime?
+
   createdAt DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)

@@ -22,7 +22,7 @@ const BATCH_SIZE = 20;
  * service — this is the simplest mechanism the current architecture
  * already supports.
  *
- * Owns exactly two jobs:
+ * Owns exactly three jobs:
  *
  *   1. `runGraceExhaustion` — `PAST_DUE` + `graceEndsAt` elapsed ->
  *      `SubscriptionService.exhaustGrace()` (-> `PAUSED`).
@@ -33,17 +33,14 @@ const BATCH_SIZE = 20;
  *      provider-confirmed boundary; a plain renewal with nothing pending
  *      remains a documented, disclosed no-op — see that method's own
  *      comment).
- *
- * Deliberately does NOT implement a third "cancellation expiration"
- * job (`CANCELLED` -> `EXPIRED`) — the readiness audit's own explicit
- * blocker: `Subscription` carries no persisted, authoritative
- * expiration timestamp or condition for a `CANCELLED` row (only
- * `graceEndsAt` exists, with no analogue for cancellation retention).
- * Inventing a duration or a new field to manufacture one was explicitly
- * forbidden; `SubscriptionService.expire()` therefore remains a
- * fully-built, callable, but currently uninvoked method until that
- * decision (exact retention duration, and where it would be persisted)
- * is separately ratified.
+ *   3. `runCancellationExpiration` — `CANCELLED` + `retentionEndsAt`
+ *      elapsed -> `SubscriptionService.expire()` (-> `EXPIRED`). Added in
+ *      the Phase 7 Cancellation Retention + Unscheduling wave
+ *      (docs/saas/DECISIONS.md P7-D3 Part D), once `retentionEndsAt`
+ *      existed as a persisted, authoritative field — this job was
+ *      deliberately NOT built earlier (the original Scheduler
+ *      Implementation Wave's own readiness audit explicitly stopped short
+ *      of it for exactly that reason).
  *
  * This class never mutates `Subscription`/writes a `SubscriptionEvent`
  * itself — it only selects eligible rows (via `SubscriptionService`'s own
@@ -196,6 +193,73 @@ export class SubscriptionSchedulerService {
         {
           level: 'error',
           tags: { area: 'subscription_period_reconciliation' },
+          extra: {
+            subscriptionId: subscription.id,
+            tenantId: subscription.tenantId,
+          },
+        },
+      );
+    }
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async runCancellationExpiration(): Promise<void> {
+    try {
+      const eligible =
+        await this.subscriptionService.findExpirableCancelledSubscriptions(
+          this.prisma,
+          new Date(),
+          BATCH_SIZE,
+        );
+      if (eligible.length === 0) {
+        return;
+      }
+      this.logger.log(
+        `Cancellation expiration: ${eligible.length} CANCELLED subscription(s) past retentionEndsAt`,
+      );
+      for (const subscription of eligible) {
+        await this.expireOne(subscription);
+      }
+    } catch (err) {
+      this.logger.error(
+        'Cancellation-expiration cron failed',
+        err instanceof Error ? err.stack : err,
+      );
+      Sentry.captureException(
+        err instanceof Error ? err : new Error(String(err)),
+        {
+          tags: { area: 'subscription_cancellation_expiration_cron' },
+        },
+      );
+    }
+  }
+
+  private async expireOne(subscription: Subscription): Promise<void> {
+    try {
+      const result = await this.subscriptionService.expire(
+        this.prisma,
+        subscription,
+        {},
+      );
+      if (result.applied) {
+        this.logger.log(
+          `Cancellation expired: subscription ${subscription.id} (tenant ${subscription.tenantId}) CANCELLED -> EXPIRED`,
+        );
+      }
+      // result.applied === false is a benign, expected no-op (a lost CAS
+      // race, or a concurrent request already moved it) — not logged as
+      // an error. No tenant/store/order/user data is ever touched by
+      // this call — expire() only ever writes Subscription/SubscriptionEvent.
+    } catch (err) {
+      this.logger.error(
+        `Cancellation expiration failed for subscription ${subscription.id}`,
+        err instanceof Error ? err.stack : err,
+      );
+      Sentry.captureException(
+        err instanceof Error ? err : new Error(String(err)),
+        {
+          level: 'error',
+          tags: { area: 'subscription_cancellation_expiration' },
           extra: {
             subscriptionId: subscription.id,
             tenantId: subscription.tenantId,

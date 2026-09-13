@@ -28,6 +28,7 @@ describe('SubscriptionSchedulerService', () => {
       trialEndsAt: null,
       pendingPlanId: null,
       graceEndsAt: new Date('2026-01-05T00:00:00Z'),
+      retentionEndsAt: null,
       updatedAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
       ...overrides,
@@ -41,10 +42,16 @@ describe('SubscriptionSchedulerService', () => {
       findSubscriptionsNeedingPeriodReconciliation: jest
         .fn()
         .mockResolvedValue([]),
+      findExpirableCancelledSubscriptions: jest.fn().mockResolvedValue([]),
       exhaustGrace: jest.fn().mockResolvedValue({
         applied: true,
         subscription: makeSubscription({ status: 'PAUSED' }),
         eventType: 'paused',
+      }),
+      expire: jest.fn().mockResolvedValue({
+        applied: true,
+        subscription: makeSubscription({ status: 'EXPIRED' }),
+        eventType: 'expired',
       }),
     };
     const subscriptionOrchestrationService = {
@@ -221,6 +228,114 @@ describe('SubscriptionSchedulerService', () => {
       const scheduler = makeScheduler(deps);
 
       await expect(scheduler.runPeriodReconciliation()).resolves.not.toThrow();
+    });
+  });
+
+  describe('runCancellationExpiration (Cancellation Retention + Unscheduling wave, P7-D3 Part D)', () => {
+    it('does nothing when no subscriptions are eligible', async () => {
+      const deps = makeDeps();
+      const scheduler = makeScheduler(deps);
+
+      await scheduler.runCancellationExpiration();
+
+      expect(deps.subscriptionService.expire).not.toHaveBeenCalled();
+    });
+
+    it('calls expire for every eligible CANCELLED subscription', async () => {
+      const deps = makeDeps();
+      const a = makeSubscription({
+        id: 'sub-a',
+        tenantId: 'tenant-a',
+        status: 'CANCELLED',
+      });
+      const b = makeSubscription({
+        id: 'sub-b',
+        tenantId: 'tenant-b',
+        status: 'CANCELLED',
+      });
+      deps.subscriptionService.findExpirableCancelledSubscriptions.mockResolvedValue(
+        [a, b],
+      );
+      const scheduler = makeScheduler(deps);
+
+      await scheduler.runCancellationExpiration();
+
+      expect(deps.subscriptionService.expire).toHaveBeenCalledTimes(2);
+      expect(deps.subscriptionService.expire).toHaveBeenNthCalledWith(
+        1,
+        deps.prisma,
+        a,
+        {},
+      );
+      expect(deps.subscriptionService.expire).toHaveBeenNthCalledWith(
+        2,
+        deps.prisma,
+        b,
+        {},
+      );
+    });
+
+    it('one subscription failing does not prevent others from being processed (failure isolation)', async () => {
+      const deps = makeDeps();
+      const a = makeSubscription({ id: 'sub-a', status: 'CANCELLED' });
+      const b = makeSubscription({ id: 'sub-b', status: 'CANCELLED' });
+      const c = makeSubscription({ id: 'sub-c', status: 'CANCELLED' });
+      deps.subscriptionService.findExpirableCancelledSubscriptions.mockResolvedValue(
+        [a, b, c],
+      );
+      deps.subscriptionService.expire
+        .mockResolvedValueOnce({
+          applied: true,
+          subscription: a,
+          eventType: 'expired',
+        })
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce({
+          applied: true,
+          subscription: c,
+          eventType: 'expired',
+        });
+      const scheduler = makeScheduler(deps);
+
+      await expect(
+        scheduler.runCancellationExpiration(),
+      ).resolves.not.toThrow();
+
+      expect(deps.subscriptionService.expire).toHaveBeenCalledTimes(3);
+    });
+
+    it('the finder itself throwing does not propagate out of the cron method', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.findExpirableCancelledSubscriptions.mockRejectedValue(
+        new Error('db unavailable'),
+      );
+      const scheduler = makeScheduler(deps);
+
+      await expect(
+        scheduler.runCancellationExpiration(),
+      ).resolves.not.toThrow();
+    });
+
+    it('an already-expired subscription (applied: false) is not treated as a failure and is not reprocessed on a repeat run', async () => {
+      const deps = makeDeps();
+      const a = makeSubscription({ id: 'sub-a', status: 'CANCELLED' });
+      deps.subscriptionService.findExpirableCancelledSubscriptions.mockResolvedValueOnce(
+        [a],
+      );
+      const scheduler = makeScheduler(deps);
+
+      await scheduler.runCancellationExpiration();
+      expect(deps.subscriptionService.expire).toHaveBeenCalledTimes(1);
+
+      // Second run: the finder itself is responsible for no longer
+      // returning an already-EXPIRED row (status: 'CANCELLED' filter) —
+      // simulated here by returning an empty set, exactly as the real
+      // finder would once the row is no longer CANCELLED.
+      deps.subscriptionService.findExpirableCancelledSubscriptions.mockResolvedValueOnce(
+        [],
+      );
+      await scheduler.runCancellationExpiration();
+      expect(deps.subscriptionService.expire).toHaveBeenCalledTimes(1);
     });
   });
 

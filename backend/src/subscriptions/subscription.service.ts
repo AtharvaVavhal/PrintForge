@@ -25,6 +25,13 @@ import {
 
 type Client = PrismaService | Prisma.TransactionClient;
 
+/** Phase 7 — Cancellation Retention + Unscheduling wave
+ * (docs/saas/DECISIONS.md P7-D3 Part D — "Cancellation retention duration =
+ * 30 days"). The single ratified constant, consumed only by `cancel()`
+ * below — never hardcoded a second time anywhere else in this file. */
+const CANCELLATION_RETENTION_DAYS = 30;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 /**
  * Phase 7 Stage 1 (docs/saas/DECISIONS.md P7-D1) — the subscription
  * transition service. Owns `Subscription.status`/`planId`/`pendingPlanId`/
@@ -160,6 +167,28 @@ export class SubscriptionService {
         currentPeriodEnd: { lte: now },
       },
       orderBy: { currentPeriodEnd: 'asc' },
+      take: limit,
+    });
+  }
+
+  /**
+   * Phase 7 — Cancellation Retention + Unscheduling wave
+   * (docs/saas/DECISIONS.md P7-D3 Part D). Candidates for
+   * `SubscriptionService.expire()` — `CANCELLED` with an elapsed
+   * `retentionEndsAt`. Same bounded/ordered shape as
+   * `findGraceExhaustedSubscriptions` above. A subscription this method
+   * has already surfaced and `expire()` has already advanced to
+   * `EXPIRED` naturally stops matching `status: 'CANCELLED'` on the next
+   * call — no separate "already processed" tracking is needed.
+   */
+  async findExpirableCancelledSubscriptions(
+    client: Client,
+    now: Date,
+    limit: number,
+  ): Promise<Subscription[]> {
+    return client.subscription.findMany({
+      where: { status: 'CANCELLED', retentionEndsAt: { lte: now } },
+      orderBy: { retentionEndsAt: 'asc' },
       take: limit,
     });
   }
@@ -634,6 +663,64 @@ export class SubscriptionService {
     };
   }
 
+  /**
+   * Phase 7 — Cancellation Retention + Unscheduling wave
+   * (docs/saas/DECISIONS.md P7-D3 Part E). ACTIVE -> ACTIVE, the exact
+   * reverse of `scheduleCancellation()` above — flips `cancelAtPeriodEnd`
+   * back to `false`, `status`/`planId` untouched. Only reachable while
+   * `ACTIVE` and only meaningful while a cancellation is actually
+   * scheduled (`cancelAtPeriodEnd === true`); idempotent no-op otherwise
+   * (already unscheduled, or nothing was ever scheduled). No provider
+   * confirmation is modeled at THIS persistence layer — per the same
+   * pattern `scheduleDowngrade`/`scheduleCancellation` already establish,
+   * "call the provider first, only persist after it accepts" is an
+   * ORCHESTRATION-layer sequencing rule
+   * (`SubscriptionOrchestrationService`'s own job), not a parameter this
+   * method itself needs. Reuses the existing `cancelled` event type with
+   * `metadata: { unscheduled: true }` — no new `SubscriptionEventType`
+   * value (P7-D3 Part H's own reuse-by-default policy).
+   */
+  async unscheduleCancellation(
+    client: Client,
+    subscription: Subscription,
+  ): Promise<TransitionResult<Subscription>> {
+    if (subscription.cancelAtPeriodEnd !== true) {
+      return { applied: false, subscription, eventType: null };
+    }
+    this.assertCurrentlyActive(subscription);
+
+    const cas = await client.subscription.updateMany({
+      where: {
+        id: subscription.id,
+        status: subscription.status,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      },
+      data: { cancelAtPeriodEnd: false, updatedAt: new Date() },
+    });
+    if (cas.count !== 1) {
+      return { applied: false, subscription, eventType: null };
+    }
+
+    await client.subscriptionEvent.create({
+      data: {
+        subscriptionId: subscription.id,
+        tenantId: subscription.tenantId,
+        type: 'cancelled',
+        fromStatus: subscription.status,
+        toStatus: subscription.status,
+        metadata: { unscheduled: true },
+      },
+    });
+    const updated = await client.subscription.findUniqueOrThrow({
+      where: { id: subscription.id },
+    });
+    return {
+      applied: true,
+      subscription: updated,
+      eventType: 'cancelled',
+    };
+  }
+
   // ─── Cancellation / reactivation / expiry ────────────────────────────────
 
   /** PAST_DUE|PAUSED|ACTIVE -> CANCELLED. `ACTIVE -> CANCELLED` (immediate
@@ -647,7 +734,18 @@ export class SubscriptionService {
    * method for BOTH an immediate cancellation and a scheduled one reaching
    * its confirmed boundary, since both are the identical `ACTIVE ->
    * CANCELLED` transition. Retains all tenant data — no deletion of any
-   * kind. Idempotent if already `CANCELLED`. */
+   * kind. Idempotent if already `CANCELLED`.
+   *
+   * **`retentionEndsAt` (docs/saas/DECISIONS.md P7-D3 Part D)** is
+   * established HERE, in the same CAS update that sets `status:
+   * 'CANCELLED'` — and nowhere else. This is deliberate: since this is the
+   * ONE method that performs the actual `-> CANCELLED` transition
+   * (`scheduleCancellation()` above never changes `status` at all — it
+   * only flips `cancelAtPeriodEnd`), retention correctly starts at the
+   * moment cancellation is genuinely effective, for BOTH an immediate
+   * cancellation and a scheduled one applied later by the orchestration
+   * layer's `reconcilePeriod()` — with no special-casing needed to tell
+   * the two apart. */
   async cancel(
     client: Client,
     subscription: Subscription,
@@ -658,9 +756,13 @@ export class SubscriptionService {
     }
     assertSubscriptionTransitionAllowed(subscription.status, 'CANCELLED');
 
+    const now = new Date();
+    const retentionEndsAt = new Date(
+      now.getTime() + CANCELLATION_RETENTION_DAYS * MS_PER_DAY,
+    );
     const cas = await client.subscription.updateMany({
       where: { id: subscription.id, status: subscription.status },
-      data: { status: 'CANCELLED', updatedAt: new Date() },
+      data: { status: 'CANCELLED', retentionEndsAt, updatedAt: now },
     });
     if (cas.count !== 1) {
       return { applied: false, subscription, eventType: null };

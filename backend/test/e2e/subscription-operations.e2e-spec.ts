@@ -8,6 +8,7 @@ import { EntitlementService } from '../../src/entitlements/entitlement.service';
 import { seedFreePlanCatalogue } from '../../prisma/free-plan-catalogue';
 import { BILLING_PROVIDER } from '../../src/subscriptions/billing-provider.token';
 import type { BillingProvider } from '../../src/subscriptions/billing-provider.interface';
+import { FakeBillingProvider } from '../../src/subscriptions/fake-billing-provider';
 
 /**
  * Phase 7 Stage 2 (docs/saas/DECISIONS.md P7-D2) — the tenant-facing
@@ -298,9 +299,20 @@ describe('Phase 7 Stage 2 — tenant subscription mutation APIs (real Postgres, 
         where: { id: owner.tenantId },
       });
       expect(tenantStillThere).not.toBeNull();
+
+      // Cancellation Retention + Unscheduling wave (P7-D3 Part D):
+      // immediate cancellation establishes retentionEndsAt right away.
+      const row = await prisma.subscription.findUniqueOrThrow({
+        where: { tenantId: owner.tenantId },
+      });
+      expect(row.retentionEndsAt).not.toBeNull();
+      const expectedMs = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      expect(
+        Math.abs(row.retentionEndsAt!.getTime() - expectedMs),
+      ).toBeLessThan(10_000);
     });
 
-    it('atPeriodEnd:true schedules cancellation without an immediate CANCELLED transition', async () => {
+    it('atPeriodEnd:true schedules cancellation without an immediate CANCELLED transition, and leaves retentionEndsAt NULL until the cancellation actually becomes effective', async () => {
       const owner = await memberWithRole('OWNER');
 
       const res = await http(app)
@@ -313,11 +325,138 @@ describe('Phase 7 Stage 2 — tenant subscription mutation APIs (real Postgres, 
       expect(res.body.data.status).toBe('ACTIVE');
       expect(res.body.data.cancelAtPeriodEnd).toBe(true);
 
+      // P7-D3 Part D: "do not start retention during merely scheduling
+      // cancellation" — retentionEndsAt must remain NULL at this point.
       const row = await prisma.subscription.findUniqueOrThrow({
         where: { tenantId: owner.tenantId },
       });
       expect(row.status).toBe('ACTIVE');
       expect(row.cancelAtPeriodEnd).toBe(true);
+      expect(row.retentionEndsAt).toBeNull();
+    });
+  });
+
+  // ─── Cancel-at-period-end unscheduling (Cancellation Retention + Unscheduling wave, P7-D3 Part E) ──
+
+  describe('unscheduling', () => {
+    it('unschedules a scheduled cancellation: provider-first, then local confirmation', async () => {
+      const owner = await memberWithRole('OWNER');
+      await http(app)
+        .post(apiPath('/admin/subscription/cancel'))
+        .set(...authHeader(owner))
+        .set('Idempotency-Key', idemKey())
+        .send({ atPeriodEnd: true })
+        .expect(201);
+      expect(
+        (billingProvider as FakeBillingProvider).isCancellationScheduled(
+          owner.subscription.providerSubscriptionId!,
+        ),
+      ).toBe(true);
+
+      const res = await http(app)
+        .post(apiPath('/admin/subscription/cancel/unschedule'))
+        .set(...authHeader(owner))
+        .set('Idempotency-Key', idemKey())
+        .expect(201);
+
+      expect(res.body.data.status).toBe('ACTIVE');
+      expect(res.body.data.cancelAtPeriodEnd).toBe(false);
+      // Provider-side state actually reflects the unschedule too — not
+      // just the local flag.
+      expect(
+        (billingProvider as FakeBillingProvider).isCancellationScheduled(
+          owner.subscription.providerSubscriptionId!,
+        ),
+      ).toBe(false);
+
+      const row = await prisma.subscription.findUniqueOrThrow({
+        where: { tenantId: owner.tenantId },
+      });
+      expect(row.status).toBe('ACTIVE');
+      expect(row.cancelAtPeriodEnd).toBe(false);
+      expect(row.planId).toBe(owner.planId); // current plan preserved
+      expect(row.currentPeriodEnd).toEqual(owner.subscription.currentPeriodEnd); // current period preserved
+    });
+
+    it('is idempotent when nothing is scheduled — no provider call, current state returned', async () => {
+      const owner = await memberWithRole('OWNER');
+
+      const res = await http(app)
+        .post(apiPath('/admin/subscription/cancel/unschedule'))
+        .set(...authHeader(owner))
+        .set('Idempotency-Key', idemKey())
+        .expect(201);
+
+      expect(res.body.data.status).toBe('ACTIVE');
+      expect(res.body.data.cancelAtPeriodEnd).toBe(false);
+    });
+
+    it('writes the existing cancelled SubscriptionEventType with metadata.unscheduled — no new enum value', async () => {
+      const owner = await memberWithRole('OWNER');
+      await http(app)
+        .post(apiPath('/admin/subscription/cancel'))
+        .set(...authHeader(owner))
+        .set('Idempotency-Key', idemKey())
+        .send({ atPeriodEnd: true })
+        .expect(201);
+
+      await http(app)
+        .post(apiPath('/admin/subscription/cancel/unschedule'))
+        .set(...authHeader(owner))
+        .set('Idempotency-Key', idemKey())
+        .expect(201);
+
+      const events = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: owner.subscription.id, type: 'cancelled' },
+        orderBy: { createdAt: 'asc' },
+      });
+      // First event: the scheduling itself (metadata.scheduled); second:
+      // this unschedule (metadata.unscheduled). Both reuse the same
+      // existing `cancelled` type — no new SubscriptionEventType value.
+      expect(events).toHaveLength(2);
+      expect(events[1].metadata).toEqual({ unscheduled: true });
+    });
+
+    it('permission enforcement matches the other mutation routes — STAFF denied (403)', async () => {
+      const staff = await memberWithRole('STAFF');
+
+      await http(app)
+        .post(apiPath('/admin/subscription/cancel/unschedule'))
+        .set(...authHeader(staff))
+        .set('Idempotency-Key', idemKey())
+        .expect(403);
+    });
+
+    it("tenant isolation — unscheduling never affects another tenant's subscription", async () => {
+      const ownerA = await memberWithRole('OWNER');
+      const ownerB = await memberWithRole('ADMIN');
+      await http(app)
+        .post(apiPath('/admin/subscription/cancel'))
+        .set(...authHeader(ownerA))
+        .set('Idempotency-Key', idemKey())
+        .send({ atPeriodEnd: true })
+        .expect(201);
+      await http(app)
+        .post(apiPath('/admin/subscription/cancel'))
+        .set(...authHeader(ownerB))
+        .set('Idempotency-Key', idemKey())
+        .send({ atPeriodEnd: true })
+        .expect(201);
+
+      await http(app)
+        .post(apiPath('/admin/subscription/cancel/unschedule'))
+        .set(...authHeader(ownerA))
+        .set('Idempotency-Key', idemKey())
+        .expect(201);
+
+      const rowA = await prisma.subscription.findUniqueOrThrow({
+        where: { tenantId: ownerA.tenantId },
+      });
+      const rowB = await prisma.subscription.findUniqueOrThrow({
+        where: { tenantId: ownerB.tenantId },
+      });
+      expect(rowA.cancelAtPeriodEnd).toBe(false); // A's own unschedule applied
+      expect(rowB.cancelAtPeriodEnd).toBe(true); // B's own schedule untouched
     });
   });
 

@@ -90,6 +90,61 @@ describe('FakeBillingProvider (Phase 7 Stage 1 test double)', () => {
     });
   });
 
+  it('cancelSubscription(mode: at_period_end) schedules a cancellation without touching the immediate-cancel flag, and unscheduleCancellation reverses it', async () => {
+    const provider = new FakeBillingProvider();
+    const customer = await provider.createCustomer('tenant-a');
+    const sub = await provider.createSubscription(
+      customer.providerCustomerId,
+      'plan-ref-1',
+    );
+
+    await provider.cancelSubscription(
+      sub.providerSubscriptionId,
+      'at_period_end',
+    );
+    expect(provider.isCancellationScheduled(sub.providerSubscriptionId)).toBe(
+      true,
+    );
+
+    const unscheduled = await provider.unscheduleCancellation(
+      sub.providerSubscriptionId,
+    );
+
+    expect(unscheduled.providerSubscriptionId).toBe(sub.providerSubscriptionId);
+    expect(provider.isCancellationScheduled(sub.providerSubscriptionId)).toBe(
+      false,
+    );
+    // Plan and period are unaffected by scheduling/unscheduling a cancellation.
+    expect(unscheduled.currentPeriodStart).toEqual(sub.currentPeriodStart);
+    expect(unscheduled.currentPeriodEnd).toEqual(sub.currentPeriodEnd);
+  });
+
+  it('unscheduleCancellation on a subscription with nothing scheduled is a harmless no-op, never throws', async () => {
+    const provider = new FakeBillingProvider();
+    const customer = await provider.createCustomer('tenant-a');
+    const sub = await provider.createSubscription(
+      customer.providerCustomerId,
+      'plan-ref-1',
+    );
+
+    await expect(
+      provider.unscheduleCancellation(sub.providerSubscriptionId),
+    ).resolves.toMatchObject({
+      providerSubscriptionId: sub.providerSubscriptionId,
+    });
+    expect(provider.isCancellationScheduled(sub.providerSubscriptionId)).toBe(
+      false,
+    );
+  });
+
+  it('unscheduleCancellation on an unknown id throws rather than fabricating a record', async () => {
+    const provider = new FakeBillingProvider();
+
+    await expect(
+      provider.unscheduleCancellation('does-not-exist'),
+    ).rejects.toThrow();
+  });
+
   it('getSubscription on an unknown id throws rather than fabricating a record (payment failure / unknown-subscription safety)', async () => {
     const provider = new FakeBillingProvider();
 
