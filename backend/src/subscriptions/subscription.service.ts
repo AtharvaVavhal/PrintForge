@@ -14,6 +14,7 @@ import {
   ApplyScheduledDowngradeInput,
   CancelInput,
   ConfirmActivationInput,
+  ConfirmRenewalInput,
   ConfirmUpgradeInput,
   ExhaustGraceInput,
   ExpireInput,
@@ -621,6 +622,99 @@ export class SubscriptionService {
       subscription: updated,
       eventType: 'downgrade_applied',
     };
+  }
+
+  // ─── Plain period renewal (Phase 7 — Wave A) ─────────────────────────────
+
+  /**
+   * Phase 7 — Wave A: Plain Period Renewal Fix. ACTIVE -> ACTIVE,
+   * provider-confirmed plain billing-period renewal — the boundary was
+   * reached and the provider confirms the subscription is still ACTIVE
+   * with NOTHING else pending (no scheduled downgrade, no scheduled
+   * cancellation; the orchestration layer is responsible for trying
+   * those two paths first and only reaching this method when neither
+   * applied — see `SubscriptionOrchestrationService.reconcilePeriod`'s
+   * own updated comment). Refreshes ONLY `currentPeriodStart`/
+   * `currentPeriodEnd` — `status`/`planId`/`cancelAtPeriodEnd`/
+   * `pendingPlanId`/`graceEndsAt`/`retentionEndsAt` are never touched
+   * here, exactly as every other transition method here only ever
+   * touches the fields it specifically owns.
+   *
+   * **Not folded into `applyScheduledDowngrade`**: that method's own
+   * idempotency/CAS guard keys off `pendingPlanId` (a plain renewal has
+   * none) and it always writes a plan change; reusing it for a
+   * no-plan-change renewal would either require `pendingPlanId` to be
+   * spuriously non-null or would silently skip the CAS guard entirely —
+   * a distinct method with its own CAS guard (on `currentPeriodStart`
+   * itself) is the correct, minimal-footprint shape.
+   *
+   * **Idempotent by provider-period comparison**: if the given
+   * `input.currentPeriodStart` already equals what's stored locally,
+   * this is a safe no-op — no duplicate renewal event is ever written
+   * for the same confirmed period (satisfies "a repeated reconciliation
+   * for the same provider period must not create duplicate renewal
+   * events"). The CAS `updateMany` additionally guards on the CURRENT
+   * `currentPeriodStart` value, so two concurrent callers (two
+   * overlapping reconciliation ticks, or a reconciliation racing a
+   * future webhook-driven renewal) can never both advance the period —
+   * the second one's `updateMany` affects zero rows and returns the
+   * same safe no-op, never a corrupted intermediate state.
+   *
+   * **Event type: reuses `activated`, not a new `renewed`/`period_
+   * renewed` value.** Per the same migration-safety-guard reasoning
+   * `scheduleCancellation`/`unscheduleCancellation` above already
+   * document (P7-D3 Part H's reuse-by-default policy) — a new enum
+   * value needs `ALTER TYPE ... ADD VALUE` on a type created by an
+   * EARLIER migration, which the additive-only guard rejects for any
+   * non-legacy migration. Disambiguated from a real PENDING/TRIALING ->
+   * ACTIVE activation by `fromStatus === toStatus` (an activation always
+   * has a real status change) and by `metadata.renewal: true`.
+   */
+  async confirmRenewal(
+    client: Client,
+    subscription: Subscription,
+    input: ConfirmRenewalInput,
+  ): Promise<TransitionResult<Subscription>> {
+    if (
+      subscription.currentPeriodStart !== null &&
+      subscription.currentPeriodStart.getTime() ===
+        input.currentPeriodStart.getTime()
+    ) {
+      return { applied: false, subscription, eventType: null };
+    }
+    this.assertCurrentlyActive(subscription);
+
+    const cas = await client.subscription.updateMany({
+      where: {
+        id: subscription.id,
+        status: subscription.status,
+        currentPeriodStart: subscription.currentPeriodStart,
+      },
+      data: {
+        currentPeriodStart: input.currentPeriodStart,
+        currentPeriodEnd: input.currentPeriodEnd,
+        updatedAt: new Date(),
+      },
+    });
+    if (cas.count !== 1) {
+      return { applied: false, subscription, eventType: null };
+    }
+
+    await client.subscriptionEvent.create({
+      data: {
+        subscriptionId: subscription.id,
+        tenantId: subscription.tenantId,
+        type: 'activated',
+        fromStatus: subscription.status,
+        toStatus: subscription.status,
+        providerEventId: input.providerEventId,
+        metadata: { renewal: true },
+      },
+    });
+    const updated = await client.subscription.findUniqueOrThrow({
+      where: { id: subscription.id },
+    });
+    return { applied: true, subscription: updated, eventType: 'activated' };
   }
 
   // ─── Cancellation scheduling (Stage 2, docs/saas/DECISIONS.md P7-D2 Part C) ──

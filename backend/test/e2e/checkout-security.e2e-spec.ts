@@ -11,6 +11,7 @@ import {
   createUploadedFile,
   createVariant,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
   rupeesToPaise,
@@ -83,6 +84,7 @@ describe('Checkout security & re-validation (§27 #1, #10, #11, #12)', () => {
 
   it('#1 — a real coupon applied alongside a tampered discountAmount is ignored; server recomputes the discount from the coupon itself, never the client value', async () => {
     const admin = await registerAdmin(app, prisma);
+    await makeTenantCheckoutReady(prisma, admin.tenantId);
     const user = await registerUser(app);
     const { productId } = await createProduct(prisma, { basePrice: '250.00' });
     await addCartItem(app, user, { productId, quantity: 2 });

@@ -247,14 +247,19 @@ export class FakeBillingProvider implements BillingProvider {
    * already-normalized shape directly.
    *
    * `type` uses this codebase's own canonical, vendor-neutral event-type
-   * vocabulary (`'payment_failed' | 'recovered' | 'cancelled'`, matching
-   * `SubscriptionService.applyBillingWebhookEvent`'s own recognized
-   * cases) — never a real vendor's event name. `providerEventId` defaults
-   * to a fresh, deterministically-prefixed id (same `fake-*-` convention
-   * as `providerCustomerId`/`providerSubscriptionId` above) but can be
-   * supplied explicitly so a test can re-emit the identical id for a
-   * duplicate-delivery case, and `occurredAt` defaults to "now" but can be
-   * supplied explicitly (e.g. in the past) for a stale/out-of-order case.
+   * vocabulary (`'payment_failed' | 'recovered' | 'cancelled' | 'renewed'`,
+   * matching `SubscriptionService.applyBillingWebhookEvent`'s own
+   * recognized cases plus `BillingWebhookProcessor`'s own `'renewed'`
+   * special-case — Phase 7, Wave A) — never a real vendor's event name.
+   * `providerEventId` defaults to a fresh, deterministically-prefixed id
+   * (same `fake-*-` convention as `providerCustomerId`/
+   * `providerSubscriptionId` above) but can be supplied explicitly so a
+   * test can re-emit the identical id for a duplicate-delivery case, and
+   * `occurredAt` defaults to "now" but can be supplied explicitly (e.g. in
+   * the past) for a stale/out-of-order case. `currentPeriodStart`/
+   * `currentPeriodEnd` (Phase 7, Wave A) are used ONLY by a `'renewed'`
+   * event — see `BillingWebhookEnvelope`'s own comment in
+   * `billing-webhook-processor.service.ts`.
    */
   buildWebhookEventBody(opts: {
     type: string;
@@ -262,6 +267,8 @@ export class FakeBillingProvider implements BillingProvider {
     providerCustomerId?: string;
     providerEventId?: string;
     occurredAt?: Date;
+    currentPeriodStart?: Date;
+    currentPeriodEnd?: Date;
   }): Buffer {
     const event: NormalizedBillingEvent = {
       providerEventId: opts.providerEventId ?? `fake-evt-${randomUUID()}`,
@@ -270,6 +277,8 @@ export class FakeBillingProvider implements BillingProvider {
         providerSubscriptionId: opts.providerSubscriptionId,
         providerCustomerId: opts.providerCustomerId,
         occurredAt: (opts.occurredAt ?? new Date()).toISOString(),
+        currentPeriodStart: opts.currentPeriodStart?.toISOString(),
+        currentPeriodEnd: opts.currentPeriodEnd?.toISOString(),
       },
     };
     return Buffer.from(JSON.stringify(event), 'utf8');

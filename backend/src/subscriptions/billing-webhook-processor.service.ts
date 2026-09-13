@@ -47,6 +47,17 @@ interface BillingWebhookEnvelope {
    * time) when absent — P7-D3 Part F: "compare provider event timestamp,
    * falling back to receivedAt, against Subscription.updatedAt". */
   occurredAt?: string;
+  /**
+   * Phase 7 — Wave A: Plain Period Renewal Fix. ISO-8601 provider-
+   * confirmed period boundaries — present ONLY on a canonical `'renewed'`
+   * event (see `RENEWAL_EVENT_TYPE` below). Not a vendor payload schema:
+   * a real `BillingProvider.parseWebhook()` implementation would need to
+   * extract whatever fields its vendor's own renewal notification uses
+   * and normalize them into these two names, exactly as it must already
+   * do for `providerSubscriptionId`/`occurredAt` above.
+   */
+  currentPeriodStart?: string;
+  currentPeriodEnd?: string;
 }
 
 function extractEnvelope(payload: unknown): BillingWebhookEnvelope {
@@ -64,8 +75,34 @@ function extractEnvelope(payload: unknown): BillingWebhookEnvelope {
         ? obj.providerCustomerId
         : undefined,
     occurredAt: typeof obj.occurredAt === 'string' ? obj.occurredAt : undefined,
+    currentPeriodStart:
+      typeof obj.currentPeriodStart === 'string'
+        ? obj.currentPeriodStart
+        : undefined,
+    currentPeriodEnd:
+      typeof obj.currentPeriodEnd === 'string'
+        ? obj.currentPeriodEnd
+        : undefined,
   };
 }
+
+/**
+ * Phase 7 — Wave A: Plain Period Renewal Fix. The one additional
+ * vendor-neutral canonical event type this processor recognizes, beyond
+ * whatever `SubscriptionService.applyBillingWebhookEvent` itself already
+ * switches on (`payment_failed`/`recovered`/`cancelled`) — handled HERE,
+ * not inside `applyBillingWebhookEvent`, because it is the only canonical
+ * type that needs payload-carried data (`currentPeriodStart`/
+ * `currentPeriodEnd`) rather than just `providerEventId`; keeping that
+ * payload-shape knowledge in this processor (which already owns
+ * `BillingWebhookEnvelope`) rather than pushing it into
+ * `SubscriptionService` keeps that class's own switch a pure
+ * type-to-method routing table. Real provider event-name mapping onto
+ * this canonical type remains deferred (production billing provider
+ * selection, P7-D1 Part G, still OPEN) — this only defines the shape a
+ * future real mapping must produce.
+ */
+const RENEWAL_EVENT_TYPE = 'renewed';
 
 /**
  * Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3).
@@ -82,10 +119,12 @@ function extractEnvelope(payload: unknown): BillingWebhookEnvelope {
  *
  * Never calls `SubscriptionOrchestrationService` (that class exists for
  * TENANT-initiated requests only) and never writes `SubscriptionEvent`
- * directly (only `SubscriptionService` may) — the sole entry point into
- * subscription state is `SubscriptionService.applyBillingWebhookEvent()`,
- * called only after this processor's own tenant-resolution (P7-D3 Part B)
- * and stale/out-of-order (P7-D3 Part F) checks have both passed.
+ * directly (only `SubscriptionService` may) — every path into subscription
+ * state goes through `SubscriptionService` (`applyBillingWebhookEvent()`
+ * for confirmation-only events, `confirmRenewal()` directly for a
+ * canonical `'renewed'` event carrying period boundaries — Phase 7, Wave
+ * A), called only after this processor's own tenant-resolution (P7-D3
+ * Part B) and stale/out-of-order (P7-D3 Part F) checks have both passed.
  *
  * `billing_webhook_events.status`: RECEIVED / PROCESSED (both a
  * successfully-considered event, whether or not it actually changed
@@ -208,11 +247,29 @@ export class BillingWebhookProcessor {
         }
 
         // ─── Apply (P7-D3: webhooks are authoritative once implemented) ─
-        await this.subscriptionService.applyBillingWebhookEvent(
-          tx,
-          subscription,
-          normalized,
-        );
+        // A canonical 'renewed' event carrying both provider-confirmed
+        // period boundaries routes to confirmRenewal() directly (Phase 7
+        // — Wave A) — everything else (including a 'renewed' event
+        // missing either boundary, which cannot be acted on) goes through
+        // applyBillingWebhookEvent()'s own type-routing switch, whose
+        // default branch is the same safe no-op it already is.
+        if (
+          normalized.type === RENEWAL_EVENT_TYPE &&
+          envelope.currentPeriodStart &&
+          envelope.currentPeriodEnd
+        ) {
+          await this.subscriptionService.confirmRenewal(tx, subscription, {
+            currentPeriodStart: new Date(envelope.currentPeriodStart),
+            currentPeriodEnd: new Date(envelope.currentPeriodEnd),
+            providerEventId: normalized.providerEventId,
+          });
+        } else {
+          await this.subscriptionService.applyBillingWebhookEvent(
+            tx,
+            subscription,
+            normalized,
+          );
+        }
 
         await tx.billingWebhookEvent.update({
           where: { id: locked.id },

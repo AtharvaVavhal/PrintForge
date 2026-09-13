@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
@@ -19,9 +20,24 @@ import { OrderLinePricing, PricingService } from './pricing/pricing.service';
 import { TaxService } from './tax/tax.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CheckoutPreviewView, OrderView } from './dto/order-view.interface';
+import { LimitEnforcementService } from '../limits/limit-enforcement.service';
+import { SubscriptionService } from '../subscriptions/subscription.service';
+import { deriveBillingPeriodIdentifier } from '../usage/usage-period';
 
 const CHECKOUT_ENDPOINT_ID = 'POST /checkout/orders';
 const SHIPPING_FEE_SETTING_KEY = 'shippingFeeFlat';
+
+/**
+ * Phase 7 — Wave B fail-closed correction. Same fixed, non-descriptive
+ * 403-message convention `LIMIT_EXCEEDED_MESSAGE`
+ * (`limit-enforcement.service.ts`) already establishes, adapted for a
+ * `ServiceUnavailableException` here — never includes the tenant id or
+ * subscription state, and is deliberately NOT `limit_exceeded`: this
+ * signals "the billing period needed to enforce orders_per_month is not
+ * yet available", never "the tenant's quota is exhausted" (which may not
+ * even be true).
+ */
+const BILLING_PERIOD_UNAVAILABLE_MESSAGE = 'billing_period_unavailable';
 
 /**
  * Mirrors cart's PLATFORM_DEFAULT_MAX_QUANTITY (§11) — duplicated locally
@@ -67,6 +83,8 @@ export class CheckoutService {
     private readonly pricingService: PricingService,
     private readonly couponsService: CouponsService,
     private readonly taxService: TaxService,
+    private readonly limitEnforcementService: LimitEnforcementService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   /**
@@ -265,6 +283,65 @@ export class CheckoutService {
       });
 
       const orderNumber = await this.ordersService.generateOrderNumber(tx);
+
+      // Phase 7 — Wave B (orders_per_month enforcement), corrected by the
+      // Wave B fail-closed correction below. Same "reservation + resource
+      // creation atomic together" placement `ProductsService
+      // .createProduct()`'s own `assertLimit()` call already establishes —
+      // immediately before the gated resource's own `.create()`, inside
+      // this SAME transaction, so a rejected reservation (or a fail-closed
+      // throw below) rolls back nothing-yet-created.
+      //
+      // The billing-period identifier is READ, never invented
+      // (docs/saas/DECISIONS.md P7-D1 Part E / Wave A): it is always
+      // exactly `Subscription.currentPeriodStart.toISOString()`, resolved
+      // via `deriveBillingPeriodIdentifier()` — never
+      // `Order.createdAt`, `Subscription.createdAt`, `currentPeriodEnd`, a
+      // calendar month, or any other locally-derived value. Read through
+      // `SubscriptionService` (never a raw `tx.subscription...` call —
+      // `subscription` is one of the six tenant-data-access-guard.spec.ts-
+      // restricted models) using THIS transaction's own `tx`, so it sees
+      // the same snapshot every other read in this transaction does.
+      //
+      // A tenant with no confirmed billing period yet (no `Subscription`
+      // row at all, or one that has never completed a provider-confirmed
+      // activation/renewal — e.g. a `PENDING` subscription, or a legacy/
+      // bootstrap-seeded row) has no authoritative period to key this
+      // limit on. **FAILS CLOSED**: rather than inventing one (forbidden)
+      // or skipping enforcement (rejected — that would make
+      // `orders_per_month` silently unlimited for exactly the tenants a
+      // finite `BILLING_PERIOD` `PlanLimit`, including the fallback/free
+      // plan, is supposed to bind), this throws immediately, before
+      // `assertLimit`/`UsageService.reserve` is ever called and before
+      // `tx.order.create` below — no Order is created, no `Usage` row is
+      // created or incremented for any period, real or invented.
+      //
+      // `ServiceUnavailableException` (never `ForbiddenException`) —
+      // deliberately NOT the same shape as `limit_exceeded`: this is not
+      // a claim that the tenant exhausted its quota (it may have room to
+      // spare on whichever plan would apply), it is "billing state this
+      // operation depends on is not yet available", the same class of
+      // outcome `SubscriptionOrchestrationService`'s own provider-
+      // timeout/reconciliation paths already return 503 for. A fixed,
+      // non-descriptive message — no tenant id, no subscription state —
+      // mirrors `LIMIT_EXCEEDED_MESSAGE`'s own convention.
+      const subscriptionForPeriod =
+        await this.subscriptionService.findSubscriptionForTenant(
+          tx,
+          cart.tenantId,
+        );
+      if (!subscriptionForPeriod?.currentPeriodStart) {
+        throw new ServiceUnavailableException(
+          BILLING_PERIOD_UNAVAILABLE_MESSAGE,
+        );
+      }
+      await this.limitEnforcementService.assertLimit(
+        tx,
+        cart.tenantId,
+        'orders_per_month',
+        1,
+        deriveBillingPeriodIdentifier(subscriptionForPeriod.currentPeriodStart),
+      );
 
       const createdOrder = await tx.order.create({
         data: {

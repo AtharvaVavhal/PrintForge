@@ -9,6 +9,7 @@ import {
   createProduct,
   createUploadedFile,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
   shippingFields,
@@ -237,13 +238,14 @@ describe('Cross-user access & auth security (§27 #2, #6, #7)', () => {
 
   describe('#7 — every /admin/* route rejects a valid JWT with role=CUSTOMER (403)', () => {
     let customer: TestUser;
-    let admin: TestUser;
+    let admin: TestUser & { tenantId: string };
     let orderId: string;
     let customerId: string;
 
     beforeEach(async () => {
       customer = await registerUser(app, 'plaincustomer');
       admin = await registerAdmin(app, prisma);
+      await makeTenantCheckoutReady(prisma, admin.tenantId);
       customerId = customer.id;
 
       const { productId } = await createProduct(prisma, { basePrice: '20.00' });

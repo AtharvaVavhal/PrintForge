@@ -1119,4 +1119,177 @@ describe('SubscriptionService', () => {
       ).rejects.toThrow(ConflictException);
     });
   });
+
+  describe('confirmRenewal (Phase 7 — Wave A: Plain Period Renewal Fix)', () => {
+    const OLD_START = new Date('2026-01-01T00:00:00Z');
+    const OLD_END = new Date('2026-02-01T00:00:00Z');
+    const NEW_START = new Date('2026-02-01T00:00:00Z');
+    const NEW_END = new Date('2026-03-01T00:00:00Z');
+
+    it('ACTIVE with a confirmed new period: CAS-updates currentPeriodStart/End and writes an `activated` event with metadata.renewal=true', async () => {
+      const { client, updateMany, eventCreate } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        currentPeriodStart: OLD_START,
+        currentPeriodEnd: OLD_END,
+      });
+
+      const result = await service.confirmRenewal(
+        client as never,
+        subscription,
+        {
+          currentPeriodStart: NEW_START,
+          currentPeriodEnd: NEW_END,
+          providerEventId: 'evt-renew-1',
+        },
+      );
+
+      expect(result.applied).toBe(true);
+      expect(result.eventType).toBe('activated');
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          id: SUB_ID,
+          status: 'ACTIVE',
+          currentPeriodStart: OLD_START,
+        },
+        data: expect.objectContaining({
+          currentPeriodStart: NEW_START,
+
+          currentPeriodEnd: NEW_END,
+        }) as unknown,
+      });
+      expect(eventCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          data: expect.objectContaining({
+            type: 'activated',
+            fromStatus: 'ACTIVE',
+            toStatus: 'ACTIVE',
+            providerEventId: 'evt-renew-1',
+            metadata: { renewal: true },
+          }),
+        }),
+      );
+    });
+
+    it('never touches planId, status, cancelAtPeriodEnd, pendingPlanId, graceEndsAt, or retentionEndsAt', async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        currentPeriodStart: OLD_START,
+        currentPeriodEnd: OLD_END,
+        planId: PLAN_A,
+        pendingPlanId: PLAN_B,
+        cancelAtPeriodEnd: false,
+        graceEndsAt: null,
+        retentionEndsAt: null,
+      });
+
+      await service.confirmRenewal(client as never, subscription, {
+        currentPeriodStart: NEW_START,
+        currentPeriodEnd: NEW_END,
+      });
+
+      const dataArg =
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        (updateMany.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      expect(dataArg).not.toHaveProperty('planId');
+      expect(dataArg).not.toHaveProperty('status');
+      expect(dataArg).not.toHaveProperty('cancelAtPeriodEnd');
+      expect(dataArg).not.toHaveProperty('pendingPlanId');
+      expect(dataArg).not.toHaveProperty('graceEndsAt');
+      expect(dataArg).not.toHaveProperty('retentionEndsAt');
+    });
+
+    it('rejects a non-ACTIVE subscription without touching the database', async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'PAST_DUE',
+        currentPeriodStart: OLD_START,
+        currentPeriodEnd: OLD_END,
+      });
+
+      await expect(
+        service.confirmRenewal(client as never, subscription, {
+          currentPeriodStart: NEW_START,
+          currentPeriodEnd: NEW_END,
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent: the provider-confirmed period already matches what is stored locally — no update, no new event', async () => {
+      const { client, updateMany, eventCreate } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        currentPeriodStart: NEW_START,
+        currentPeriodEnd: NEW_END,
+      });
+
+      const result = await service.confirmRenewal(
+        client as never,
+        subscription,
+        {
+          currentPeriodStart: NEW_START,
+          currentPeriodEnd: NEW_END,
+        },
+      );
+
+      expect(result.applied).toBe(false);
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(eventCreate).not.toHaveBeenCalled();
+    });
+
+    it('a lost CAS race (someone else already advanced the period) is a safe no-op, never an error', async () => {
+      const { client } = makeClient({ updateManyCount: 0 });
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        currentPeriodStart: OLD_START,
+        currentPeriodEnd: OLD_END,
+      });
+
+      const result = await service.confirmRenewal(
+        client as never,
+        subscription,
+        {
+          currentPeriodStart: NEW_START,
+          currentPeriodEnd: NEW_END,
+        },
+      );
+
+      expect(result.applied).toBe(false);
+    });
+
+    it('a first-ever renewal on a subscription whose currentPeriodStart is null is treated as a real change, not idempotent', async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'ACTIVE',
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+      });
+
+      const result = await service.confirmRenewal(
+        client as never,
+        subscription,
+        {
+          currentPeriodStart: NEW_START,
+          currentPeriodEnd: NEW_END,
+        },
+      );
+
+      expect(result.applied).toBe(true);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: SUB_ID, status: 'ACTIVE', currentPeriodStart: null },
+        data: expect.objectContaining({
+          currentPeriodStart: NEW_START,
+        }) as unknown,
+      });
+    });
+  });
 });

@@ -8,6 +8,7 @@ import {
   authHeader,
   createProduct,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
   shippingFields,
@@ -25,7 +26,7 @@ import { PrismaService } from '../../src/common/database/prisma.service';
 describe('Order-status transition legality (§27 #8)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let admin: TestUser;
+  let admin: TestUser & { tenantId: string };
 
   beforeAll(async () => {
     ({ app, prisma } = await createTestApp());
@@ -38,6 +39,7 @@ describe('Order-status transition legality (§27 #8)', () => {
   beforeEach(async () => {
     await resetDatabase(prisma);
     admin = await registerAdmin(app, prisma);
+    await makeTenantCheckoutReady(prisma, admin.tenantId);
   });
 
   async function createPendingOrder(): Promise<{

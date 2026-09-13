@@ -50,6 +50,22 @@ export interface ApplyScheduledDowngradeInput {
   providerEventId?: string;
 }
 
+/**
+ * Phase 7 — Wave A: Plain Period Renewal Fix. A provider-confirmed plain
+ * billing-period renewal — no plan change, no status change, nothing
+ * scheduled. Mirrors `ApplyScheduledDowngradeInput`'s shape exactly
+ * (same two provider-confirmed period fields), since both ultimately
+ * refresh the same two columns; the difference is entirely in which
+ * `SubscriptionService` method is called (see `confirmRenewal`'s own
+ * doc comment for why this is not folded into
+ * `applyScheduledDowngrade`).
+ */
+export interface ConfirmRenewalInput {
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+  providerEventId?: string;
+}
+
 export interface CancelInput {
   providerEventId?: string;
 }

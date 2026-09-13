@@ -97,6 +97,8 @@ describe('Phase 7 — D7 SaaS Billing Webhooks (real Postgres, real FakeBillingP
     providerCustomerId?: string;
     providerEventId?: string;
     occurredAt?: Date;
+    currentPeriodStart?: Date;
+    currentPeriodEnd?: Date;
   }): Record<string, unknown> {
     const bytes = billingProvider.buildWebhookEventBody(opts);
     return JSON.parse(bytes.toString('utf8')) as Record<string, unknown>;
@@ -379,6 +381,125 @@ describe('Phase 7 — D7 SaaS Billing Webhooks (real Postgres, real FakeBillingP
         beforeEvents,
       );
       expect(await prisma.billingWebhookEvent.count()).toBe(1);
+    });
+  });
+
+  // ─── Plain period renewal (Phase 7 — Wave A) ─────────────────────────────
+
+  describe('plain period renewal (canonical "renewed" webhook event)', () => {
+    it('a canonical renewed event with both period boundaries refreshes currentPeriodStart/End and writes an activated/renewal event', async () => {
+      const { subscription } = await makeRegisteredSubscription('ACTIVE');
+      const newStart = future(60_000);
+      const newEnd = future(30 * 24 * 60 * 60_000);
+      const body = eventBody({
+        type: 'renewed',
+        providerSubscriptionId: subscription.providerSubscriptionId!,
+        occurredAt: future(),
+        currentPeriodStart: newStart,
+        currentPeriodEnd: newEnd,
+      });
+
+      await postWebhook(body).expect(200);
+      await processor.processReceivedBillingWebhooks();
+
+      const updated = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(updated.currentPeriodStart?.getTime()).toBe(newStart.getTime());
+      expect(updated.currentPeriodEnd?.getTime()).toBe(newEnd.getTime());
+      expect(updated.status).toBe('ACTIVE'); // unchanged
+      expect(updated.planId).toBe(subscription.planId); // unchanged
+
+      const events = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'activated' },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0].metadata).toMatchObject({ renewal: true });
+      const row = await prisma.billingWebhookEvent.findUniqueOrThrow({
+        where: { providerEventId: body.providerEventId as string },
+      });
+      expect(row.status).toBe('PROCESSED');
+    });
+
+    it('a stale renewal (occurredAt before the subscription was last updated) is IGNORED and cannot regress the period', async () => {
+      const { subscription } = await makeRegisteredSubscription('ACTIVE');
+      // Advance the subscription's own updatedAt first, via a real,
+      // non-stale renewal.
+      const firstStart = future(60_000);
+      const firstEnd = future(30 * 24 * 60 * 60_000);
+      await postWebhook(
+        eventBody({
+          type: 'renewed',
+          providerSubscriptionId: subscription.providerSubscriptionId!,
+          occurredAt: future(),
+          currentPeriodStart: firstStart,
+          currentPeriodEnd: firstEnd,
+        }),
+      ).expect(200);
+      await processor.processReceivedBillingWebhooks();
+      const afterFirst = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(afterFirst.currentPeriodStart?.getTime()).toBe(
+        firstStart.getTime(),
+      );
+
+      // A second, STALE renewal — timestamped before the subscription's
+      // own updatedAt — carrying a DIFFERENT (earlier) period than what's
+      // now stored. Must never regress currentPeriodStart/End backward.
+      const staleStart = new Date(subscription.currentPeriodStart!);
+      const staleEnd = new Date(subscription.currentPeriodEnd!);
+      const staleBody = eventBody({
+        type: 'renewed',
+        providerSubscriptionId: subscription.providerSubscriptionId!,
+        occurredAt: new Date(afterFirst.updatedAt!.getTime() - 60_000),
+        currentPeriodStart: staleStart,
+        currentPeriodEnd: staleEnd,
+      });
+      await postWebhook(staleBody).expect(200);
+      await processor.processReceivedBillingWebhooks();
+
+      const finalRow = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(finalRow.currentPeriodStart?.getTime()).toBe(firstStart.getTime()); // unchanged, NOT regressed to staleStart
+      const row = await prisma.billingWebhookEvent.findUniqueOrThrow({
+        where: { providerEventId: staleBody.providerEventId as string },
+      });
+      expect(row.status).toBe('IGNORED');
+      expect(row.lastError).toMatch(/stale/);
+    });
+
+    it('tenant isolation: a renewal event for tenant A never touches tenant B', async () => {
+      const { subscription: subA } = await makeRegisteredSubscription('ACTIVE');
+      const { subscription: subB } = await makeRegisteredSubscription('ACTIVE');
+      const newStart = future(60_000);
+      const newEnd = future(30 * 24 * 60 * 60_000);
+      const body = eventBody({
+        type: 'renewed',
+        providerSubscriptionId: subA.providerSubscriptionId!,
+        occurredAt: future(),
+        currentPeriodStart: newStart,
+        currentPeriodEnd: newEnd,
+      });
+      await postWebhook(body).expect(200);
+
+      await processor.processReceivedBillingWebhooks();
+
+      const updatedA = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subA.id },
+      });
+      const updatedB = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subB.id },
+      });
+      expect(updatedA.currentPeriodStart?.getTime()).toBe(newStart.getTime());
+      expect(updatedB.currentPeriodStart?.getTime()).toBe(
+        subB.currentPeriodStart?.getTime(),
+      ); // untouched
+      const eventsB = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subB.id },
+      });
+      expect(eventsB).toHaveLength(0);
     });
   });
 });

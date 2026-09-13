@@ -93,6 +93,11 @@ describe('BillingWebhookProcessor', () => {
         subscription: SUBSCRIPTION,
         eventType: 'cancelled',
       }),
+      confirmRenewal: jest.fn().mockResolvedValue({
+        applied: true,
+        subscription: SUBSCRIPTION,
+        eventType: 'activated',
+      }),
     };
     const processor = new BillingWebhookProcessor(
       prisma as never,
@@ -156,6 +161,133 @@ describe('BillingWebhookProcessor', () => {
     expect(
       subscriptionService.findSubscriptionByProviderCustomerId,
     ).toHaveBeenCalledWith(expect.anything(), 'fake-cust-1');
+  });
+
+  describe('Phase 7 — Wave A: canonical renewal routing', () => {
+    const NEW_START = '2026-02-01T00:00:00.000Z';
+    const NEW_END = '2026-03-01T00:00:00.000Z';
+
+    it("a canonical 'renewed' event carrying both period boundaries calls confirmRenewal, not applyBillingWebhookEvent", async () => {
+      const { processor, subscriptionService, txUpdates } = build({
+        payload: {
+          providerEventId: 'evt-renew-1',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: NOW.toISOString(),
+            currentPeriodStart: NEW_START,
+            currentPeriodEnd: NEW_END,
+          },
+        },
+      });
+
+      await processor.processReceivedBillingWebhooks();
+
+      expect(subscriptionService.confirmRenewal).toHaveBeenCalledWith(
+        expect.anything(),
+        SUBSCRIPTION,
+        {
+          currentPeriodStart: new Date(NEW_START),
+          currentPeriodEnd: new Date(NEW_END),
+          providerEventId: 'evt-renew-1',
+        },
+      );
+      expect(
+        subscriptionService.applyBillingWebhookEvent,
+      ).not.toHaveBeenCalled();
+      expect(txUpdates[0].status).toBe('PROCESSED');
+    });
+
+    it("a 'renewed' event missing currentPeriodEnd falls back to applyBillingWebhookEvent's own safe no-op default — never calls confirmRenewal", async () => {
+      const { processor, subscriptionService, txUpdates } = build({
+        payload: {
+          providerEventId: 'evt-renew-2',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: NOW.toISOString(),
+            currentPeriodStart: NEW_START,
+            // currentPeriodEnd deliberately absent
+          },
+        },
+      });
+
+      await processor.processReceivedBillingWebhooks();
+
+      expect(subscriptionService.confirmRenewal).not.toHaveBeenCalled();
+      expect(subscriptionService.applyBillingWebhookEvent).toHaveBeenCalled();
+      expect(txUpdates[0].status).toBe('PROCESSED');
+    });
+
+    it('never adds a new SubscriptionEventType — confirmRenewal is the only call, no direct SubscriptionEvent write from the processor itself', async () => {
+      const { processor, subscriptionService } = build({
+        payload: {
+          providerEventId: 'evt-renew-3',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: NOW.toISOString(),
+            currentPeriodStart: NEW_START,
+            currentPeriodEnd: NEW_END,
+          },
+        },
+      });
+
+      await processor.processReceivedBillingWebhooks();
+
+      // The processor itself never touches subscriptionEvent — only
+      // SubscriptionService.confirmRenewal (already unit-tested on its
+      // own to write the existing `activated` type) may.
+      expect(subscriptionService.confirmRenewal).toHaveBeenCalledTimes(1);
+    });
+
+    it('a stale renewal (occurredAt <= Subscription.updatedAt) is IGNORED before confirmRenewal is ever called', async () => {
+      const { processor, subscriptionService, txUpdates } = build({
+        payload: {
+          providerEventId: 'evt-renew-stale',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: new Date('2026-08-01T00:00:00Z').toISOString(), // before SUBSCRIPTION.updatedAt
+            currentPeriodStart: NEW_START,
+            currentPeriodEnd: NEW_END,
+          },
+        },
+      });
+
+      await processor.processReceivedBillingWebhooks();
+
+      expect(subscriptionService.confirmRenewal).not.toHaveBeenCalled();
+      expect(txUpdates[0].status).toBe('IGNORED');
+      expect(txUpdates[0].lastError).toMatch(/stale/);
+    });
+
+    it('a single ingested renewal row is only ever handed to confirmRenewal once per tick', async () => {
+      // Real dedup of a REDELIVERED event (same providerEventId twice) is
+      // enforced at ingestion (INSERT ... ON CONFLICT DO NOTHING — proven
+      // in billing-webhook-ingestion.service.spec.ts / the e2e suite),
+      // and cross-tick double-processing of the SAME row is already
+      // covered generically by the "already-locked row" test below (its
+      // FOR UPDATE re-check returns no rows on a second concurrent tick).
+      // This test restates that guarantee in renewal terms: one due row
+      // in the batch results in exactly one confirmRenewal call.
+      const { processor, subscriptionService } = build({
+        payload: {
+          providerEventId: 'evt-renew-dup',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: NOW.toISOString(),
+            currentPeriodStart: NEW_START,
+            currentPeriodEnd: NEW_END,
+          },
+        },
+      });
+
+      await processor.processReceivedBillingWebhooks();
+
+      expect(subscriptionService.confirmRenewal).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('an unresolvable subscription is marked IGNORED with a useful lastError — never calls applyBillingWebhookEvent, never crashes', async () => {

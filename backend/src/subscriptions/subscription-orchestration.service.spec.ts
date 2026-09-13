@@ -125,6 +125,17 @@ describe('SubscriptionOrchestrationService', () => {
         subscription: makeSubscription({ status: 'ACTIVE' }),
         eventType: 'reactivated',
       }),
+      confirmRenewal: jest.fn().mockImplementation(() => {
+        callOrder.push('confirmRenewal');
+        return Promise.resolve({
+          applied: true,
+          subscription: makeSubscription({
+            currentPeriodStart: new Date('2026-02-01T00:00:00Z'),
+            currentPeriodEnd: new Date('2026-03-01T00:00:00Z'),
+          }),
+          eventType: 'activated',
+        });
+      }),
     };
 
     const idempotencyService = {
@@ -706,9 +717,10 @@ describe('SubscriptionOrchestrationService', () => {
         deps.subscriptionService.applyScheduledDowngrade,
       ).not.toHaveBeenCalled();
       expect(deps.subscriptionService.cancel).not.toHaveBeenCalled();
+      expect(deps.subscriptionService.confirmRenewal).not.toHaveBeenCalled();
     });
 
-    it('applies a pending downgrade once the provider-confirmed boundary is reached', async () => {
+    it('applies a pending downgrade once the provider-confirmed boundary is reached, and does NOT also confirm a plain renewal', async () => {
       const deps = makeDeps();
       deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
         makeSubscription({ pendingPlanId: PLAN_B }),
@@ -730,9 +742,10 @@ describe('SubscriptionOrchestrationService', () => {
       expect(
         deps.subscriptionService.applyScheduledDowngrade,
       ).toHaveBeenCalled();
+      expect(deps.subscriptionService.confirmRenewal).not.toHaveBeenCalled();
     });
 
-    it('applies a scheduled cancellation once the provider-confirmed boundary is reached', async () => {
+    it('applies a scheduled cancellation once the provider-confirmed boundary is reached, and does NOT also confirm a plain renewal', async () => {
       const deps = makeDeps();
       deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
         makeSubscription({ cancelAtPeriodEnd: true }),
@@ -747,9 +760,60 @@ describe('SubscriptionOrchestrationService', () => {
       await service.reconcilePeriod(TENANT_ID);
 
       expect(deps.subscriptionService.cancel).toHaveBeenCalled();
+      expect(deps.subscriptionService.confirmRenewal).not.toHaveBeenCalled();
     });
 
-    it('is safe to call repeatedly (idempotent no-op once nothing is pending)', async () => {
+    it('Phase 7 — Wave A: confirms a plain renewal with the provider-confirmed period when nothing is pending', async () => {
+      const deps = makeDeps();
+      deps.billingProvider.getSubscription.mockResolvedValue({
+        providerSubscriptionId: PROVIDER_SUB_ID,
+        currentPeriodStart: new Date('2026-02-01T00:00:00Z'),
+        currentPeriodEnd: new Date('2026-03-01T00:00:00Z'),
+      });
+      const service = makeService(deps);
+
+      await service.reconcilePeriod(TENANT_ID);
+
+      expect(deps.subscriptionService.confirmRenewal).toHaveBeenCalledWith(
+        deps.prisma,
+        expect.objectContaining({ id: SUB_ID }),
+        {
+          currentPeriodStart: new Date('2026-02-01T00:00:00Z'),
+          currentPeriodEnd: new Date('2026-03-01T00:00:00Z'),
+        },
+      );
+      expect(
+        deps.subscriptionService.applyScheduledDowngrade,
+      ).not.toHaveBeenCalled();
+      expect(deps.subscriptionService.cancel).not.toHaveBeenCalled();
+    });
+
+    it('never infers the next period locally — always uses the provider-confirmed boundaries, never currentPeriodEnd + a guessed duration', async () => {
+      const deps = makeDeps();
+      // A provider-confirmed period whose length differs from the local
+      // subscription's own prior period — if the orchestration layer ever
+      // inferred a new period locally (e.g. old length re-applied), this
+      // would diverge from what's asserted below.
+      deps.billingProvider.getSubscription.mockResolvedValue({
+        providerSubscriptionId: PROVIDER_SUB_ID,
+        currentPeriodStart: new Date('2026-02-01T00:00:00Z'),
+        currentPeriodEnd: new Date('2026-05-15T00:00:00Z'), // irregular length
+      });
+      const service = makeService(deps);
+
+      await service.reconcilePeriod(TENANT_ID);
+
+      expect(deps.subscriptionService.confirmRenewal).toHaveBeenCalledWith(
+        deps.prisma,
+        expect.anything(),
+        {
+          currentPeriodStart: new Date('2026-02-01T00:00:00Z'),
+          currentPeriodEnd: new Date('2026-05-15T00:00:00Z'),
+        },
+      );
+    });
+
+    it('is safe to call repeatedly (idempotent no-op — confirmRenewal itself becomes a no-op once the period is already current)', async () => {
       const deps = makeDeps();
       deps.billingProvider.getSubscription.mockResolvedValue({
         providerSubscriptionId: PROVIDER_SUB_ID,
@@ -765,6 +829,41 @@ describe('SubscriptionOrchestrationService', () => {
         deps.subscriptionService.applyScheduledDowngrade,
       ).not.toHaveBeenCalled();
       expect(deps.subscriptionService.cancel).not.toHaveBeenCalled();
+      // Both calls reach confirmRenewal (SubscriptionService's own CAS/
+      // provider-period comparison is what makes the SECOND call a
+      // no-op — see subscription.service.spec.ts's own idempotency test);
+      // the orchestration layer itself calls it unconditionally both times.
+      expect(deps.subscriptionService.confirmRenewal).toHaveBeenCalledTimes(2);
+    });
+
+    it('provider failure during reconciliation surfaces a recoverable error and performs no local mutation', async () => {
+      const deps = makeDeps();
+      deps.billingProvider.getSubscription.mockRejectedValue(
+        new Error('network down'),
+      );
+      const service = makeService(deps);
+
+      await expect(service.reconcilePeriod(TENANT_ID)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(
+        deps.subscriptionService.applyScheduledDowngrade,
+      ).not.toHaveBeenCalled();
+      expect(deps.subscriptionService.cancel).not.toHaveBeenCalled();
+      expect(deps.subscriptionService.confirmRenewal).not.toHaveBeenCalled();
+    });
+
+    it('a provider timeout during reconciliation is treated the same as any other unreachable-provider failure — no local mutation', async () => {
+      const deps = makeDeps();
+      deps.billingProvider.getSubscription.mockRejectedValue(
+        new BillingProviderTimeoutError('timed out'),
+      );
+      const service = makeService(deps);
+
+      await expect(service.reconcilePeriod(TENANT_ID)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(deps.subscriptionService.confirmRenewal).not.toHaveBeenCalled();
     });
   });
 

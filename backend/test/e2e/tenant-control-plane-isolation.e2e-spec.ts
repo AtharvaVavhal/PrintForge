@@ -11,6 +11,7 @@ import {
   createTextCustomizationField,
   createVariant,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
   shippingFields,
@@ -89,6 +90,7 @@ describe('Tenant Control Plane isolation (Phase 5 W10 hardening)', () => {
     async function makeOrderForTenant(
       tenantId: string,
     ): Promise<{ orderId: string; user: TestUser }> {
+      await makeTenantCheckoutReady(prisma, tenantId);
       const user = await registerUser(app, 'buyer');
       const { productId } = await createProduct(prisma, { tenantId });
       await addCartItem(app, user, { productId, quantity: 1 });
@@ -285,6 +287,7 @@ describe('Tenant Control Plane isolation (Phase 5 W10 hardening)', () => {
   describe('customers', () => {
     it('GET /admin/customers never lists a customer who has only ordered from another tenant (P0 regression)', async () => {
       const { adminA, adminB } = await twoTenants();
+      await makeTenantCheckoutReady(prisma, adminB.tenantId);
       const shopperB = await registerUser(app, 'shopper-b');
       const { productId } = await createProduct(prisma, {
         tenantId: adminB.tenantId,
@@ -308,6 +311,7 @@ describe('Tenant Control Plane isolation (Phase 5 W10 hardening)', () => {
 
     it("GET /admin/customers/:id 404s for a customer who has never ordered from the caller's tenant (P0 regression)", async () => {
       const { adminA, adminB } = await twoTenants();
+      await makeTenantCheckoutReady(prisma, adminB.tenantId);
       const shopperB = await registerUser(app, 'shopper-b2');
       const { productId } = await createProduct(prisma, {
         tenantId: adminB.tenantId,
@@ -544,6 +548,7 @@ describe('Tenant Control Plane isolation (Phase 5 W10 hardening)', () => {
   describe('reviews', () => {
     it("PATCH /admin/reviews/:id/status 404s for another tenant's review (P0 regression)", async () => {
       const { adminA, adminB } = await twoTenants();
+      await makeTenantCheckoutReady(prisma, adminB.tenantId);
 
       const shopperB = await registerUser(app, 'reviewer-b');
       const { productId: productB } = await createProduct(prisma, {

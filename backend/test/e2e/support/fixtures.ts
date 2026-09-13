@@ -4,6 +4,10 @@ import request from 'supertest';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../src/common/database/prisma.service';
 import { API_PREFIX } from '../../../src/common/constants/app.constants';
+import {
+  BASELINE_SUBSCRIPTION_PERIOD_START,
+  BASELINE_SUBSCRIPTION_PERIOD_END,
+} from './db';
 
 export function apiPath(p: string): string {
   return `/${API_PREFIX}${p}`;
@@ -177,6 +181,63 @@ export async function registerAdmin(
 
 export function authHeader(user: TestUser): [string, string] {
   return ['Authorization', `Bearer ${user.accessToken}`];
+}
+
+/**
+ * Phase 7 — Wave B (checkout-ready fixture). `registerAdmin()` /
+ * `grantOwnerMembership()` deliberately create a tenant with NO
+ * `Subscription` at all — intentional, since Phase 6 entitlement suites
+ * (`entitlement-guard.e2e-spec.ts`, `limit-enforcement.e2e-spec.ts`,
+ * `coupons-feature-gate.e2e-spec.ts`) build their own from scratch and
+ * must keep doing so unmodified. But `CheckoutService` now fails closed
+ * with `ServiceUnavailableException('billing_period_unavailable')` on any
+ * tenant with no confirmed billing period (checkout.service.ts), so an
+ * e2e suite whose `registerAdmin()`-created tenant actually reaches
+ * `POST /checkout/orders` needs one. This is opt-in — call it explicitly
+ * per tenant, never wired into `registerAdmin`/`grantOwnerMembership`
+ * themselves — so every test that deliberately exercises the
+ * subscription-less state keeps doing so unchanged.
+ *
+ * Reuses `db.ts`'s own baseline `Subscription` period constants (fixed
+ * ISO dates, never `new Date()`/`Date.now()`) for the same reason that
+ * file's own comment gives: reproducible regardless of when the suite
+ * runs, since nothing in `CheckoutService`'s enforcement checks whether
+ * `now` falls inside the period, only that a confirmed one exists at all.
+ * `limitValue: null` (unlimited `orders_per_month`) mirrors `storage_mb`'s
+ * own `null` on the baseline tenant in `resetDatabase` — this unblocks
+ * checkout from a gate the calling test wasn't written to exercise, not a
+ * commercial value.
+ */
+export async function makeTenantCheckoutReady(
+  prisma: PrismaService,
+  tenantId: string,
+): Promise<void> {
+  const plan = await prisma.plan.create({
+    data: {
+      key: `checkout-ready-plan-${randomUUID()}`,
+      name: 'Checkout-Ready Test Plan',
+      isActive: true,
+      sortOrder: 0,
+      isEnterpriseCustom: false,
+    },
+  });
+  await prisma.planLimit.create({
+    data: {
+      planId: plan.id,
+      limitKey: 'orders_per_month',
+      limitValue: null,
+      period: 'BILLING_PERIOD',
+    },
+  });
+  await prisma.subscription.create({
+    data: {
+      tenantId,
+      planId: plan.id,
+      status: 'ACTIVE',
+      currentPeriodStart: BASELINE_SUBSCRIPTION_PERIOD_START,
+      currentPeriodEnd: BASELINE_SUBSCRIPTION_PERIOD_END,
+    },
+  });
 }
 
 /**

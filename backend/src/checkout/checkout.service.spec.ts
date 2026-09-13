@@ -24,6 +24,8 @@ describe('CheckoutService.toOrderView — shippingFee read-back', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
+      {} as never,
     );
   }
 

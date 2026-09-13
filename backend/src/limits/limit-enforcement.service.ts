@@ -19,15 +19,24 @@ const LIMIT_EXCEEDED_MESSAGE = 'limit_exceeded';
 
 /**
  * Thrown by `assertLimit` when the resolved limit's period is
- * `BILLING_PERIOD` (today, only `orders_per_month`) — deliberately NOT a
- * `ForbiddenException`. This is a caller/wiring error (someone tried to
- * enforce a limit key W5 has explicitly, deliberately left unwired — see
- * the W5 report §8/§32), never a normal per-request outcome, and must
- * never be silently treated as an ordinary limit-exceeded denial. No
- * caller in this codebase triggers this today (`orders_per_month` is
- * never passed to `assertLimit` anywhere) — it exists as a defensive rail
- * so a future accidental wiring attempt fails loudly instead of silently
- * inventing a billing-period identifier.
+ * `BILLING_PERIOD` (today, only `orders_per_month`) AND the caller did not
+ * supply a resolved `period` string — deliberately NOT a
+ * `ForbiddenException`. This is a caller/wiring error, never a normal
+ * per-request outcome, and must never be silently treated as an ordinary
+ * limit-exceeded denial.
+ *
+ * Phase 7 — Wave B (orders_per_month enforcement): `CheckoutService` is
+ * now a real caller for the `orders_per_month` key, but it only ever
+ * calls `assertLimit` WITH a resolved `period` (derived from the
+ * tenant's own provider-confirmed `Subscription.currentPeriodStart` —
+ * see that call site's own comment) when one is actually available; when
+ * no confirmed billing period exists yet, it skips calling `assertLimit`
+ * for this key entirely rather than calling it without a period (see
+ * `checkout.service.ts`'s own "fail safe, never invent a period"
+ * comment). This error therefore still does not trigger via any current
+ * call path — it remains a defensive rail against a FUTURE `BILLING_
+ * PERIOD`-classified key (or caller) that forgets to resolve/supply its
+ * own period before calling `assertLimit`.
  */
 export class BillingPeriodUnresolvedError extends Error {
   constructor(limitKey: string) {
@@ -48,7 +57,10 @@ export class BillingPeriodUnresolvedError extends Error {
  *
  * **The three-way limit distinction (P6-D2/P6-D3) needs NO special-casing
  * here** — `assertLimit` always calls `UsageService.reserve(tx, tenantId,
- * limitKey, PERSISTENT_PERIOD, amount, limit.value)` with whatever
+ * limitKey, <period>, amount, limit.value)` (`<period>` is
+ * `PERSISTENT_PERIOD` for every `PERSISTENT`-classified key, unconditionally
+ * — Phase 7 Wave B's own caller-supplied `period` parameter, below, is
+ * read only for a `BILLING_PERIOD`-classified key) with whatever
  * `EntitlementService.resolve()` already resolved:
  *   - finite `PlanLimit` → `limit.value` is that finite integer → `reserve`
  *     enforces it via its own atomic CAS.
@@ -92,25 +104,45 @@ export class LimitEnforcementService {
    * responsible for actually creating the gated resource using the SAME
    * `tx` immediately afterward, inside the SAME transaction — this method
    * does not (and cannot) create anything itself.
+   *
+   * Phase 7 — Wave B addition: `period` is REQUIRED for a
+   * `BILLING_PERIOD`-classified `limitKey` (today, only
+   * `orders_per_month`) — the caller (`CheckoutService`) is responsible
+   * for resolving it from the tenant's own provider-confirmed
+   * `Subscription.currentPeriodStart` (`deriveBillingPeriodIdentifier()`,
+   * `usage-period.ts`) BEFORE calling this method; omitting it for a
+   * `BILLING_PERIOD` key throws `BillingPeriodUnresolvedError` (unchanged
+   * behavior). `period` is ALWAYS ignored for a `PERSISTENT`-classified
+   * key — `PERSISTENT_PERIOD` is used unconditionally in that case,
+   * exactly as before this wave, so no existing caller (`ProductsService`,
+   * `TeamService`, `UploadsService`) is in any way affected by this new,
+   * optional parameter.
    */
   async assertLimit(
     tx: LimitClient,
     tenantId: string,
     limitKey: LimitKey,
     amount: number,
+    period?: string,
   ): Promise<void> {
     const resolution = await this.entitlementService.resolve(tenantId);
     const limit = resolution.limits[limitKey];
 
+    let resolvedPeriod: string;
     if (limit.period === 'BILLING_PERIOD') {
-      throw new BillingPeriodUnresolvedError(limitKey);
+      if (!period) {
+        throw new BillingPeriodUnresolvedError(limitKey);
+      }
+      resolvedPeriod = period;
+    } else {
+      resolvedPeriod = PERSISTENT_PERIOD;
     }
 
     const outcome = await this.usageService.reserve(
       tx,
       tenantId,
       limitKey,
-      PERSISTENT_PERIOD,
+      resolvedPeriod,
       amount,
       limit.value,
     );

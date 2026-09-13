@@ -8,6 +8,7 @@ import {
   authHeader,
   createProduct,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
 } from './support/fixtures';
@@ -111,6 +112,7 @@ describe('Admin control plane (Phase 13.2)', () => {
 
     it('a configured shipping fee is used by the checkout total (server-authoritative)', async () => {
       const admin = await registerAdmin(app, prisma);
+      await makeTenantCheckoutReady(prisma, admin.tenantId);
       await http(app)
         .patch(apiPath('/admin/settings/shippingFeeFlat'))
         .set(...authHeader(admin))

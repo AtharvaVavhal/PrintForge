@@ -8,6 +8,7 @@ import {
   authHeader,
   createProduct,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
   shippingFields,
@@ -396,6 +397,7 @@ describe('Tax & invoicing (Phase 13.4)', () => {
     const owner = await registerUser(app, 'owner');
     const other = await registerUser(app, 'other');
     const admin = await registerAdmin(app, prisma);
+    await makeTenantCheckoutReady(prisma, admin.tenantId);
     // The order must belong to admin's own tenant for the admin-scoped
     // read below to succeed — `registerAdmin` mints a fresh tenant, which
     // becomes the "most recently created" one `StorefrontTenantResolver`

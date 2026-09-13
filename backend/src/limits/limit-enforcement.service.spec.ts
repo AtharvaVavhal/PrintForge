@@ -188,6 +188,67 @@ describe('LimitEnforcementService', () => {
     expect(usageService.reserve).not.toHaveBeenCalled();
   });
 
+  // ─── N/O: orders_per_month (BILLING_PERIOD) — Phase 7 Wave B ────────────
+
+  it('N. a BILLING_PERIOD-classified limit key WITH a caller-supplied period reserves against exactly that period, never PERSISTENT_PERIOD', async () => {
+    const { service, usageService } = makeServices({
+      limits: { orders_per_month: { value: 100, period: 'BILLING_PERIOD' } },
+    });
+    const period = '2026-02-01T00:00:00.000Z';
+
+    await expect(
+      service.assertLimit(tx, TENANT_ID, 'orders_per_month', 1, period),
+    ).resolves.toBeUndefined();
+    expect(usageService.reserve).toHaveBeenCalledWith(
+      tx,
+      TENANT_ID,
+      'orders_per_month',
+      period,
+      1,
+      100,
+    );
+  });
+
+  it('N2. a BILLING_PERIOD-classified limit key WITH a period still enforces LIMIT_EXCEEDED normally', async () => {
+    const { service } = makeServices({
+      limits: { orders_per_month: { value: 100, period: 'BILLING_PERIOD' } },
+      reserveOutcome: { status: 'LIMIT_EXCEEDED', count: 100, limit: 100 },
+    });
+
+    const rejection = service.assertLimit(
+      tx,
+      TENANT_ID,
+      'orders_per_month',
+      1,
+      '2026-02-01T00:00:00.000Z',
+    );
+    await expect(rejection).rejects.toThrow(ForbiddenException);
+    await expect(rejection).rejects.toThrow('limit_exceeded');
+  });
+
+  it('O. a caller-supplied period is IGNORED for a PERSISTENT-classified key — PERSISTENT_PERIOD is always used', async () => {
+    const { service, usageService } = makeServices({
+      limits: { products: { value: 10, period: 'PERSISTENT' } },
+    });
+
+    await service.assertLimit(
+      tx,
+      TENANT_ID,
+      'products',
+      1,
+      '2026-02-01T00:00:00.000Z', // deliberately supplied, must be ignored
+    );
+
+    expect(usageService.reserve).toHaveBeenCalledWith(
+      tx,
+      TENANT_ID,
+      'products',
+      PERSISTENT_PERIOD,
+      1,
+      10,
+    );
+  });
+
   // ─── Q: no duplicate reservation ─────────────────────────────────────────
 
   it('Q. reserve() is called exactly once per assertLimit call — no duplicate or retry reservation', async () => {

@@ -614,6 +614,7 @@ export class SubscriptionOrchestrationService {
     }
 
     let updated = subscription;
+    let somethingScheduledApplied = false;
     if (updated.pendingPlanId) {
       const result = await this.subscriptionService.applyScheduledDowngrade(
         this.prisma,
@@ -624,6 +625,7 @@ export class SubscriptionOrchestrationService {
         },
       );
       updated = result.subscription;
+      somethingScheduledApplied = true;
     }
     if (updated.status === 'ACTIVE' && updated.cancelAtPeriodEnd === true) {
       const result = await this.subscriptionService.cancel(
@@ -632,15 +634,26 @@ export class SubscriptionOrchestrationService {
         {},
       );
       updated = result.subscription;
+      somethingScheduledApplied = true;
     }
-    // Disclosed, known gap: a plain renewal (boundary reached, nothing
-    // scheduled) has no Stage 1 method to refresh currentPeriodStart/End
-    // alone without a status/plan change alongside it — Stage 2 does not
-    // invent one (would need either a new SubscriptionEvent enum value,
-    // which the migration-safety guard rejects for a non-legacy migration
-    // — see subscription.service.ts's own scheduleCancellation comment —
-    // or reusing an existing type in a way that would misrepresent what
-    // happened). Deferred to a future, separately-ratified stage.
+    // Phase 7 — Wave A: Plain Period Renewal Fix. Neither a scheduled
+    // downgrade nor a scheduled cancellation applied above — the boundary
+    // was reached with nothing else pending, so this is an ordinary
+    // provider-confirmed renewal. `confirmRenewal`'s own idempotency check
+    // (compares `input.currentPeriodStart` against what's already stored)
+    // means calling this unconditionally here is safe even if `updated`
+    // somehow already reflects the confirmed period — it becomes a no-op.
+    if (!somethingScheduledApplied && updated.status === 'ACTIVE') {
+      const result = await this.subscriptionService.confirmRenewal(
+        this.prisma,
+        updated,
+        {
+          currentPeriodStart: providerState.currentPeriodStart,
+          currentPeriodEnd: providerState.currentPeriodEnd,
+        },
+      );
+      updated = result.subscription;
+    }
     return this.toView(updated);
   }
 

@@ -9,6 +9,7 @@ import {
   createCoupon,
   createProduct,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
   shippingFields,
@@ -131,6 +132,7 @@ describe('Checkout order-creation races (§27 #3, #13, #14)', () => {
 
   it('#3 — a coupon with usageLimitTotal: 1, claimed by genuinely concurrent checkouts from different users, is granted to exactly one', async () => {
     const admin = await registerAdmin(app, prisma);
+    await makeTenantCheckoutReady(prisma, admin.tenantId);
     const coupon = await createCoupon(prisma, admin.id, {
       percentageOff: 10,
       usageLimitTotal: 1,

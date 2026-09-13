@@ -8,6 +8,7 @@ import {
   authHeader,
   createProduct,
   http,
+  makeTenantCheckoutReady,
   registerAdmin,
   registerUser,
   shippingFields,
@@ -345,12 +346,14 @@ describe('AppSetting tenant/store ownership (Phase 5 W9)', () => {
         // same user reuses the same already-tenant-scoped cart regardless
         // of what gets created afterward.
         const adminA = await registerAdmin(app, prisma);
+        await makeTenantCheckoutReady(prisma, adminA.tenantId);
         const userA = await registerUser(app, 'invA');
         const aOrders = [
           await checkoutAndPay(userA, adminA.tenantId, processor),
         ];
 
         const adminB = await registerAdmin(app, prisma);
+        await makeTenantCheckoutReady(prisma, adminB.tenantId);
         const userB = await registerUser(app, 'invB');
         const b1 = await checkoutAndPay(userB, adminB.tenantId, processor);
 

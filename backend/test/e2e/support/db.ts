@@ -63,6 +63,32 @@ const ALL_TABLES = [
 ];
 
 /**
+ * Phase 7 — Wave B shared-fixture fix. The baseline tenant's `Subscription`
+ * (below) is `ACTIVE`, but pre-Phase-7 it never carried a confirmed billing
+ * period at all — now that `CheckoutService` fails closed
+ * (`ServiceUnavailableException('billing_period_unavailable')`) on any
+ * `ACTIVE` subscription with no `currentPeriodStart`, that omission would
+ * break `POST /checkout/orders` for every e2e suite that reaches this
+ * tenant, not just Phase 7 ones. Fixed dates, not `new Date()`/`Date.now()`
+ * — the same "hand-picked ISO date pair" convention already used
+ * throughout the Phase 7 e2e suites (e.g. `subscription-orchestration
+ * .service.spec.ts`'s own `new Date('2026-01-01T00:00:00Z')` fixtures) —
+ * so every test run is reproducible regardless of when it executes, and
+ * this period's "age" relative to the real clock is irrelevant: nothing in
+ * `CheckoutService`'s enforcement checks whether `now` falls inside
+ * `[currentPeriodStart, currentPeriodEnd)`, only that a confirmed period
+ * exists at all. A 30-day span (`currentPeriodEnd = currentPeriodStart +
+ * 30 days`) mirrors `FakeBillingProvider`'s own `FAKE_PERIOD_MS` — a
+ * complete period, not merely a start with no end.
+ */
+export const BASELINE_SUBSCRIPTION_PERIOD_START = new Date(
+  '2026-01-01T00:00:00.000Z',
+);
+export const BASELINE_SUBSCRIPTION_PERIOD_END = new Date(
+  '2026-01-31T00:00:00.000Z',
+);
+
+/**
  * Full-truncate isolation between tests (§29/§27 — this repo has no other
  * established e2e reset pattern; app.e2e-spec.ts's /health test never
  * touches the database). RESTART IDENTITY CASCADE resets every table in
@@ -161,8 +187,32 @@ export async function resetDatabase(
         period: 'PERSISTENT',
       },
     });
+    // Phase 7 — Wave B shared-fixture fix. Same reasoning as `storage_mb`
+    // immediately above, now that `orders_per_month` is actually enforced
+    // (Wave B) against a tenant with a confirmed billing period (which the
+    // baseline subscription now has, per this file's own comment above) —
+    // without this row, `EntitlementService`'s existing deny-by-default
+    // behavior for a MISSING `PlanLimit` (P6-D2: `value: 0`) would reject
+    // every checkout through the baseline tenant outright. `limitValue:
+    // null` (unlimited, still tracked per P6-D3) for the same reason
+    // `storage_mb` uses it: unblocking pre-existing tests from a limit
+    // they were never written to exercise, not a commercial value.
+    await prisma.planLimit.create({
+      data: {
+        planId: baselinePlan.id,
+        limitKey: 'orders_per_month',
+        limitValue: null,
+        period: 'BILLING_PERIOD',
+      },
+    });
     await prisma.subscription.create({
-      data: { tenantId: tenant.id, planId: baselinePlan.id, status: 'ACTIVE' },
+      data: {
+        tenantId: tenant.id,
+        planId: baselinePlan.id,
+        status: 'ACTIVE',
+        currentPeriodStart: BASELINE_SUBSCRIPTION_PERIOD_START,
+        currentPeriodEnd: BASELINE_SUBSCRIPTION_PERIOD_END,
+      },
     });
   }
 }

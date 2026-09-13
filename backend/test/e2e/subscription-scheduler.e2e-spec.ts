@@ -5,7 +5,7 @@ import { createTestApp } from './support/test-app';
 import { PrismaService } from '../../src/common/database/prisma.service';
 import { SubscriptionSchedulerService } from '../../src/subscriptions/subscription-scheduler.service';
 import { BILLING_PROVIDER } from '../../src/subscriptions/billing-provider.token';
-import type { BillingProvider } from '../../src/subscriptions/billing-provider.interface';
+import { FakeBillingProvider } from '../../src/subscriptions/fake-billing-provider';
 import { seedFreePlanCatalogue } from '../../prisma/free-plan-catalogue';
 
 /**
@@ -23,7 +23,7 @@ describe('Phase 7 — Subscription Scheduler (real Postgres, real FakeBillingPro
   let app: INestApplication;
   let prisma: PrismaService;
   let scheduler: SubscriptionSchedulerService;
-  let billingProvider: BillingProvider;
+  let billingProvider: FakeBillingProvider;
 
   beforeAll(async () => {
     ({ app, prisma } = await createTestApp());
@@ -190,6 +190,13 @@ describe('Phase 7 — Subscription Scheduler (real Postgres, real FakeBillingPro
       });
       expect(updated.planId).toBe(targetPlan.id);
       expect(updated.pendingPlanId).toBeNull();
+      // Phase 7 — Wave A: applying a scheduled downgrade must NOT also
+      // write a plain-renewal event alongside it — the two paths are
+      // mutually exclusive within one reconciliation pass.
+      const renewalEvents = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'activated' },
+      });
+      expect(renewalEvents).toHaveLength(0);
     });
 
     it('applies a scheduled cancellation once the local currentPeriodEnd has elapsed', async () => {
@@ -210,6 +217,12 @@ describe('Phase 7 — Subscription Scheduler (real Postgres, real FakeBillingPro
         where: { id: subscription.id },
       });
       expect(updated.status).toBe('CANCELLED');
+      // Phase 7 — Wave A: applying a scheduled cancellation must NOT also
+      // write a plain-renewal event.
+      const renewalEvents = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'activated' },
+      });
+      expect(renewalEvents).toHaveLength(0);
     });
 
     it('an ACTIVE subscription whose currentPeriodEnd has NOT elapsed is left untouched', async () => {
@@ -292,6 +305,124 @@ describe('Phase 7 — Subscription Scheduler (real Postgres, real FakeBillingPro
         where: { subscriptionId: subscription.id, type: 'downgrade_applied' },
       });
       expect(events).toHaveLength(1); // the second run no longer matches the eligibility query at all (planId already applied, currentPeriodEnd refreshed)
+    });
+
+    // ─── Plain period renewal (Phase 7 — Wave A) ───────────────────────
+
+    /**
+     * Makes a subscription eligible for `findSubscriptionsNeedingPeriodReconciliation`'s
+     * own local pre-filter (`currentPeriodEnd <= now`) — same technique the
+     * pre-existing downgrade/cancellation tests above already use — WITHOUT
+     * touching the FAKE PROVIDER's own record, so `getSubscription()` still
+     * returns whatever period `advancePeriod` (called separately) produced
+     * there. The local row and the provider's own record are intentionally
+     * two independent stores here, exactly like a real stale-local-record
+     * scenario.
+     */
+    async function backdateLocalPeriod(subscriptionId: string): Promise<void> {
+      await prisma.subscription.update({
+        where: { id: subscriptionId },
+        data: {
+          currentPeriodStart: new Date(Date.now() - 60 * 24 * 60 * 60_000),
+          currentPeriodEnd: new Date(Date.now() - 30 * 24 * 60 * 60_000),
+        },
+      });
+    }
+
+    it('a plain renewal (nothing scheduled) advances the local period to the provider-confirmed boundaries and writes an activated/renewal event', async () => {
+      const { subscription } = await makeRegisteredSubscription('ACTIVE');
+      // Advances the FAKE PROVIDER's own record forward, then backdates the
+      // LOCAL row — the real-world condition this job exists to detect:
+      // the provider has moved on, the local record has not caught up.
+      const advanced = billingProvider.advancePeriod(
+        subscription.providerSubscriptionId!,
+      );
+      await backdateLocalPeriod(subscription.id);
+
+      await scheduler.runPeriodReconciliation();
+
+      const updated = await prisma.subscription.findUniqueOrThrow({
+        where: { id: subscription.id },
+      });
+      expect(updated.currentPeriodStart?.getTime()).toBe(
+        advanced.currentPeriodStart.getTime(),
+      );
+      expect(updated.currentPeriodEnd?.getTime()).toBe(
+        advanced.currentPeriodEnd.getTime(),
+      );
+      // Never touched: status, planId, cancelAtPeriodEnd, pendingPlanId.
+      expect(updated.status).toBe('ACTIVE');
+      expect(updated.planId).toBe(subscription.planId);
+      expect(updated.cancelAtPeriodEnd).toBeFalsy();
+      expect(updated.pendingPlanId).toBeNull();
+
+      const events = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'activated' },
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0].fromStatus).toBe('ACTIVE');
+      expect(events[0].toStatus).toBe('ACTIVE');
+      expect(events[0].metadata).toMatchObject({ renewal: true });
+    });
+
+    it('repeated reconciliation of the same renewed period is idempotent — a second run writes no duplicate renewal event', async () => {
+      const { subscription } = await makeRegisteredSubscription('ACTIVE');
+      billingProvider.advancePeriod(subscription.providerSubscriptionId!);
+      await backdateLocalPeriod(subscription.id);
+
+      await scheduler.runPeriodReconciliation();
+      await scheduler.runPeriodReconciliation();
+
+      const events = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'activated' },
+      });
+      expect(events).toHaveLength(1);
+    });
+
+    it('two concurrent reconciliation attempts for the same subscription do not double-renew the period', async () => {
+      const { subscription } = await makeRegisteredSubscription('ACTIVE');
+      billingProvider.advancePeriod(subscription.providerSubscriptionId!);
+      await backdateLocalPeriod(subscription.id);
+
+      await Promise.all([
+        scheduler.runPeriodReconciliation(),
+        scheduler.runPeriodReconciliation(),
+      ]);
+
+      const events = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: subscription.id, type: 'activated' },
+      });
+      expect(events).toHaveLength(1);
+    });
+
+    it('tenant isolation: a plain renewal for one tenant never touches another tenant’s subscription', async () => {
+      const { subscription: dueSub } =
+        await makeRegisteredSubscription('ACTIVE');
+      const advanced = billingProvider.advancePeriod(
+        dueSub.providerSubscriptionId!,
+      );
+      await backdateLocalPeriod(dueSub.id);
+      const { subscription: untouchedSub } =
+        await makeRegisteredSubscription('ACTIVE'); // own period still current, not due
+
+      await scheduler.runPeriodReconciliation();
+
+      const dueRow = await prisma.subscription.findUniqueOrThrow({
+        where: { id: dueSub.id },
+      });
+      expect(dueRow.currentPeriodStart?.getTime()).toBe(
+        advanced.currentPeriodStart.getTime(),
+      );
+      const untouchedRow = await prisma.subscription.findUniqueOrThrow({
+        where: { id: untouchedSub.id },
+      });
+      expect(untouchedRow.currentPeriodStart?.getTime()).toBe(
+        untouchedSub.currentPeriodStart?.getTime(),
+      );
+      const untouchedEvents = await prisma.subscriptionEvent.findMany({
+        where: { subscriptionId: untouchedSub.id },
+      });
+      expect(untouchedEvents).toHaveLength(0);
     });
   });
 
