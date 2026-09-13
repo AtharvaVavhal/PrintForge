@@ -22,6 +22,18 @@ export interface AppConfig {
     keySecret: string;
     webhookSecret: string;
   };
+  /**
+   * Phase 7 — production SaaS billing provider (docs/saas/DECISIONS.md
+   * P7-D4 Part E). Deliberately a SEPARATE config block from `razorpay`
+   * above (the Phase 8 merchant-commerce credentials) even though both
+   * are Razorpay products — a distinct account, key pair, and webhook
+   * secret, never reused between SaaS billing and merchant commerce.
+   */
+  razorpaySaas: {
+    keyId: string;
+    keySecret: string;
+    webhookSecret: string;
+  };
   resend: {
     apiKey: string;
     emailFromAddress: string;
@@ -123,6 +135,11 @@ export default (): AppConfig => ({
     keyId: process.env.RAZORPAY_KEY_ID ?? '',
     keySecret: process.env.RAZORPAY_KEY_SECRET ?? '',
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ?? '',
+  },
+  razorpaySaas: {
+    keyId: process.env.RAZORPAY_SAAS_KEY_ID ?? '',
+    keySecret: process.env.RAZORPAY_SAAS_KEY_SECRET ?? '',
+    webhookSecret: process.env.RAZORPAY_SAAS_WEBHOOK_SECRET ?? '',
   },
   resend: {
     apiKey: process.env.RESEND_API_KEY ?? '',

@@ -35,7 +35,18 @@ export class BillingWebhookIngestionService {
     @Inject(BILLING_PROVIDER) private readonly billingProvider: BillingProvider,
   ) {}
 
-  async receiveWebhook(rawBody: Buffer, signature: string): Promise<void> {
+  /**
+   * `headerEventId` (docs/saas/DECISIONS.md P7-D5 Part E) — optional,
+   * passed straight through to `BillingProvider.parseWebhook()`; this
+   * service never reads or interprets it itself. Mirrors
+   * `PaymentsService.receiveWebhook()`'s own header-then-body split for
+   * the merchant commerce webhook exactly.
+   */
+  async receiveWebhook(
+    rawBody: Buffer,
+    signature: string,
+    headerEventId?: string,
+  ): Promise<void> {
     if (!this.billingProvider.verifyWebhook(rawBody, signature)) {
       // Invalid signature -> no DB write at all (same discipline as
       // payments.service.ts's own receiveWebhook()).
@@ -44,7 +55,7 @@ export class BillingWebhookIngestionService {
 
     let event: NormalizedBillingEvent;
     try {
-      event = this.billingProvider.parseWebhook(rawBody);
+      event = this.billingProvider.parseWebhook(rawBody, headerEventId);
     } catch {
       throw new BadRequestException('Malformed billing webhook payload');
     }

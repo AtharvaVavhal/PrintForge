@@ -123,7 +123,21 @@ export interface BillingProvider {
    * implemented anywhere in Stage 1 (P7-D1 Part H). */
   verifyWebhook(rawBody: Buffer, signature: string): boolean;
 
-  /** Interface-level contract only — no real payload parsing is
-   * implemented anywhere in Stage 1 (P7-D1 Part H). */
-  parseWebhook(rawBody: Buffer): NormalizedBillingEvent;
+  /**
+   * `headerEventId` (docs/saas/DECISIONS.md P7-D5 Part E) — optional,
+   * additive parameter: a provider-specific delivery id read from an HTTP
+   * header by the controller (e.g. Razorpay's `X-Razorpay-Event-Id`),
+   * threaded through `BillingWebhookIngestionService.receiveWebhook()`.
+   * Empirically confirmed (P7-D5 Part H) that at least one real vendor
+   * (Razorpay) carries its event id ONLY in a header, never inside the
+   * JSON payload body itself — a `parseWebhook()` implementation that can
+   * only see `rawBody` has no way to produce a stable `providerEventId`
+   * for such a vendor. Optional so `FakeBillingProvider`'s existing
+   * single-argument implementation remains valid (TypeScript permits a
+   * shorter function signature to satisfy an interface whose extra
+   * parameters are optional) — no change to `FakeBillingProvider` or any
+   * test that calls this with one argument. An adapter whose vendor DOES
+   * carry the id in the payload is free to ignore this parameter entirely.
+   */
+  parseWebhook(rawBody: Buffer, headerEventId?: string): NormalizedBillingEvent;
 }

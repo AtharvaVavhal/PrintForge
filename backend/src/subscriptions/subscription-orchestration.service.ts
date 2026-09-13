@@ -3,6 +3,7 @@ import {
   HttpException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -61,6 +62,8 @@ const UNSCHEDULE_CANCELLATION_ENDPOINT_ID =
  */
 @Injectable()
 export class SubscriptionOrchestrationService {
+  private readonly logger = new Logger(SubscriptionOrchestrationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly subscriptionService: SubscriptionService,
@@ -628,6 +631,46 @@ export class SubscriptionOrchestrationService {
       somethingScheduledApplied = true;
     }
     if (updated.status === 'ACTIVE' && updated.cancelAtPeriodEnd === true) {
+      // docs/saas/DECISIONS.md P7-D5 Part D — for a provider (Razorpay)
+      // whose adapter never told it about the scheduled cancellation at
+      // request time (Part B), the confirmed boundary reached here is
+      // this class's ONLY remaining opportunity to actually tell the
+      // provider to stop billing — unlike the pre-P7-D5 assumption this
+      // branch originally carried (that the provider had already
+      // cancelled itself via its own cycle-end mechanism), that can no
+      // longer be assumed for every adapter. `BillingProviderTimeoutError`
+      // is deliberately NOT specially reconciled here (unlike every other
+      // provider call site in this class) — `attemptReconciliationRead()`
+      // exposes no field confirming cancellation either way (the same
+      // disclosed limitation `reconcileCancelTimeout()` already documents
+      // for the tenant-initiated cancel path), and this method already
+      // runs on every scheduler tick (`SubscriptionSchedulerService
+      // .runPeriodReconciliation`, every 5 minutes) — a transient failure
+      // here safely retries on the next tick rather than needing its own
+      // bespoke reconciliation branch.
+      //
+      // Disclosed, accepted limitation: this boundary is detected AFTER
+      // the provider's own period has already advanced past
+      // `currentPeriodEnd` (`boundaryReached`, above) — for a provider
+      // using local-only scheduling (P7-D5 Part B), this means the
+      // provider may have already completed one more full billing cycle's
+      // charge before this call ever runs, since nothing told it to stop
+      // beforehand. Closing that gap would need either a schema field
+      // exposing the provider's own next-charge timestamp or a different
+      // scheduling trigger — both out of scope for this change; this call
+      // still stops billing for every cycle AFTER that one.
+      this.assertHasProviderLink(updated);
+      try {
+        await this.billingProvider.cancelSubscription(
+          updated.providerSubscriptionId,
+          'immediate',
+        );
+      } catch (err) {
+        this.logger.warn(
+          `reconcilePeriod: provider cancellation failed for tenant ${updated.tenantId}, will retry next tick: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return this.toView(updated);
+      }
       const result = await this.subscriptionService.cancel(
         this.prisma,
         updated,

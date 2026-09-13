@@ -763,6 +763,46 @@ describe('SubscriptionOrchestrationService', () => {
       expect(deps.subscriptionService.confirmRenewal).not.toHaveBeenCalled();
     });
 
+    it('docs/saas/DECISIONS.md P7-D5 Part D: calls billingProvider.cancelSubscription(immediate) BEFORE the local cancel — the only point a local-only-scheduling adapter (Razorpay) is ever told to actually stop billing', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ cancelAtPeriodEnd: true }),
+      );
+      deps.billingProvider.getSubscription.mockResolvedValue({
+        providerSubscriptionId: PROVIDER_SUB_ID,
+        currentPeriodStart: new Date('2026-02-01T00:00:00Z'),
+        currentPeriodEnd: new Date('2026-03-01T00:00:00Z'),
+      });
+      const service = makeService(deps);
+
+      await service.reconcilePeriod(TENANT_ID);
+
+      expect(deps.billingProvider.cancelSubscription).toHaveBeenCalledWith(
+        PROVIDER_SUB_ID,
+        'immediate',
+      );
+    });
+
+    it('P7-D5 Part D: a provider cancellation failure at the boundary performs NO local mutation and does not throw — safe to retry on the next scheduler tick', async () => {
+      const deps = makeDeps();
+      deps.subscriptionService.getSubscriptionForTenant.mockResolvedValue(
+        makeSubscription({ cancelAtPeriodEnd: true }),
+      );
+      deps.billingProvider.getSubscription.mockResolvedValue({
+        providerSubscriptionId: PROVIDER_SUB_ID,
+        currentPeriodStart: new Date('2026-02-01T00:00:00Z'),
+        currentPeriodEnd: new Date('2026-03-01T00:00:00Z'),
+      });
+      deps.billingProvider.cancelSubscription.mockRejectedValue(
+        new Error('network down'),
+      );
+      const service = makeService(deps);
+
+      await expect(service.reconcilePeriod(TENANT_ID)).resolves.toBeDefined();
+
+      expect(deps.subscriptionService.cancel).not.toHaveBeenCalled();
+    });
+
     it('Phase 7 — Wave A: confirms a plain renewal with the provider-confirmed period when nothing is pending', async () => {
       const deps = makeDeps();
       deps.billingProvider.getSubscription.mockResolvedValue({

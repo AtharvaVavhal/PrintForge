@@ -13,24 +13,32 @@ import { Public } from '../common/decorators/public.decorator';
 import { BillingWebhookIngestionService } from './billing-webhook-ingestion.service';
 
 /**
- * Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3).
- * Owns POST /webhooks/billing (Signed — provider signature, not JWT).
- * Deliberately separate from `PaymentsController`'s POST /payments/webhook
- * (commerce) — frozen SaaS invariant 6 / P7-D3 Part B: SaaS subscription
- * billing and merchant commerce payments are separate, never sharing a
- * route, a table, or a secret.
+ * Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3),
+ * header names finalized per P7-D4/P7-D5 (Razorpay Subscriptions, the
+ * ratified production SaaS billing provider). Owns POST /webhooks/billing
+ * (Signed — provider signature, not JWT). Deliberately separate from
+ * `PaymentsController`'s POST /payments/webhook (commerce) — frozen SaaS
+ * invariant 6 / P7-D3 Part B: SaaS subscription billing and merchant
+ * commerce payments are separate, never sharing a route, a table, or a
+ * secret. This controller never imports anything from `payments/`; the
+ * header NAMES happen to match Razorpay's merchant-commerce webhook
+ * convention only because both are Razorpay products, not because any
+ * code or secret is shared (see `RazorpayBillingProvider`'s own header
+ * comment).
  *
  * `req.rawBody` is available with no extra configuration — `main.ts` sets
  * `rawBody: true` as a GLOBAL Nest option, not per-route.
  *
- * `x-billing-signature` is a placeholder header name — no real vendor is
- * selected yet (production billing provider selection, P7-D1 Part G,
- * remains OPEN); whichever vendor is eventually chosen may use a
- * differently-named header, at which point only this one `@Headers(...)`
- * argument needs to change. `FakeBillingProvider.verifyWebhook()` accepts
- * any non-empty signature unconditionally — this route's own job is only
- * to require SOME signature be present and hand it to `BillingProvider`
- * for verification, never to interpret it itself.
+ * `X-Razorpay-Event-Id` (P7-D5 Part E — empirically confirmed present on
+ * a real captured Razorpay Subscriptions webhook delivery; the JSON
+ * payload body carries no id of its own) is extracted here and threaded
+ * through to `BillingProvider.parseWebhook()` as `providerEventId` —
+ * mirroring `PaymentsController`'s own `x-razorpay-event-id` extraction
+ * for the merchant commerce webhook exactly, as an independent
+ * implementation, never shared code. Optional at this layer (undefined is
+ * passed straight through) since `BillingProvider.parseWebhook()`'s own
+ * second parameter is optional and a non-Razorpay adapter (or
+ * `FakeBillingProvider`) may not need it at all.
  */
 @Controller('webhooks/billing')
 export class BillingWebhooksController {
@@ -43,12 +51,13 @@ export class BillingWebhooksController {
   @HttpCode(HttpStatus.OK)
   async receive(
     @Req() req: RawBodyRequest<Request>,
-    @Headers('x-billing-signature') signature: string | undefined,
+    @Headers('x-razorpay-signature') signature: string | undefined,
+    @Headers('x-razorpay-event-id') eventId: string | undefined,
   ): Promise<{ received: true }> {
     if (!req.rawBody || !signature) {
       throw new BadRequestException('Missing webhook body or signature');
     }
-    await this.ingestionService.receiveWebhook(req.rawBody, signature);
+    await this.ingestionService.receiveWebhook(req.rawBody, signature, eventId);
     return { received: true };
   }
 }

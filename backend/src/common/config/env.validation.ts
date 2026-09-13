@@ -65,6 +65,12 @@ export const PRODUCTION_REQUIRED_KEYS = [
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
   'RAZORPAY_WEBHOOK_SECRET',
+  // Phase 7 — production SaaS billing provider (docs/saas/DECISIONS.md
+  // P7-D4 Part E) — a deliberately separate credential set from the three
+  // merchant-commerce keys immediately above, never reused between them.
+  'RAZORPAY_SAAS_KEY_ID',
+  'RAZORPAY_SAAS_KEY_SECRET',
+  'RAZORPAY_SAAS_WEBHOOK_SECRET',
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
   'CLOUDINARY_API_SECRET',

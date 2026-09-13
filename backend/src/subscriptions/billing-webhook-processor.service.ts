@@ -97,10 +97,26 @@ function extractEnvelope(payload: unknown): BillingWebhookEnvelope {
  * payload-shape knowledge in this processor (which already owns
  * `BillingWebhookEnvelope`) rather than pushing it into
  * `SubscriptionService` keeps that class's own switch a pure
- * type-to-method routing table. Real provider event-name mapping onto
- * this canonical type remains deferred (production billing provider
- * selection, P7-D1 Part G, still OPEN) — this only defines the shape a
- * future real mapping must produce.
+ * type-to-method routing table.
+ *
+ * docs/saas/DECISIONS.md P7-D5 Part E/§7-8 — now that Razorpay Subscriptions
+ * is the ratified production provider, this special case has one further
+ * branch: `RazorpayBillingProvider.parseWebhook()` maps Razorpay's own
+ * `subscription.charged` event to THIS canonical type unconditionally
+ * (Razorpay has no distinct "recovered" event — a successful retry after a
+ * prior failure and an ordinary periodic renewal are the identical
+ * `subscription.charged` event; confirmed via that adapter's own doc
+ * comment). Disambiguating them requires the LOCAL subscription's current
+ * status, which `parseWebhook()` — a pure function of the raw payload —
+ * cannot see; this processor already resolves the local subscription
+ * before reaching this point, so the branch lives here: a currently
+ * `PAST_DUE` subscription routes to `recoverPayment()` (an existing
+ * `applyBillingWebhookEvent` case, needing only `providerEventId` — the
+ * period does not change on a same-cycle recovery), anything else routes
+ * to `confirmRenewal()` as before. Neither `RazorpayBillingProvider` nor
+ * any other adapter duplicates this state-machine decision itself — it
+ * parses/normalizes only; `SubscriptionService` remains the sole authority
+ * for which transition applies and for actually applying it.
  */
 const RENEWAL_EVENT_TYPE = 'renewed';
 
@@ -121,10 +137,12 @@ const RENEWAL_EVENT_TYPE = 'renewed';
  * TENANT-initiated requests only) and never writes `SubscriptionEvent`
  * directly (only `SubscriptionService` may) — every path into subscription
  * state goes through `SubscriptionService` (`applyBillingWebhookEvent()`
- * for confirmation-only events, `confirmRenewal()` directly for a
- * canonical `'renewed'` event carrying period boundaries — Phase 7, Wave
- * A), called only after this processor's own tenant-resolution (P7-D3
- * Part B) and stale/out-of-order (P7-D3 Part F) checks have both passed.
+ * for confirmation-only events, `confirmRenewal()`/`recoverPayment()`
+ * directly for a canonical `'renewed'` event carrying period boundaries,
+ * disambiguated by the local subscription's current status — Phase 7,
+ * Wave A / P7-D5), called only after this processor's own
+ * tenant-resolution (P7-D3 Part B) and stale/out-of-order (P7-D3 Part F)
+ * checks have both passed.
  *
  * `billing_webhook_events.status`: RECEIVED / PROCESSED (both a
  * successfully-considered event, whether or not it actually changed
@@ -249,8 +267,14 @@ export class BillingWebhookProcessor {
         // ─── Apply (P7-D3: webhooks are authoritative once implemented) ─
         // A canonical 'renewed' event carrying both provider-confirmed
         // period boundaries routes to confirmRenewal() directly (Phase 7
-        // — Wave A) — everything else (including a 'renewed' event
-        // missing either boundary, which cannot be acted on) goes through
+        // — Wave A) UNLESS the local subscription is currently PAST_DUE,
+        // in which case it is actually a same-cycle payment recovery
+        // (P7-D5 — Razorpay's 'subscription.charged' covers both cases;
+        // see RENEWAL_EVENT_TYPE's own doc comment above) and routes to
+        // recoverPayment() instead — never confirmRenewal() on a PAST_DUE
+        // subscription (its own assertCurrentlyActive() would reject
+        // that). Everything else (including a 'renewed' event missing
+        // either period boundary, which cannot be acted on) goes through
         // applyBillingWebhookEvent()'s own type-routing switch, whose
         // default branch is the same safe no-op it already is.
         if (
@@ -258,11 +282,17 @@ export class BillingWebhookProcessor {
           envelope.currentPeriodStart &&
           envelope.currentPeriodEnd
         ) {
-          await this.subscriptionService.confirmRenewal(tx, subscription, {
-            currentPeriodStart: new Date(envelope.currentPeriodStart),
-            currentPeriodEnd: new Date(envelope.currentPeriodEnd),
-            providerEventId: normalized.providerEventId,
-          });
+          if (subscription.status === 'PAST_DUE') {
+            await this.subscriptionService.recoverPayment(tx, subscription, {
+              providerEventId: normalized.providerEventId,
+            });
+          } else {
+            await this.subscriptionService.confirmRenewal(tx, subscription, {
+              currentPeriodStart: new Date(envelope.currentPeriodStart),
+              currentPeriodEnd: new Date(envelope.currentPeriodEnd),
+              providerEventId: normalized.providerEventId,
+            });
+          }
         } else {
           await this.subscriptionService.applyBillingWebhookEvent(
             tx,

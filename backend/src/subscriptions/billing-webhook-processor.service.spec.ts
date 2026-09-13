@@ -98,6 +98,11 @@ describe('BillingWebhookProcessor', () => {
         subscription: SUBSCRIPTION,
         eventType: 'activated',
       }),
+      recoverPayment: jest.fn().mockResolvedValue({
+        applied: true,
+        subscription: SUBSCRIPTION,
+        eventType: 'resumed',
+      }),
     };
     const processor = new BillingWebhookProcessor(
       prisma as never,
@@ -287,6 +292,97 @@ describe('BillingWebhookProcessor', () => {
       await processor.processReceivedBillingWebhooks();
 
       expect(subscriptionService.confirmRenewal).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('docs/saas/DECISIONS.md P7-D5 — recovered-vs-renewed disambiguation', () => {
+    const NEW_START = '2026-02-01T00:00:00.000Z';
+    const NEW_END = '2026-03-01T00:00:00.000Z';
+
+    it('a canonical "renewed" event on a PAST_DUE local subscription calls recoverPayment, never confirmRenewal (Razorpay subscription.charged covers both recovery and renewal)', async () => {
+      const { processor, subscriptionService, txUpdates } = build({
+        payload: {
+          providerEventId: 'evt-recover-1',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: NOW.toISOString(),
+            currentPeriodStart: NEW_START,
+            currentPeriodEnd: NEW_END,
+          },
+        },
+      });
+      subscriptionService.findSubscriptionByProviderSubscriptionId.mockResolvedValue(
+        { ...SUBSCRIPTION, status: 'PAST_DUE' },
+      );
+
+      await processor.processReceivedBillingWebhooks();
+
+      expect(subscriptionService.recoverPayment).toHaveBeenCalledWith(
+        expect.anything(),
+        { ...SUBSCRIPTION, status: 'PAST_DUE' },
+        { providerEventId: 'evt-recover-1' },
+      );
+      expect(subscriptionService.confirmRenewal).not.toHaveBeenCalled();
+      expect(txUpdates[0].status).toBe('PROCESSED');
+    });
+
+    it('a canonical "renewed" event on an ACTIVE local subscription still calls confirmRenewal, never recoverPayment', async () => {
+      const { processor, subscriptionService } = build({
+        payload: {
+          providerEventId: 'evt-renew-active',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: NOW.toISOString(),
+            currentPeriodStart: NEW_START,
+            currentPeriodEnd: NEW_END,
+          },
+        },
+      });
+      // SUBSCRIPTION's own default status is already 'ACTIVE' — asserted
+      // explicitly here so this test fails loudly if that default ever
+      // changes, rather than silently passing for the wrong reason.
+      expect(SUBSCRIPTION.status).toBe('ACTIVE');
+
+      await processor.processReceivedBillingWebhooks();
+
+      expect(subscriptionService.confirmRenewal).toHaveBeenCalledWith(
+        expect.anything(),
+        SUBSCRIPTION,
+        {
+          currentPeriodStart: new Date(NEW_START),
+          currentPeriodEnd: new Date(NEW_END),
+          providerEventId: 'evt-renew-active',
+        },
+      );
+      expect(subscriptionService.recoverPayment).not.toHaveBeenCalled();
+    });
+
+    it('a PAST_DUE recovery never touches the period fields — recoverPayment is called with providerEventId only', async () => {
+      const { processor, subscriptionService } = build({
+        payload: {
+          providerEventId: 'evt-recover-2',
+          type: 'renewed',
+          payload: {
+            providerSubscriptionId: 'fake-sub-1',
+            occurredAt: NOW.toISOString(),
+            currentPeriodStart: NEW_START,
+            currentPeriodEnd: NEW_END,
+          },
+        },
+      });
+      subscriptionService.findSubscriptionByProviderSubscriptionId.mockResolvedValue(
+        { ...SUBSCRIPTION, status: 'PAST_DUE' },
+      );
+
+      await processor.processReceivedBillingWebhooks();
+
+      const call = subscriptionService.recoverPayment.mock
+        .calls[0] as unknown[];
+      expect(call[2]).toEqual({ providerEventId: 'evt-recover-2' });
+      expect(call[2]).not.toHaveProperty('currentPeriodStart');
+      expect(call[2]).not.toHaveProperty('currentPeriodEnd');
     });
   });
 

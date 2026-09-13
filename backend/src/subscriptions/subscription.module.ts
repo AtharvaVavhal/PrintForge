@@ -7,7 +7,7 @@ import { BillingWebhookIngestionService } from './billing-webhook-ingestion.serv
 import { BillingWebhookProcessor } from './billing-webhook-processor.service';
 import { BillingWebhooksController } from './billing-webhooks.controller';
 import { BILLING_PROVIDER } from './billing-provider.token';
-import { FakeBillingProvider } from './fake-billing-provider';
+import { RazorpayBillingProvider } from './razorpay-billing-provider';
 
 /**
  * Phase 7 Stage 1 (docs/saas/DECISIONS.md P7-D1) — the subscription
@@ -23,13 +23,20 @@ import { FakeBillingProvider } from './fake-billing-provider';
  *
  *   - **The `BILLING_PROVIDER` DI binding — THE single, obvious
  *     replacement point (P7-D2 Part G).** `useClass: FakeBillingProvider`
- *     is the ONLY line in the entire codebase that names a concrete
- *     `BillingProvider` implementation. This is NOT a production
- *     billing-provider selection — the production provider remains
- *     UNDECIDED (P7-D1 Part G, still OPEN). Once one is chosen and a real
- *     adapter is built (a separate, later, explicitly-authorized change),
- *     replacing this fake means changing exactly this one `useClass`
- *     value — nothing that injects `BILLING_PROVIDER` needs to change.
+ *     was the ONLY line in the entire codebase that named a concrete
+ *     `BillingProvider` implementation, until docs/saas/DECISIONS.md
+ *     P7-D4 ratified Razorpay Subscriptions as the production SaaS
+ *     billing provider and P7-D5 ratified its cancellation/webhook
+ *     adapter behavior — `RazorpayBillingProvider` is that real adapter.
+ *     Exactly as this comment always anticipated: nothing that injects
+ *     `BILLING_PROVIDER` (`SubscriptionOrchestrationService`,
+ *     `BillingWebhookIngestionService`, `BillingWebhookProcessor`) needed
+ *     to change at all — only this one `useClass` value did. Every
+ *     existing e2e suite continues running against `FakeBillingProvider`
+ *     regardless, via `test/e2e/support/test-app.ts`'s own
+ *     `.overrideProvider(BILLING_PROVIDER)` (the same mechanism already
+ *     established there for `CloudinaryService`) — see that file's own
+ *     comment for why.
  *
  *   - `IdempotencyModule` import — `SubscriptionOrchestrationService`'s
  *     HTTP-level idempotency-key handling reuses the exact same
@@ -83,7 +90,7 @@ import { FakeBillingProvider } from './fake-billing-provider';
     SubscriptionSchedulerService,
     BillingWebhookIngestionService,
     BillingWebhookProcessor,
-    { provide: BILLING_PROVIDER, useClass: FakeBillingProvider },
+    { provide: BILLING_PROVIDER, useClass: RazorpayBillingProvider },
   ],
   exports: [SubscriptionService, SubscriptionOrchestrationService],
 })

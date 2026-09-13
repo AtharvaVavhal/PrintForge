@@ -124,7 +124,7 @@ describe('Phase 7 — D7 SaaS Billing Webhooks (real Postgres, real FakeBillingP
       .post(apiPath('/webhooks/billing'))
       .set('Content-Type', 'application/json');
     if (signature) {
-      req.set('x-billing-signature', signature);
+      req.set('x-razorpay-signature', signature);
     }
     return req.send(body);
   }
