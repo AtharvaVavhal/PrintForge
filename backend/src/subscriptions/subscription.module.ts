@@ -3,6 +3,9 @@ import { IdempotencyModule } from '../checkout/idempotency/idempotency.module';
 import { SubscriptionService } from './subscription.service';
 import { SubscriptionOrchestrationService } from './subscription-orchestration.service';
 import { SubscriptionSchedulerService } from './subscription-scheduler.service';
+import { BillingWebhookIngestionService } from './billing-webhook-ingestion.service';
+import { BillingWebhookProcessor } from './billing-webhook-processor.service';
+import { BillingWebhooksController } from './billing-webhooks.controller';
 import { BILLING_PROVIDER } from './billing-provider.token';
 import { FakeBillingProvider } from './fake-billing-provider';
 
@@ -39,20 +42,47 @@ import { FakeBillingProvider } from './fake-billing-provider';
  * needed to, per this file's own prior comment, still accurate for
  * `SubscriptionService` considered alone).
  *
- * Phase 7 Scheduler Implementation Wave — `SubscriptionSchedulerService`
- * added as a provider only (not exported — nothing calls it directly,
- * `@nestjs/schedule`'s `ScheduleModule.forRoot()`, already registered in
- * `app.module.ts`, discovers its `@Cron` methods automatically once it is
- * instantiated as part of this module's provider graph). See that
- * class's own header comment for exactly which two jobs it owns and why
- * a third (cancellation expiration) is deliberately absent.
+ * Phase 7 Scheduler Implementation Wave / Cancellation Retention wave —
+ * `SubscriptionSchedulerService` added as a provider only (not exported —
+ * nothing calls it directly, `@nestjs/schedule`'s `ScheduleModule.forRoot()`,
+ * already registered in `app.module.ts`, discovers its `@Cron` methods
+ * automatically once it is instantiated as part of this module's provider
+ * graph). See that class's own header comment for exactly which THREE jobs
+ * it owns (grace exhaustion, period reconciliation, cancellation
+ * expiration).
+ *
+ * Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3)
+ * additions:
+ *
+ *   - `BillingWebhooksController` (`POST /webhooks/billing`, `@Public()`)
+ *     — this is the FIRST controller `SubscriptionModule` itself owns
+ *     (Stage 2's admin routes live on `AdminController`, in `AdminModule`,
+ *     which imports this module — a billing webhook is provider-initiated,
+ *     not tenant-console-initiated, so it does not belong there).
+ *     Registering it here, rather than a new dedicated module, is
+ *     deliberate ("avoid unnecessary new modules" — the webhook wave's own
+ *     authorization): a Nest controller registered inside ANY module that
+ *     is part of the running `AppModule` graph is reachable regardless of
+ *     which parent imports that module, and this module is already
+ *     reachable via `AdminModule` -> `AppModule` — no new import into
+ *     `app.module.ts` is needed for this route to exist.
+ *
+ *   - `BillingWebhookIngestionService` (Phase 1 — verify/parse/persist,
+ *     called by the controller above) and `BillingWebhookProcessor`
+ *     (Phase 2 — the `@Cron` poller, discovered the same way
+ *     `SubscriptionSchedulerService`'s jobs already are) — both provided
+ *     but not exported; nothing outside this module calls either
+ *     directly.
  */
 @Module({
   imports: [IdempotencyModule],
+  controllers: [BillingWebhooksController],
   providers: [
     SubscriptionService,
     SubscriptionOrchestrationService,
     SubscriptionSchedulerService,
+    BillingWebhookIngestionService,
+    BillingWebhookProcessor,
     { provide: BILLING_PROVIDER, useClass: FakeBillingProvider },
   ],
   exports: [SubscriptionService, SubscriptionOrchestrationService],

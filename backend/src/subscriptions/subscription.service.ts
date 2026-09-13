@@ -9,6 +9,7 @@ import {
   assertSubscriptionTransitionAllowed,
   isSubscriptionTransitionAllowed,
 } from './state-machine/subscription-state-machine';
+import { NormalizedBillingEvent } from './billing-provider.interface';
 import {
   ApplyScheduledDowngradeInput,
   CancelInput,
@@ -31,6 +32,14 @@ type Client = PrismaService | Prisma.TransactionClient;
  * below — never hardcoded a second time anywhere else in this file. */
 const CANCELLATION_RETENTION_DAYS = 30;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3
+ * Part C — "Grace period = 7 days"). Consumed only by
+ * `applyBillingWebhookEvent`'s `payment_failed` branch below — the sole
+ * place a webhook-confirmed payment failure is turned into a `graceEndsAt`
+ * value. (`findGraceExhaustedSubscriptions` above already reads whatever
+ * `graceEndsAt` was written here — no scheduler change needed for this.) */
+const GRACE_PERIOD_DAYS = 7;
 
 /**
  * Phase 7 Stage 1 (docs/saas/DECISIONS.md P7-D1) — the subscription
@@ -190,6 +199,41 @@ export class SubscriptionService {
       where: { status: 'CANCELLED', retentionEndsAt: { lte: now } },
       orderBy: { retentionEndsAt: 'asc' },
       take: limit,
+    });
+  }
+
+  /**
+   * Phase 7 — D7 SaaS Billing Webhooks wave. Provider-initiated lookup —
+   * used ONLY by `BillingWebhookProcessor` to resolve which local
+   * subscription an inbound webhook event refers to, tried first (P7-D3
+   * Part B: "resolve subscription/tenant using
+   * providerSubscriptionId/providerCustomerId"). `providerSubscriptionId`
+   * is `@unique`, so this returns at most one row; never trusts a
+   * caller-supplied `tenantId` — the tenant is whatever tenant this
+   * uniquely-identified subscription actually belongs to, nothing a
+   * webhook payload could ever assert directly.
+   */
+  async findSubscriptionByProviderSubscriptionId(
+    client: Client,
+    providerSubscriptionId: string,
+  ): Promise<Subscription | null> {
+    return client.subscription.findUnique({
+      where: { providerSubscriptionId },
+    });
+  }
+
+  /**
+   * Phase 7 — D7 SaaS Billing Webhooks wave. Same role as
+   * `findSubscriptionByProviderSubscriptionId` above, tried as the
+   * fallback when an event carries only a `providerCustomerId` (P7-D3
+   * Part B). `providerCustomerId` is likewise `@unique` on `Subscription`.
+   */
+  async findSubscriptionByProviderCustomerId(
+    client: Client,
+    providerCustomerId: string,
+  ): Promise<Subscription | null> {
+    return client.subscription.findUnique({
+      where: { providerCustomerId },
     });
   }
 
@@ -869,6 +913,77 @@ export class SubscriptionService {
       where: { id: subscription.id },
     });
     return { applied: true, subscription: updated, eventType: 'expired' };
+  }
+
+  // ─── Provider webhook entry point (Phase 7 — D7 SaaS Billing Webhooks) ──
+
+  /**
+   * The SOLE entry point `BillingWebhookProcessor` may call
+   * (docs/saas/DECISIONS.md P7-D3) — routes an already-normalized,
+   * already tenant-resolved, already staleness-checked provider event
+   * into one of this file's own EXISTING transition methods. Deliberately
+   * NOT a second state machine: every branch below calls a method that
+   * already exists for a non-webhook caller — `subscription-state-
+   * machine.ts` remains the one and only transition table.
+   *
+   * Recognizes exactly the confirmation-only event types that need no
+   * vendor-specific payload interpretation to apply
+   * (`payment_failed` / `recovered` / `cancelled`). An `activated`-style
+   * confirmation would additionally need a confirmed billing period
+   * (`currentPeriodStart`/`currentPeriodEnd`), which can only be read out
+   * of a real vendor's own payload shape — the production billing
+   * provider remains OPEN (P7-D1 Part G), so reading period dates out of
+   * `event.payload` here would mean inventing a vendor payload schema,
+   * explicitly out of scope for this wave. That mapping is deliberately
+   * deferred to whenever a real `BillingProvider` adapter is chosen and
+   * built — it is not a gap in this method's own logic, and is called out
+   * as remaining provider-dependent work.
+   *
+   * `event.type` is NOT a real vendor's own event-name vocabulary
+   * (`invoice.paid`, `subscription.charged`, etc.) — it is whatever a real
+   * `BillingProvider.parseWebhook()` implementation normalizes a vendor
+   * event into, exactly as `NormalizedBillingEvent`'s own interface doc
+   * comment already anticipates ("the caller ... is responsible for
+   * interpreting this against whichever provider produced it").
+   * `FakeBillingProvider.buildWebhookEventBody()` emits these same
+   * canonical type strings directly, since it has no real vendor
+   * vocabulary to translate from.
+   *
+   * Any outcome here (applied, or a safe no-op because the target state
+   * already holds, or an unrecognized `event.type`) is a NON-throwing
+   * return — `BillingWebhookProcessor` marks the row `PROCESSED` in every
+   * one of those cases; only a thrown error (e.g. an illegal transition)
+   * signals a retry/dead-letter decision to the caller.
+   */
+  async applyBillingWebhookEvent(
+    client: Client,
+    subscription: Subscription,
+    event: NormalizedBillingEvent,
+  ): Promise<TransitionResult<Subscription>> {
+    switch (event.type) {
+      case 'payment_failed': {
+        const graceEndsAt = new Date(
+          Date.now() + GRACE_PERIOD_DAYS * MS_PER_DAY,
+        );
+        return this.recordPaymentFailure(client, subscription, {
+          graceEndsAt,
+          providerEventId: event.providerEventId,
+        });
+      }
+      case 'recovered':
+        return this.recoverPayment(client, subscription, {
+          providerEventId: event.providerEventId,
+        });
+      case 'cancelled':
+        return this.cancel(client, subscription, {
+          providerEventId: event.providerEventId,
+        });
+      default:
+        // Unrecognized/not-yet-supported event type — a safe no-op, never
+        // an error. Expected and correct during this vendor-undecided
+        // phase (P7-D1 Part G, still OPEN), not a processing failure.
+        return { applied: false, subscription, eventType: null };
+    }
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────

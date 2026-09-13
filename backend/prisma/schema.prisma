@@ -90,6 +90,20 @@ enum WebhookEventStatus {
   FAILED
 }
 
+// Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3
+// Part B). Same status vocabulary as `WebhookEventStatus` above, by
+// deliberate precedent — but its OWN enum, never a reuse of that one, so a
+// future commerce-only change to `WebhookEventStatus` can never silently
+// affect the separate SaaS-billing table this backs (`BillingWebhookEvent`,
+// below — see that model's own comment for the full separation rationale).
+enum BillingWebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  PROCESSING_FAILED
+  IGNORED
+  FAILED
+}
+
 // §12.2 — transactional outbox.
 enum OutboxEventType {
   ORDER_PAID
@@ -1417,8 +1431,9 @@ model Subscription {
 // audit trail is a snapshot, not a live reference.
 //
 // `providerEventId` is explicitly NOT unique (P7-D1 Part F) — provider-
-// event deduplication belongs to the future `BillingWebhookEvent` boundary
-// (D7, still OPEN), never to this table. This model is domain history
+// event deduplication belongs to the separate `BillingWebhookEvent` table
+// below (D7 — implemented in the D7 SaaS Billing Webhooks wave; see that
+// model's own comment), never to this table. This model is domain history
 // only: no update/delete method is ever exposed for it (append-only by
 // construction, same discipline as `PlatformAuditLog`/`TenantAuditLog`),
 // and no code anywhere may use it as an idempotency/dedup store.
@@ -1442,6 +1457,58 @@ model SubscriptionEvent {
   @@index([tenantId])
   @@index([providerEventId])
   @@map("subscription_events")
+}
+
+// Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3
+// Part B — the two-table design ratified there). A brand-new table, exactly
+// like `SubscriptionEvent` above: no G-19 restriction applies to anything
+// in it.
+//
+// Deliberately SEPARATE from the commerce `WebhookEvent`/`webhook_events`
+// table (frozen SaaS invariant 6: SaaS subscription billing and merchant
+// commerce payments are separate) — never merged, never shares a secret or
+// a route. Mirrors `WebhookEvent`'s own shape closely (same RECEIVED /
+// PROCESSED / PROCESSING_FAILED / IGNORED / FAILED status vocabulary, same
+// attempts/availableAt/lastError/processedAt retry bookkeeping) but is its
+// OWN enum/table — reusing `WebhookEventStatus`'s name here would silently
+// couple a future commerce-only enum change to this SaaS-only table.
+//
+// Platform-scoped by design (P7-D3 Part B: "never trust tenantId from
+// webhook payload"): deliberately NO `tenantId` column. Tenant is resolved
+// downstream, at PROCESSING time, via `Subscription.providerSubscriptionId`/
+// `providerCustomerId` (both already `@unique`) — never stored as an
+// unverified guess on the raw ingested row.
+//
+// Deliberately NO foreign key to `Subscription`: an event may legitimately
+// arrive before, or reference, a subscription this system does not (or no
+// longer) recognize (a provider retry, a race, a misconfigured endpoint) —
+// exactly the case the two-phase ingestion/processing split exists to
+// tolerate; a hard FK would force ingestion to fail-fast on the one case
+// this design is built to absorb gracefully (the processor marks such a
+// row IGNORED, never crashes).
+//
+// `providerEventId` IS unique here (unlike `SubscriptionEvent.providerEventId`
+// above) — this table, not `SubscriptionEvent`, is the sole dedup boundary
+// (P7-D3 Part B: "providerEventId is unique for BillingWebhookEvent
+// deduplication"). `payload` retains the full normalized event
+// (`{providerEventId, type, payload}` — see `BillingProvider.parseWebhook`)
+// verbatim, for replay.
+model BillingWebhookEvent {
+  id              String                    @id @default(uuid())
+  providerEventId String                    @unique
+  payload         Json
+  status          BillingWebhookEventStatus @default(RECEIVED)
+
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  lastError   String?
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, availableAt])
+  @@map("billing_webhook_events")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

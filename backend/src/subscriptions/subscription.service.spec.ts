@@ -915,4 +915,208 @@ describe('SubscriptionService', () => {
       expect(eventCreate).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('findSubscriptionByProviderSubscriptionId / findSubscriptionByProviderCustomerId (D7 SaaS Billing Webhooks wave)', () => {
+    it('looks up by the unique providerSubscriptionId column, never by tenantId', async () => {
+      const { client } = makeClient();
+      client.subscription.findUnique.mockResolvedValue(makeSubscription());
+      const service = new SubscriptionService(client as never);
+
+      const result = await service.findSubscriptionByProviderSubscriptionId(
+        client as never,
+        'fake-sub-1',
+      );
+
+      expect(result?.id).toBe(SUB_ID);
+      expect(client.subscription.findUnique).toHaveBeenCalledWith({
+        where: { providerSubscriptionId: 'fake-sub-1' },
+      });
+    });
+
+    it('looks up by the unique providerCustomerId column', async () => {
+      const { client } = makeClient();
+      client.subscription.findUnique.mockResolvedValue(makeSubscription());
+      const service = new SubscriptionService(client as never);
+
+      await service.findSubscriptionByProviderCustomerId(
+        client as never,
+        'fake-cust-1',
+      );
+
+      expect(client.subscription.findUnique).toHaveBeenCalledWith({
+        where: { providerCustomerId: 'fake-cust-1' },
+      });
+    });
+
+    it('both return null rather than throwing when nothing matches', async () => {
+      const { client } = makeClient();
+      client.subscription.findUnique.mockResolvedValue(null);
+      const service = new SubscriptionService(client as never);
+
+      await expect(
+        service.findSubscriptionByProviderSubscriptionId(
+          client as never,
+          'does-not-exist',
+        ),
+      ).resolves.toBeNull();
+      await expect(
+        service.findSubscriptionByProviderCustomerId(
+          client as never,
+          'does-not-exist',
+        ),
+      ).resolves.toBeNull();
+    });
+  });
+
+  describe('applyBillingWebhookEvent (D7 SaaS Billing Webhooks wave, docs/saas/DECISIONS.md P7-D3)', () => {
+    it("routes a 'payment_failed' event into recordPaymentFailure with a 7-day graceEndsAt (P7-D3 Part C)", async () => {
+      const { client, updateMany, eventCreate } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({ status: 'ACTIVE' });
+      const before = Date.now();
+
+      const result = await service.applyBillingWebhookEvent(
+        client as never,
+        subscription,
+        { providerEventId: 'evt-1', type: 'payment_failed', payload: {} },
+      );
+
+      expect(result.applied).toBe(true);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: SUB_ID, status: 'ACTIVE' },
+        data: expect.objectContaining({
+          status: 'PAST_DUE',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          graceEndsAt: expect.any(Date),
+        }) as unknown,
+      });
+
+      const dataArg =
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        (updateMany.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      const graceEndsAt = dataArg.graceEndsAt as Date;
+      const deltaDays =
+        (graceEndsAt.getTime() - before) / (24 * 60 * 60 * 1000);
+      expect(deltaDays).toBeGreaterThan(6.9);
+      expect(deltaDays).toBeLessThan(7.1);
+      expect(eventCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          data: expect.objectContaining({
+            type: 'payment_failed',
+            providerEventId: 'evt-1',
+          }),
+        }),
+      );
+    });
+
+    it("routes a 'recovered' event into recoverPayment", async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({
+        status: 'PAST_DUE',
+        graceEndsAt: new Date(),
+      });
+
+      const result = await service.applyBillingWebhookEvent(
+        client as never,
+        subscription,
+        { providerEventId: 'evt-2', type: 'recovered', payload: {} },
+      );
+
+      expect(result.applied).toBe(true);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: SUB_ID, status: 'PAST_DUE' },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({ status: 'ACTIVE' }),
+      });
+    });
+
+    it("routes a 'cancelled' event into cancel, which also establishes retentionEndsAt", async () => {
+      const { client, updateMany } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({ status: 'ACTIVE' });
+
+      const result = await service.applyBillingWebhookEvent(
+        client as never,
+        subscription,
+        { providerEventId: 'evt-3', type: 'cancelled', payload: {} },
+      );
+
+      expect(result.applied).toBe(true);
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { id: SUB_ID, status: 'ACTIVE' },
+        data: expect.objectContaining({
+          status: 'CANCELLED',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          retentionEndsAt: expect.any(Date),
+        }) as unknown,
+      });
+    });
+
+    it('an unrecognized event type is a safe no-op — never a new SubscriptionEventType, never an error', async () => {
+      const { client, updateMany, eventCreate } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({ status: 'ACTIVE' });
+
+      const result = await service.applyBillingWebhookEvent(
+        client as never,
+        subscription,
+        {
+          providerEventId: 'evt-4',
+          type: 'some.unmapped.vendor.event',
+          payload: {},
+        },
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.eventType).toBeNull();
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(eventCreate).not.toHaveBeenCalled();
+    });
+
+    it('an idempotent replay (already at target state) is a safe no-op, same as any other transition method', async () => {
+      const { client, updateMany, eventCreate } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({ status: 'CANCELLED' });
+
+      const result = await service.applyBillingWebhookEvent(
+        client as never,
+        subscription,
+        { providerEventId: 'evt-5', type: 'cancelled', payload: {} },
+      );
+
+      expect(result.applied).toBe(false);
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(eventCreate).not.toHaveBeenCalled();
+    });
+
+    it('a lost CAS race (someone else transitioned first) is a safe no-op, not an error', async () => {
+      const { client } = makeClient({ updateManyCount: 0 });
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({ status: 'ACTIVE' });
+
+      const result = await service.applyBillingWebhookEvent(
+        client as never,
+        subscription,
+        { providerEventId: 'evt-6', type: 'cancelled', payload: {} },
+      );
+
+      expect(result.applied).toBe(false);
+    });
+
+    it('an illegal transition (e.g. cancelled on an already-EXPIRED subscription) throws ConflictException, unhandled by this method', async () => {
+      const { client } = makeClient();
+      const service = new SubscriptionService(client as never);
+      const subscription = makeSubscription({ status: 'EXPIRED' });
+
+      await expect(
+        service.applyBillingWebhookEvent(client as never, subscription, {
+          providerEventId: 'evt-7',
+          type: 'cancelled',
+          payload: {},
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
 });

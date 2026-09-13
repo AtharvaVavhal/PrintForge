@@ -233,6 +233,48 @@ export class FakeBillingProvider implements BillingProvider {
     return event;
   }
 
+  /**
+   * Phase 7 — D7 SaaS Billing Webhooks wave. Deterministic, vendor-neutral
+   * raw webhook body builder — NOT a Razorpay/Stripe/etc. payload shape.
+   * Produces exactly the bytes `verifyWebhook`/`parseWebhook` above expect
+   * (a JSON `{providerEventId, type, payload}` envelope): a real
+   * `BillingProvider` adapter's own `parseWebhook()` would need to
+   * normalize a real vendor's payload INTO this same shape (see
+   * `billing-webhook-processor.service.ts`'s own header comment for the
+   * minimal `payload` envelope — `providerSubscriptionId` /
+   * `providerCustomerId` / `occurredAt` — that processor expects); this
+   * fake, having no real vendor to translate from, emits that
+   * already-normalized shape directly.
+   *
+   * `type` uses this codebase's own canonical, vendor-neutral event-type
+   * vocabulary (`'payment_failed' | 'recovered' | 'cancelled'`, matching
+   * `SubscriptionService.applyBillingWebhookEvent`'s own recognized
+   * cases) — never a real vendor's event name. `providerEventId` defaults
+   * to a fresh, deterministically-prefixed id (same `fake-*-` convention
+   * as `providerCustomerId`/`providerSubscriptionId` above) but can be
+   * supplied explicitly so a test can re-emit the identical id for a
+   * duplicate-delivery case, and `occurredAt` defaults to "now" but can be
+   * supplied explicitly (e.g. in the past) for a stale/out-of-order case.
+   */
+  buildWebhookEventBody(opts: {
+    type: string;
+    providerSubscriptionId?: string;
+    providerCustomerId?: string;
+    providerEventId?: string;
+    occurredAt?: Date;
+  }): Buffer {
+    const event: NormalizedBillingEvent = {
+      providerEventId: opts.providerEventId ?? `fake-evt-${randomUUID()}`,
+      type: opts.type,
+      payload: {
+        providerSubscriptionId: opts.providerSubscriptionId,
+        providerCustomerId: opts.providerCustomerId,
+        occurredAt: (opts.occurredAt ?? new Date()).toISOString(),
+      },
+    };
+    return Buffer.from(JSON.stringify(event), 'utf8');
+  }
+
   private getOrThrow(providerSubscriptionId: string): FakeSubscriptionRecord {
     const record = this.subscriptions.get(providerSubscriptionId);
     if (!record) {

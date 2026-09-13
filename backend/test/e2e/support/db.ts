@@ -41,6 +41,13 @@ const ALL_TABLES = [
   // SaaS Foundation (Phase 1) — additive. No existing e2e test writes to
   // these yet; listed so the truncate stays complete as later phases do.
   'subscriptions',
+  // Phase 7 — D7 SaaS Billing Webhooks wave. Deliberately has NO foreign
+  // key to `subscriptions` or any other table (see schema.prisma's own
+  // comment on `BillingWebhookEvent`), so — unlike `subscription_events`,
+  // which TRUNCATE...CASCADE already empties via its FK to `subscriptions`
+  // even though it isn't listed here — this table MUST be listed
+  // explicitly, or rows accumulate across tests within the same file.
+  'billing_webhook_events',
   'store_domains',
   'stores',
   'tenant_memberships',
@@ -181,7 +188,9 @@ const ENUM_COLUMNS: Record<string, string> = {
 };
 
 function isPlainObjectValue(value: unknown): boolean {
-  return value !== null && typeof value === 'object' && !(value instanceof Date);
+  return (
+    value !== null && typeof value === 'object' && !(value instanceof Date)
+  );
 }
 
 /**
@@ -232,9 +241,7 @@ export async function rawInsert(
   // Not every table has both columns (e.g. `coupon_usages` has no
   // `updatedAt` at all) — check what actually exists rather than
   // hand-maintaining a per-table list that could silently drift.
-  const existingCols = await prisma.$queryRawUnsafe<
-    { column_name: string }[]
-  >(
+  const existingCols = await prisma.$queryRawUnsafe<{ column_name: string }[]>(
     `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
     table,
   );

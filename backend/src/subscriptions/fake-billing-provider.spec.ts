@@ -197,6 +197,55 @@ describe('FakeBillingProvider (Phase 7 Stage 1 test double)', () => {
     expect(parsed).toEqual(event);
   });
 
+  it('buildWebhookEventBody (D7 SaaS Billing Webhooks wave) produces bytes verifyWebhook/parseWebhook round-trip correctly', async () => {
+    const provider = new FakeBillingProvider();
+    const customer = await provider.createCustomer('tenant-a');
+    const sub = await provider.createSubscription(
+      customer.providerCustomerId,
+      'plan-ref-1',
+    );
+
+    const body = provider.buildWebhookEventBody({
+      type: 'payment_failed',
+      providerSubscriptionId: sub.providerSubscriptionId,
+    });
+
+    expect(provider.verifyWebhook(body, 'any-signature')).toBe(true);
+    const parsed = provider.parseWebhook(body);
+    expect(parsed.type).toBe('payment_failed');
+    expect(parsed.providerEventId).toMatch(/^fake-evt-/);
+    expect(parsed.payload).toMatchObject({
+      providerSubscriptionId: sub.providerSubscriptionId,
+    });
+  });
+
+  it('buildWebhookEventBody accepts an explicit providerEventId (duplicate-delivery tests) and occurredAt (stale/out-of-order tests)', () => {
+    const provider = new FakeBillingProvider();
+    const past = new Date('2020-01-01T00:00:00Z');
+
+    const first = provider.buildWebhookEventBody({
+      type: 'cancelled',
+      providerCustomerId: 'fake-cust-1',
+      providerEventId: 'evt-fixed-1',
+      occurredAt: past,
+    });
+    const duplicate = provider.buildWebhookEventBody({
+      type: 'cancelled',
+      providerCustomerId: 'fake-cust-1',
+      providerEventId: 'evt-fixed-1',
+      occurredAt: past,
+    });
+
+    const parsedFirst = provider.parseWebhook(first);
+    const parsedDuplicate = provider.parseWebhook(duplicate);
+    expect(parsedFirst.providerEventId).toBe('evt-fixed-1');
+    expect(parsedDuplicate.providerEventId).toBe('evt-fixed-1');
+    expect(parsedFirst.payload).toMatchObject({
+      providerCustomerId: 'fake-cust-1',
+      occurredAt: past.toISOString(),
+    });
+  });
+
   it("state is per-instance — a fresh FakeBillingProvider never sees another instance's fake subscriptions", async () => {
     const providerA = new FakeBillingProvider();
     const providerB = new FakeBillingProvider();
