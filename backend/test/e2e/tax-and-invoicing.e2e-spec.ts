@@ -20,7 +20,8 @@ import {
 } from './support/razorpay-signing';
 import { PrismaService } from '../../src/common/database/prisma.service';
 import { WebhookProcessor } from '../../src/payments/webhooks/webhook-processor.service';
-import { RazorpayService } from '../../src/payments/razorpay/razorpay.service';
+import { RazorpayProviderAdapter } from '../../src/payments/razorpay/razorpay-provider-adapter';
+import { CredentialEncryptionService } from '../../src/payments/crypto/credential-encryption.service';
 import { EmailService } from '../../src/notifications/email/email.service';
 
 /**
@@ -76,6 +77,45 @@ async function checkout(
   };
 }
 
+/**
+ * Phase 8 (P8-9) — `POST /checkout/orders/:id/retry-payment` now resolves
+ * an ACTIVE `PaymentAccount` bound to the order's store and initiates
+ * through `RazorpayProviderAdapter`, never the legacy global
+ * `RazorpayService` — no fallback (an explicit, ratified P8-9 behavior
+ * change). The two `retry-payment` tests below need one bound for the
+ * baseline tenant before calling it; credentials are fake/local-only, same
+ * convention `payments-race.e2e-spec.ts` and `phase8-merchant-payments
+ * .e2e-spec.ts` already establish.
+ */
+async function bindPaymentAccountForTenant(
+  prisma: PrismaService,
+  credentialEncryption: CredentialEncryptionService,
+  tenantId: string,
+): Promise<void> {
+  const store = await prisma.store.findFirstOrThrow({
+    where: { tenantId, isPrimary: true },
+  });
+  const encrypted = credentialEncryption.encrypt(
+    JSON.stringify({
+      keyId: `rzp_test_tax_fixture_${randomUUID()}`,
+      keySecret: `fake_secret_${randomUUID()}`,
+      webhookSecret: `fake_webhook_secret_${randomUUID()}`,
+    }),
+  );
+  await prisma.paymentAccount.create({
+    data: {
+      tenantId,
+      storeId: store.id,
+      provider: 'RAZORPAY',
+      status: 'ACTIVE',
+      mode: 'TEST',
+      credentialsEncrypted: new Uint8Array(encrypted),
+      credentialsUpdatedAt: new Date(),
+      connectedAt: new Date(),
+    },
+  });
+}
+
 async function payOrder(
   app: INestApplication,
   prisma: PrismaService,
@@ -123,7 +163,8 @@ describe('Tax & invoicing (Phase 13.4)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let processor: WebhookProcessor;
-  let razorpay: RazorpayService;
+  let providerAdapter: RazorpayProviderAdapter;
+  let credentialEncryption: CredentialEncryptionService;
   let emailSpy: jest.SpyInstance;
   // The baseline tenant `resetDatabase` seeds for every test (Phase 5 W9 —
   // paired with a primary Store, required now that shippingFeeFlat is
@@ -137,7 +178,8 @@ describe('Tax & invoicing (Phase 13.4)', () => {
   beforeAll(async () => {
     ({ app, prisma } = await createTestApp());
     processor = app.get(WebhookProcessor);
-    razorpay = app.get(RazorpayService);
+    providerAdapter = app.get(RazorpayProviderAdapter);
+    credentialEncryption = app.get(CredentialEncryptionService);
   });
 
   afterAll(async () => {
@@ -232,10 +274,11 @@ describe('Tax & invoicing (Phase 13.4)', () => {
     await setTenantSetting(prisma, tenantId, 'tax.enabled', 'true');
     await setTenantSetting(prisma, tenantId, 'tax.pricingMode', 'EXCLUSIVE');
     await setTenantSetting(prisma, tenantId, 'tax.ratePercent', '18.00');
+    await bindPaymentAccountForTenant(prisma, credentialEncryption, tenantId);
 
     const createSpy = jest
-      .spyOn(razorpay, 'createOrder')
-      .mockResolvedValue({ id: `order_test_${randomUUID()}` });
+      .spyOn(providerAdapter, 'createOrder')
+      .mockResolvedValue({ providerOrderId: `order_test_${randomUUID()}` });
 
     const user = await registerUser(app, 'tax');
     const { orderId } = await checkout(app, prisma, user, '100.00', tenantId);
@@ -252,6 +295,7 @@ describe('Tax & invoicing (Phase 13.4)', () => {
       order.total.times(100).toDecimalPlaces(0).toFixed(0),
     );
     expect(createSpy).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ amountPaise: expectedPaise }),
     );
     const attempt = await prisma.paymentAttempt.findFirstOrThrow({
@@ -511,10 +555,11 @@ describe('Tax & invoicing (Phase 13.4)', () => {
     await setTenantSetting(prisma, tenantId, 'tax.enabled', 'true');
     await setTenantSetting(prisma, tenantId, 'tax.pricingMode', 'INCLUSIVE');
     await setTenantSetting(prisma, tenantId, 'tax.ratePercent', '18.00');
+    await bindPaymentAccountForTenant(prisma, credentialEncryption, tenantId);
 
     const createSpy = jest
-      .spyOn(razorpay, 'createOrder')
-      .mockResolvedValue({ id: `order_test_${randomUUID()}` });
+      .spyOn(providerAdapter, 'createOrder')
+      .mockResolvedValue({ providerOrderId: `order_test_${randomUUID()}` });
 
     const user = await registerUser(app, 'tax');
     const { orderId, body } = await checkout(
@@ -542,6 +587,7 @@ describe('Tax & invoicing (Phase 13.4)', () => {
     );
     expect(order.total.toFixed(2)).toBe('150.00');
     expect(createSpy).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ amountPaise: expectedPaise }),
     );
 

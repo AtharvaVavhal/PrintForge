@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
 } from '@nestjs/common';
@@ -52,6 +53,37 @@ export class PaymentsController {
       throw new BadRequestException('Missing webhook body or signature');
     }
     await this.paymentsService.receiveWebhook(
+      req.rawBody.toString('utf8'),
+      signature,
+      eventId,
+    );
+    return { received: true };
+  }
+
+  /**
+   * Phase 8 (P8-10) — merchant commerce webhook, one path per
+   * `PaymentAccount` (P8-3 §9: "webhook routing is per-account, by path").
+   * A separate route from `POST /payments/webhook` above (untouched, task
+   * strict rule) — that one stays for any order that predates per-account
+   * routing. Dashboard-configured per merchant at
+   * `{BACKEND_URL}/api/v1/payments/webhook/{accountId}`, once that
+   * account's own webhook secret is set via `POST /admin/payment-accounts/
+   * :id/connect` (P8-5).
+   */
+  @Public()
+  @Post('webhook/:accountId')
+  @HttpCode(HttpStatus.OK)
+  async merchantWebhook(
+    @Param('accountId') accountId: string,
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-razorpay-signature') signature: string | undefined,
+    @Headers('x-razorpay-event-id') eventId: string | undefined,
+  ): Promise<{ received: true }> {
+    if (!req.rawBody || !signature) {
+      throw new BadRequestException('Missing webhook body or signature');
+    }
+    await this.paymentsService.receiveMerchantWebhook(
+      accountId,
       req.rawBody.toString('utf8'),
       signature,
       eventId,

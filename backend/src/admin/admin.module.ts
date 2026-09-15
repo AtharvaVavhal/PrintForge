@@ -9,6 +9,7 @@ import { InvoicesModule } from '../invoices/invoices.module';
 import { EntitlementModule } from '../entitlements/entitlement.module';
 import { UsageModule } from '../usage/usage.module';
 import { SubscriptionModule } from '../subscriptions/subscription.module';
+import { RefundsModule } from '../payments/refunds/refunds.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -41,6 +42,12 @@ import { AdminService } from './admin.service';
  * logic itself. This is also the first module import that brings
  * `SubscriptionModule` into the running `app.module.ts` graph at all
  * (Stage 1 never needed to — see that module's own comment).
+ *
+ * Phase 8 (P8-11) - `RefundsModule` imported for `POST /admin/payment-
+ * attempts/:id/refund`, delegating to `RefundsService` the same way
+ * every other mutation route already delegates to its own domain
+ * service - reuses the existing `orders:transition` permission (no new
+ * permission), no new authorization mechanism.
  */
 @Module({
   imports: [
@@ -54,6 +61,7 @@ import { AdminService } from './admin.service';
     EntitlementModule,
     UsageModule,
     SubscriptionModule,
+    RefundsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

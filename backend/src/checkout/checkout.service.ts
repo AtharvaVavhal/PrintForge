@@ -350,6 +350,16 @@ export class CheckoutService {
           // Derived from the cart being checked out — never a
           // client-supplied value (Phase 4 W7 / P4-D2).
           tenantId: cart.tenantId,
+          // Phase 8 (P8-3 architecture spec §6.1) — the same server-resolved
+          // `storeId` already computed above (line ~225, via
+          // `resolvePrimaryStoreId`) for the shipping-fee lookup, now also
+          // persisted onto the Order itself. Confirmed gap the Phase 8
+          // Start-Gate Audit identified: this column has existed since
+          // Phase 4 W6 but was never written here — `PaymentAccount`
+          // resolution (a later P8 stage) needs it to walk
+          // Order -> Store -> PaymentAccount. No new resolution mechanism
+          // introduced — reuses the exact value already in scope.
+          storeId,
           status: OrderStatus.PENDING_PAYMENT,
           subtotal: paiseToDecimalString(subtotalPaise),
           shippingFee: paiseToDecimalString(finalShippingFeePaise),

@@ -26,14 +26,14 @@ describe('WebhookProcessor — bounded retry', () => {
     payload: { payment: { entity: { id: 'pay_x', order_id: 'order_x' } } },
   };
 
-  function build(rowAttempts: number) {
+  function build(rowAttempts: number, paymentAccountId: string | null = null) {
     const txUpdates: UpdateData[] = [];
     const outerUpdates: UpdateData[] = [];
     const tx = {
       $queryRaw: jest
         .fn()
         .mockResolvedValue([
-          { id: 'wh-1', payload: PAYLOAD, attempts: rowAttempts },
+          { id: 'wh-1', payload: PAYLOAD, attempts: rowAttempts, paymentAccountId },
         ]),
       webhookEvent: {
         update: jest.fn((args: { data: UpdateData }) => {
@@ -56,6 +56,7 @@ describe('WebhookProcessor — bounded retry', () => {
     };
     const paymentsService = {
       applyWebhookEvent: jest.fn(),
+      applyMerchantWebhookEvent: jest.fn(),
       isUniqueConstraintViolation: jest.fn().mockReturnValue(false),
     };
     const processor = new WebhookProcessor(
@@ -148,5 +149,71 @@ describe('WebhookProcessor — bounded retry', () => {
 
     expect(outerUpdates[0].status).toBe('PROCESSED');
     expect(captureException).not.toHaveBeenCalled();
+  });
+
+  // ─── P8-10 — merchant commerce routing branch ──────────────────────
+
+  describe('merchant commerce routing (paymentAccountId set)', () => {
+    it('a row with paymentAccountId set routes to applyMerchantWebhookEvent, never applyWebhookEvent', async () => {
+      const { processor, paymentsService, txUpdates } = build(0, 'pa-1');
+      paymentsService.applyMerchantWebhookEvent.mockResolvedValue('PROCESSED');
+
+      await processor.processReceivedWebhooks();
+
+      expect(paymentsService.applyMerchantWebhookEvent).toHaveBeenCalledWith(
+        expect.anything(),
+        'pa-1',
+        PAYLOAD,
+      );
+      expect(paymentsService.applyWebhookEvent).not.toHaveBeenCalled();
+      expect(txUpdates[0].status).toBe('PROCESSED');
+    });
+
+    it('a row with paymentAccountId null still routes to applyWebhookEvent — the pre-P8-10 global path is unchanged', async () => {
+      const { processor, paymentsService } = build(0, null);
+      paymentsService.applyWebhookEvent.mockResolvedValue('PROCESSED');
+
+      await processor.processReceivedWebhooks();
+
+      expect(paymentsService.applyWebhookEvent).toHaveBeenCalledWith(
+        expect.anything(),
+        PAYLOAD,
+      );
+      expect(paymentsService.applyMerchantWebhookEvent).not.toHaveBeenCalled();
+    });
+
+    it('a merchant webhook processing failure retries exactly like the global path (same bounded backoff)', async () => {
+      const { processor, paymentsService, outerUpdates } = build(0, 'pa-1');
+      paymentsService.applyMerchantWebhookEvent.mockRejectedValue(new Error('boom'));
+
+      await processor.processReceivedWebhooks();
+
+      expect(outerUpdates[0].status).toBe('PROCESSING_FAILED');
+      expect(outerUpdates[0].attempts).toBe(1);
+    });
+
+    it('a merchant webhook payment mismatch is non-retryable — same dead-letter/Sentry behavior as the global path', async () => {
+      const { processor, paymentsService, outerUpdates } = build(0, 'pa-1');
+      paymentsService.applyMerchantWebhookEvent.mockRejectedValue(
+        new PaymentMismatchError('AMOUNT_MISMATCH', 'expected 15000, got 100'),
+      );
+
+      await processor.processReceivedWebhooks();
+
+      expect(outerUpdates[0].status).toBe('FAILED');
+      expect(captureException).toHaveBeenCalledTimes(1);
+    });
+
+    it('a concurrent-capture P2002 on a merchant webhook is a no-op success too', async () => {
+      const { processor, paymentsService, outerUpdates } = build(1, 'pa-1');
+      const p2002 = Object.assign(new Error('unique'), { code: 'P2002' });
+      paymentsService.applyMerchantWebhookEvent.mockRejectedValue(p2002);
+      paymentsService.isUniqueConstraintViolation.mockReturnValue(true);
+
+      await processor.processReceivedWebhooks();
+
+      expect(outerUpdates[0].status).toBe('PROCESSED');
+      expect(captureException).not.toHaveBeenCalled();
+    });
   });
 });

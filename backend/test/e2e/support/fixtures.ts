@@ -109,14 +109,16 @@ export async function registerSuperAdmin(
  * creates Tenant + Store together; the same pairing every W9-touched
  * runtime path now depends on: `resolvePrimaryStoreId` throws
  * `NotFoundException` for a tenant with none, and checkout's shipping-fee
- * lookup — STORE-owned as of W9 — calls it unconditionally). Test fixtures
- * that mint a throwaway tenant must pair it with a primary Store the same
- * way, or every checkout-touching e2e test for that tenant would 404
- * despite having done nothing wrong. Centralized here so `grantOwner
- * Membership` and `ensureTenantId` (the two fixture call sites that create
- * a brand-new Tenant row) can't drift out of sync with each other.
+ * lookup — STORE-owned as of W9 — calls it unconditionally; P8-4.1 —
+ * `CouponsService.createCoupon` now also depends on it unconditionally).
+ * Test fixtures that mint a throwaway tenant must pair it with a primary
+ * Store the same way, or every checkout/coupon-touching e2e test for that
+ * tenant would 404 despite having done nothing wrong. Centralized here
+ * (and exported, P8-4.1) so `grantOwnerMembership`/`ensureTenantId` (this
+ * file's own two call sites) and any other fixture file that mints its
+ * own ad-hoc tenant can't drift out of sync with each other.
  */
-async function createPrimaryStore(
+export async function createPrimaryStore(
   prisma: PrismaService,
   tenantId: string,
 ): Promise<string> {
@@ -457,6 +459,23 @@ export async function createCoupon(
 ): Promise<{ id: string; code: string }> {
   const type = options.type ?? 'PERCENTAGE';
   const tenantId = await ensureTenantId(prisma, options.tenantId);
+  // P8-4 — `Order.storeId` is now populated at checkout (previously always
+  // NULL, which made the pre-existing composite
+  // `orders_storeId_couponId_fkey` FK inert: Postgres skips a multi-column
+  // FK check entirely when any referencing column is NULL). With a real
+  // `storeId` on the order, that FK is enforced for the first time, and
+  // requires a matching `(storeId, id)` row in `coupons` — so this fixture
+  // must set `storeId` to the SAME tenant's primary store `createCoupon`'s
+  // caller will check out against (every tenant this fixture reaches is
+  // paired with exactly one primary Store — `ensureTenantId`'s own
+  // comment). NOTE: the real, non-test `CouponsService.createCoupon()`
+  // (`src/coupons/coupons.service.ts`) does NOT set `storeId` either — a
+  // pre-existing gap this fixture change does not fix and that this
+  // session's Phase 8 work flags as a separate, out-of-scope blocker (see
+  // the P8-4 completion report), not silently patched here.
+  const primaryStore = await prisma.store.findFirstOrThrow({
+    where: { tenantId, isPrimary: true },
+  });
   const coupon = await prisma.coupon.create({
     data: {
       code: `TEST${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`,
@@ -473,6 +492,7 @@ export async function createCoupon(
       minOrderValue: options.minOrderValue,
       createdByAdminId,
       tenantId,
+      storeId: primaryStore.id,
     },
   });
   return { id: coupon.id, code: coupon.code };

@@ -276,4 +276,109 @@ describe('Checkout security & re-validation (§27 #1, #10, #11, #12)', () => {
       })
       .expect(201);
   });
+
+  // ─── Phase 8 (P8-4) — Order.storeId persistence ────────────────────────
+
+  it('P8-4 — checkout persists the tenant-resolved storeId onto the created Order', async () => {
+    const admin = await registerAdmin(app, prisma);
+    await makeTenantCheckoutReady(prisma, admin.tenantId);
+    const user = await registerUser(app);
+    const { productId } = await createProduct(prisma, { basePrice: '99.00' });
+    await addCartItem(app, user, { productId, quantity: 1 });
+
+    const primaryStore = await prisma.store.findFirstOrThrow({
+      where: { tenantId: admin.tenantId, isPrimary: true },
+    });
+
+    const res = await http(app)
+      .post(apiPath('/checkout/orders'))
+      .set(...authHeader(user))
+      .set('Idempotency-Key', `storeid-persist-${user.id}`)
+      .send(shippingFields())
+      .expect(201);
+
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { id: res.body.data.id as string },
+    });
+    expect(order.storeId).not.toBeNull();
+    expect(order.storeId).toBe(primaryStore.id);
+    expect(order.tenantId).toBe(admin.tenantId);
+  });
+
+  // ─── Phase 8 (P8-4.1) — Coupon.storeId production gap fix ─────────────
+
+  it('P8-4.1 — a coupon created for the correct store can be used by an order for that store', async () => {
+    const admin = await registerAdmin(app, prisma);
+    await makeTenantCheckoutReady(prisma, admin.tenantId);
+    const user = await registerUser(app);
+    const { productId } = await createProduct(prisma, { basePrice: '250.00' });
+    await addCartItem(app, user, { productId, quantity: 2 });
+    const coupon = await createCoupon(prisma, admin.id, {
+      percentageOff: 20,
+      tenantId: admin.tenantId,
+    });
+
+    const res = await http(app)
+      .post(apiPath('/checkout/orders'))
+      .set(...authHeader(user))
+      .set('Idempotency-Key', `coupon-store-match-${user.id}`)
+      .send({ ...shippingFields(), couponCode: coupon.code })
+      .expect(201);
+
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { id: res.body.data.id as string },
+    });
+    const couponRow = await prisma.coupon.findUniqueOrThrow({
+      where: { id: coupon.id },
+    });
+    expect(order.storeId).toBe(couponRow.storeId);
+    expect(order.couponId).toBe(coupon.id);
+  });
+
+  it('P8-4.1 — a coupon whose storeId does not match the order storeId is rejected, not silently applied (DB-level defense-in-depth)', async () => {
+    const admin = await registerAdmin(app, prisma);
+    await makeTenantCheckoutReady(prisma, admin.tenantId);
+    const user = await registerUser(app);
+    const { productId } = await createProduct(prisma, { basePrice: '250.00' });
+    await addCartItem(app, user, { productId, quantity: 2 });
+    const coupon = await createCoupon(prisma, admin.id, {
+      percentageOff: 20,
+      tenantId: admin.tenantId,
+    });
+
+    // Simulate corrupted/legacy data (exactly the pre-P8-4.1 bug shape,
+    // generalized: a coupon whose storeId does not match the tenant's own
+    // order storeId) — a second, unrelated store, real row, wrong tenant.
+    const otherTenant = await prisma.tenant.create({
+      data: { slug: `p8-4-1-mismatch-${admin.tenantId}` },
+    });
+    const otherStore = await prisma.store.create({
+      data: {
+        tenantId: otherTenant.id,
+        slug: `p8-4-1-mismatch-store-${admin.tenantId}`,
+        name: 'Mismatch Store',
+        status: 'ACTIVE',
+        isPrimary: true,
+      },
+    });
+    await prisma.coupon.update({
+      where: { id: coupon.id },
+      data: { storeId: otherStore.id },
+    });
+
+    const res = await http(app)
+      .post(apiPath('/checkout/orders'))
+      .set(...authHeader(user))
+      .set('Idempotency-Key', `coupon-store-mismatch-${user.id}`)
+      .send({ ...shippingFields(), couponCode: coupon.code });
+
+    // The checkout transaction must fail (never silently succeed with a
+    // mismatched coupon/order storeId pair) — the composite
+    // orders_storeId_couponId_fkey constraint is the backstop being
+    // proven here; no order is left behind either way.
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(
+      await prisma.order.findMany({ where: { userId: user.id } }),
+    ).toHaveLength(0);
+  });
 });

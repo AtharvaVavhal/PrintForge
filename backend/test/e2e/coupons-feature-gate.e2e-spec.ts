@@ -2,7 +2,13 @@ import { randomUUID } from 'crypto';
 import { INestApplication } from '@nestjs/common';
 import { resetDatabase } from './support/db';
 import { createTestApp } from './support/test-app';
-import { apiPath, authHeader, http, registerUser } from './support/fixtures';
+import {
+  apiPath,
+  authHeader,
+  createPrimaryStore,
+  http,
+  registerUser,
+} from './support/fixtures';
 import { PrismaService } from '../../src/common/database/prisma.service';
 
 /**
@@ -49,6 +55,12 @@ describe('Phase 6 W8 — coupons feature gate on POST /admin/coupons', () => {
     const tenant = await prisma.tenant.create({
       data: { slug: `coupons-gate-${randomUUID()}` },
     });
+    // P8-4.1 — `createCoupon` now resolves the tenant's primary store
+    // unconditionally (same dependency `resolvePrimaryStoreId` already
+    // has elsewhere); this ad-hoc tenant needs one paired the same way
+    // `grantOwnerMembership`/`ensureTenantId` already do, or every test
+    // below would 404 despite having done nothing wrong.
+    await createPrimaryStore(prisma, tenant.id);
     await prisma.tenantMembership.create({
       data: { userId: user.id, tenantId: tenant.id, role, status: 'ACTIVE' },
     });
@@ -89,11 +101,24 @@ describe('Phase 6 W8 — coupons feature gate on POST /admin/coupons', () => {
   it('coupons feature enabled -> creation succeeds', async () => {
     const owner = await memberWithCouponsFeature(true);
 
-    await http(app)
+    const res = await http(app)
       .post(apiPath('/admin/coupons'))
       .set(...authHeader(owner))
       .send(validCouponPayload())
       .expect(201);
+
+    // P8-4.1 — through the REAL POST /admin/coupons code path (not a
+    // direct-Prisma test fixture): the created coupon's storeId is the
+    // tenant's own primary store, never null, never client-supplied
+    // (`CreateCouponDto` has no storeId field).
+    const primaryStore = await prisma.store.findFirstOrThrow({
+      where: { tenantId: owner.tenantId, isPrimary: true },
+    });
+    const coupon = await prisma.coupon.findUniqueOrThrow({
+      where: { id: res.body.data.id as string },
+    });
+    expect(coupon.storeId).not.toBeNull();
+    expect(coupon.storeId).toBe(primaryStore.id);
   });
 
   it('a missing PlanFeature row for coupons (deny-by-default, P6-D2) also 403s with upgrade_required', async () => {

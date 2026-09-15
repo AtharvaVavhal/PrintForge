@@ -21,6 +21,7 @@ import { PrismaService } from '../../src/common/database/prisma.service';
 import { EmailService } from '../../src/notifications/email/email.service';
 import { OutboxPoller } from '../../src/notifications/outbox/outbox.poller';
 import { WebhookProcessor } from '../../src/payments/webhooks/webhook-processor.service';
+import { CredentialEncryptionService } from '../../src/payments/crypto/credential-encryption.service';
 
 interface PendingPaymentFixture {
   user: TestUser;
@@ -38,6 +39,18 @@ interface PendingPaymentFixture {
  * verify-vs-webhook races, email-outage isolation) exercises Razorpay's
  * API; both the webhook and verify endpoints under test only ever do a
  * local HMAC check, never an outbound call to Razorpay.
+ *
+ * Phase 8 (P8-9) update: `PaymentsService.verifyPayment` now resolves the
+ * order's bound `PaymentAccount` and verifies against THAT account's own
+ * key secret — there is no more fallback to a global/platform credential
+ * (an explicit, ratified P8-9 behavior change). So this fixture also binds
+ * an ACTIVE `PaymentAccount` whose credentials equal the SAME
+ * `RAZORPAY_KEY_SECRET`/`RAZORPAY_WEBHOOK_SECRET` this file's
+ * `signVerifyPayload`/`signWebhookPayload` helpers already sign with —
+ * every existing call site keeps working unmodified. (The legacy global
+ * `POST /payments/webhook` route this file also exercises is untouched by
+ * P8-9/10 and still verifies against those same global env secrets
+ * directly, so it needed no change here.)
  */
 async function setupPendingPayment(
   app: INestApplication,
@@ -64,9 +77,33 @@ async function setupPendingPayment(
   );
   const razorpayOrderId = `order_test_${randomUUID()}`;
 
+  const credentialEncryption = app.get(CredentialEncryptionService);
+  const store = await prisma.store.findFirstOrThrow({
+    where: { tenantId: order.tenantId, isPrimary: true },
+  });
+  const encrypted = credentialEncryption.encrypt(
+    JSON.stringify({
+      keyId: process.env.RAZORPAY_KEY_ID ?? 'rzp_test_race_fixture',
+      keySecret: process.env.RAZORPAY_KEY_SECRET,
+      webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
+    }),
+  );
+  const paymentAccount = await prisma.paymentAccount.create({
+    data: {
+      tenantId: order.tenantId,
+      storeId: store.id,
+      provider: 'RAZORPAY',
+      status: 'ACTIVE',
+      mode: 'TEST',
+      credentialsEncrypted: new Uint8Array(encrypted),
+      credentialsUpdatedAt: new Date(),
+      connectedAt: new Date(),
+    },
+  });
+
   await prisma.order.update({
     where: { id: orderId },
-    data: { razorpayOrderId },
+    data: { razorpayOrderId, paymentAccountId: paymentAccount.id },
   });
   await prisma.paymentAttempt.create({
     data: {
@@ -76,6 +113,7 @@ async function setupPendingPayment(
       currency: 'INR',
       status: 'INITIATED',
       tenantId: order.tenantId,
+      paymentAccountId: paymentAccount.id,
     },
   });
 

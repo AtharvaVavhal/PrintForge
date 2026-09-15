@@ -15,6 +15,7 @@ import { AuditService } from '../common/audit/audit.service';
 import { resolveTenantAuditActor } from '../common/audit/tenant-actor-attribution';
 import { assertObjectInTenant } from '../common/tenant/object-auth';
 import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { resolvePrimaryStoreId } from '../common/tenant/primary-store';
 import { TenantContext } from '../common/tenant/tenant-context';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { UpdateCouponDto } from './dto/update-coupon.dto';
@@ -133,6 +134,27 @@ export class CouponsService {
     this.assertTypeFieldsConsistent(dto);
     await this.assertScopeFieldsConsistent(tenantContext, dto);
 
+    // P8-4.1 — a coupon's `storeId` was never populated, invisible until
+    // `Order.storeId` (P8-4) started being persisted for real: the
+    // existing composite `orders_storeId_couponId_fkey` constraint
+    // requires a matching `(storeId, id)` row in `coupons` whenever an
+    // order applies one, and silently passed before only because Postgres
+    // skips a multi-column FK check entirely when any referenced column
+    // is NULL. Resolved exactly like `checkout.service.ts` resolves the
+    // order's own `storeId` — `resolvePrimaryStoreId` needs the full
+    // `PrismaService` (its D4 tenant-scoped client cannot be built from an
+    // already-open `Prisma.TransactionClient`), so this read happens
+    // OUTSIDE the transaction below, same reasoning
+    // `checkout.service.ts`'s own identical call documents. Server-derived
+    // from the caller's own resolved tenant context — never client-
+    // supplied, and `CreateCouponDto` has no `storeId` field to begin
+    // with, so there is no client input to distrust here in the first
+    // place.
+    const storeId = await resolvePrimaryStoreId(
+      this.prisma,
+      tenantContext.tenantId,
+    );
+
     return this.prisma.$transaction(async (tx) => {
       let created: Coupon;
       try {
@@ -160,6 +182,7 @@ export class CouponsService {
             // Server-derived from the caller's own resolved tenant context
             // (never client-supplied) — Phase 4 W7 / P4-D2.
             tenantId: tenantContext.tenantId,
+            storeId,
           },
         });
       } catch (err) {

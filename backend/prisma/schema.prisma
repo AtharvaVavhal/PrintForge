@@ -90,6 +90,33 @@ enum WebhookEventStatus {
   FAILED
 }
 
+// Phase 8 (P8-D3/P8-D6, docs/saas/DECISIONS.md) — merchant commerce payment
+// providers. `RAZORPAY` is the only value today; extensible without a
+// migration to the enum's own column type (Postgres `ALTER TYPE ... ADD
+// VALUE` is a separate, not-yet-permitted shape under this repo's
+// migration-safety guard — same G-10 constraint `SubscriptionEventType`'s
+// own comment already documents — so a second provider, if it ever ships,
+// is its own later decision, not assumed here).
+enum PaymentProviderType {
+  RAZORPAY
+}
+
+// Phase 8 (P8-3 architecture spec §4) — minimal 3-state PaymentAccount
+// lifecycle. No hard delete — DISABLED is terminal-but-reversible, the same
+// discipline TenantStatus/StoreStatus/Coupon.isActive already use elsewhere
+// in this schema (invariant 19: destroying merchant data is never a side
+// effect of a status change).
+enum PaymentAccountStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum PaymentAccountMode {
+  TEST
+  LIVE
+}
+
 // Phase 7 — D7 SaaS Billing Webhooks wave (docs/saas/DECISIONS.md P7-D3
 // Part B). Same status vocabulary as `WebhookEventStatus` above, by
 // deliberate precedent — but its OWN enum, never a reuse of that one, so a
@@ -524,6 +551,24 @@ model Order {
 
   razorpayOrderId String? @unique
 
+  // Phase 8 (P8-3 architecture spec §2.3) — the merchant PaymentAccount
+  // this order's payment was routed through, resolved server-side at
+  // checkout from the order's own `storeId` and persisted once, never
+  // re-resolved later (P8-3 §6: "resolve once, at checkout; persist the
+  // FK; never re-resolve for the same order later"). Plain column,
+  // deliberately NO Prisma `@relation` / DB foreign key — `orders` is a
+  // table created by an EARLIER migration, so migration-safety.spec.ts's
+  // G-19 rule applies exactly as it already did to
+  // `Subscription.pendingPlanId` (P7-D1 Part … see that field's own
+  // comment): the ONLY permitted change to a pre-existing table is a
+  // single, purely nullable `ADD COLUMN`, no `DEFAULT`, no `NOT NULL` — a
+  // real `ADD CONSTRAINT … FOREIGN KEY` is rejected outright for a table
+  // not created in the same migration file. Referential integrity to
+  // `PaymentAccount.id` is therefore enforced at the APPLICATION layer
+  // (`PaymentAccountsService`/`CheckoutService`), not the database layer,
+  // for this stage — same deviation, same reasoning, same precedent.
+  paymentAccountId String?
+
   // Immutable shipping snapshot — copied from User at creation time, never a
   // live FK (§11 "Immutable shipping snapshot").
   shippingRecipientName String
@@ -562,6 +607,7 @@ model Order {
   @@index([tenantId])
   @@index([storeId])
   @@index([customerId])
+  @@index([paymentAccountId])
   @@map("orders")
 }
 
@@ -679,6 +725,13 @@ model PaymentAttempt {
 
   tenantId String
 
+  // Phase 8 (P8-3 architecture spec §2.3) — same plain-column, no-FK
+  // treatment as `Order.paymentAccountId` (see that field's own comment):
+  // `payment_attempts` is a pre-existing table, so G-19 permits only a
+  // bare nullable `ADD COLUMN`, never a new `ADD CONSTRAINT … FOREIGN
+  // KEY`. Application-layer referential integrity only, for this stage.
+  paymentAccountId String?
+
   createdAt  DateTime  @default(now())
   capturedAt DateTime?
   updatedAt  DateTime  @updatedAt
@@ -688,6 +741,7 @@ model PaymentAttempt {
 
   @@index([orderId])
   @@index([tenantId])
+  @@index([paymentAccountId])
   @@map("payment_attempts")
 }
 
@@ -719,6 +773,11 @@ model Refund {
 
   tenantId String
 
+  // Phase 8 (P8-3 architecture spec §2.3) — same plain-column, no-FK
+  // treatment as `Order.paymentAccountId` (see that field's own comment):
+  // `refunds` is a pre-existing table, G-19-restricted the same way.
+  paymentAccountId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -726,6 +785,7 @@ model Refund {
 
   @@index([paymentAttemptId])
   @@index([tenantId])
+  @@index([paymentAccountId])
   @@map("refunds")
 }
 
@@ -765,6 +825,16 @@ model WebhookEvent {
   payload         Json
   status          WebhookEventStatus @default(RECEIVED)
 
+  // Phase 8 (P8-3 architecture spec §2.3/§9) — resolved DURING processing
+  // only, never trusted from the raw payload (mirrors
+  // `BillingWebhookEvent`'s own "never trust tenantId from the payload"
+  // discipline, P7-D3 Part B). Same plain-column, no-FK treatment as
+  // `Order.paymentAccountId` (see that field's own comment): `webhook_events`
+  // is a pre-existing table, G-19-restricted the same way. NOT populated
+  // by anything in this stage — no webhook processing changes yet (P8-4
+  // scope; see the payment-accounts module's own doc comment).
+  paymentAccountId String?
+
   attempts    Int       @default(0)
   availableAt DateTime  @default(now())
   lastError   String?
@@ -774,7 +844,85 @@ model WebhookEvent {
   updatedAt DateTime @updatedAt
 
   @@index([status, availableAt])
+  @@index([paymentAccountId])
   @@map("webhook_events")
+}
+
+// Phase 8 (P8-D3/P8-D6, docs/saas/DECISIONS.md; P8-3 architecture spec §2.1)
+// — a merchant's own, independently-owned Razorpay account, per Store per
+// Provider. Structurally distinct from PrintForge's own SaaS-billing
+// `Subscription` (invariant 6) — never related to it, by design; see
+// `money-flow-separation.spec.ts`.
+//
+// Store-owned (not Tenant-owned): `tenantId` is denormalized for isolation
+// defense-in-depth (same convention as `Customer`/`StoreDomain`/
+// `StoreSetting`), `storeId` is the real ownership FK. `@@unique([storeId,
+// provider])` caps a store at one row per provider — never zero (a store
+// may hold no PaymentAccount yet), never two for the SAME provider, but
+// explicitly NOT one-provider-only: a second, distinct provider is a second
+// row, not a schema change (P8-3 §2.1 "do not assume one provider").
+//
+// `credentialsEncrypted` is deliberately nullable — P8-4 shipped it unused
+// (schema + lifecycle only); P8-5 populates it as an opaque AES-256-GCM
+// blob (P8-D6, `CredentialEncryptionService`), written via
+// `PaymentAccountsService.configureCredentials` and decrypted only inside
+// `RazorpayAccountVerifierService` (the provider-adapter boundary) —
+// `PaymentAccountsService` itself still only ever handles it as opaque
+// ciphertext. No `credentialsKeyId` column — P8-D6
+// ratified a single, platform-wide master key (one Render environment
+// secret), not a KMS with per-record data keys, so there is exactly one
+// key for every row to reference; a per-row key-reference column would be
+// dead weight (P8-3 §2.1, explicit deviation from the Master Plan's
+// original per-row-KMS-key sketch).
+//
+// Deliberately excluded (P8-3 §2.1 / P8-D3 Part F): no KYC field, no
+// Route/linked-account id, no settlement-schedule field, no
+// merchant-of-record flag, no split-payment/platform-fee field, no
+// "default account" flag (moot while exactly one provider exists), no
+// dedicated audit-event table (`TenantAuditLog` is reused instead).
+model PaymentAccount {
+  id       String @id @default(uuid())
+  tenantId String
+  storeId  String
+
+  provider PaymentProviderType
+  status   PaymentAccountStatus @default(PENDING)
+  mode     PaymentAccountMode
+
+  displayName String?
+
+  // Opaque, application-level AES-256-GCM ciphertext (P8-D6). Never
+  // decomposed into named columns (no `razorpayKeyId` field) — this is
+  // what keeps the schema provider-shape-agnostic (P8-3 §5.3): a future
+  // non-Razorpay adapter can store an entirely different credential shape
+  // inside the same opaque blob. NOT read or written by this stage.
+  credentialsEncrypted Bytes?
+  credentialsUpdatedAt DateTime?
+
+  connectedAt    DateTime?
+  disabledAt     DateTime?
+  disabledReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  // A plain, directly-expressible Prisma composite relation — NOT a
+  // hand-added-SQL case. `Store` already carries `@@unique([tenantId,
+  // id])`, added specifically ("supporting index for StoreSetting's
+  // composite ownership FK") for exactly this P4-D3 pattern;
+  // `PaymentAccount` is simply the next consumer of an index that already
+  // exists for this purpose. `payment_accounts` is a table created in
+  // THIS SAME migration, so this FK carries no G-19 restriction at all
+  // (same "newInThisFile" exemption `SubscriptionEvent`'s own comment
+  // documents) — unlike the plain, unconstrained `paymentAccountId`
+  // columns added above to the four PRE-EXISTING commerce tables.
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([storeId, provider])
+  @@index([tenantId])
+  @@index([status])
+  @@map("payment_accounts")
 }
 
 // Checkout dedup — claimed via INSERT...ON CONFLICT DO NOTHING (§13.G).
@@ -1128,6 +1276,8 @@ model Tenant {
   // Phase 6 (W1) — back-relations only; add NO column to `tenants`.
   usage             Usage[]
   entitlementOverrides TenantEntitlementOverride[]
+  // Phase 8 — back-relation only; adds NO column to `tenants`.
+  paymentAccounts PaymentAccount[]
 
   @@index([status])
   @@map("tenants")
@@ -1168,6 +1318,8 @@ model Store {
   // StoreSetting model this file's own comment above anticipated
   // ("Branding / a keyed StoreSetting are deferred to Phase 4/12").
   storeSettings StoreSetting[]
+  // Phase 8 — back-relation only; adds NO column to `stores`.
+  paymentAccounts PaymentAccount[]
 
   @@unique([tenantId, slug])
   // Phase 5 (W9) — supporting index for StoreSetting's composite ownership

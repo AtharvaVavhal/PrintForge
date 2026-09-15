@@ -10,7 +10,12 @@ import { PaymentMismatchError } from './payment-mismatch.error';
  * test/e2e/payment-reconciliation.e2e-spec.ts.
  */
 describe('PaymentsService.assertCapturedPaymentMatchesOrder', () => {
-  const service = new PaymentsService({} as never, {} as never);
+  const service = new PaymentsService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
 
   const order = {
     razorpayOrderId: 'order_abc',

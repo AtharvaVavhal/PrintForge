@@ -25,6 +25,10 @@ interface LockedWebhookRow {
   id: string;
   payload: unknown;
   attempts: number;
+  /** P8-10 — set only for a row `receiveMerchantWebhook` persisted (the
+   * per-account commerce route); `null`/`undefined` for every pre-P8-10
+   * row, which still routes to `applyWebhookEvent` exactly as before. */
+  paymentAccountId: string | null;
 }
 
 /**
@@ -71,7 +75,7 @@ export class WebhookProcessor {
         // Re-select FOR UPDATE inside the transaction (§12.3) — guards
         // against double-processing if a slow tick overlaps the next one.
         const rows = await tx.$queryRaw<LockedWebhookRow[]>`
-          SELECT id, payload, attempts FROM webhook_events
+          SELECT id, payload, attempts, "paymentAccountId" FROM webhook_events
           WHERE id = ${id} AND status IN ('RECEIVED', 'PROCESSING_FAILED')
           FOR UPDATE
         `;
@@ -82,10 +86,21 @@ export class WebhookProcessor {
         attempts = locked.attempts;
         payloadForContext = locked.payload as RazorpayWebhookPayload;
 
-        const outcome = await this.paymentsService.applyWebhookEvent(
-          tx,
-          locked.payload as RazorpayWebhookPayload,
-        );
+        // P8-10 — a row with `paymentAccountId` set was persisted by the
+        // per-account merchant commerce route (`receiveMerchantWebhook`)
+        // and is processed through the account-aware pipeline; every
+        // other row (the pre-P8-10 global route, untouched) keeps going
+        // through `applyWebhookEvent` exactly as before.
+        const outcome = locked.paymentAccountId
+          ? await this.paymentsService.applyMerchantWebhookEvent(
+              tx,
+              locked.paymentAccountId,
+              locked.payload as RazorpayWebhookPayload,
+            )
+          : await this.paymentsService.applyWebhookEvent(
+              tx,
+              locked.payload as RazorpayWebhookPayload,
+            );
 
         await tx.webhookEvent.update({
           where: { id: locked.id },

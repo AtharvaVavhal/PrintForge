@@ -27,6 +27,8 @@ import { ListAdminCouponsQueryDto } from '../coupons/dto/list-admin-coupons-quer
 import { AppSettingService } from '../app-setting/app-setting.service';
 import { UpdateSettingDto } from '../app-setting/dto/update-setting.dto';
 import { InvoicesService } from '../invoices/invoices.service';
+import { RefundsService } from '../payments/refunds/refunds.service';
+import { CreateRefundDto } from '../payments/refunds/dto/create-refund.dto';
 import { SubscriptionOrchestrationService } from '../subscriptions/subscription-orchestration.service';
 import { UpgradeSubscriptionDto } from '../subscriptions/dto/upgrade-subscription.dto';
 import { DowngradeSubscriptionDto } from '../subscriptions/dto/downgrade-subscription.dto';
@@ -41,7 +43,12 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
  * /admin/orders/:id/status (CAS-idempotent — already-applied transition
  * → 200, illegal → 409, and a target status of REFUNDED also closes out
  * the order's PENDING Refund row — see OrdersService.performRefundRecording
- * — §13.L/§32's "record only, no in-app refund-initiation API"), GET
+ * — §13.L/§32's "record only, no in-app refund-initiation API"; unchanged
+ * by Phase 8), POST /admin/payment-attempts/:id/refund (Phase 8, P8-11 —
+ * the actual in-app Razorpay refund call, via the payment's own
+ * historically-bound PaymentAccount, delegated to RefundsService — a
+ * separate, explicit action from the REFUNDED status transition above,
+ * not a replacement for it), GET
  * /admin/dashboard (minimal — no charts), GET /admin/customers[/:id]
  * (read-only), PATCH /admin/reviews/:id/status (moderation; unlike order
  * status there's no transition graph to enforce, any ReviewStatus to any
@@ -75,6 +82,7 @@ export class AdminController {
     private readonly appSettingService: AppSettingService,
     private readonly invoicesService: InvoicesService,
     private readonly subscriptionOrchestrationService: SubscriptionOrchestrationService,
+    private readonly refundsService: RefundsService,
   ) {}
 
   /** Every Stage 2 mutation route requires this header — same convention,
@@ -134,6 +142,30 @@ export class AdminController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.adminTransitionStatus(tenant, admin, id, dto);
+  }
+
+  /**
+   * Phase 8 (P8-11) — the merchant commerce in-app refund business
+   * workflow. Same `orders:transition` permission as the status-
+   * transition route above (no new permission introduced) — refunding a
+   * captured payment is exactly the same class of financially-
+   * consequential order/payment-lifecycle action already gated by it.
+   * Delegates entirely to `RefundsService`, which resolves the
+   * PaymentAttempt's OWN historically-bound `PaymentAccount` (never the
+   * store's current one) and calls Razorpay through that account's own
+   * adapter/credentials — this controller performs no provider-calling
+   * or resolution logic itself, same delegation discipline every other
+   * route here already follows.
+   */
+  @RequirePermission('orders:transition')
+  @Post('payment-attempts/:id/refund')
+  async refundPaymentAttempt(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateRefundDto,
+  ) {
+    return this.refundsService.createRefund(tenant, admin, id, dto);
   }
 
   @RequirePermission('dashboard:read')

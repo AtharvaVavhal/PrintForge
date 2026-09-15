@@ -8,6 +8,7 @@ import {
   Min,
   validateSync,
 } from 'class-validator';
+import { resolvePaymentCredentialsMasterKey } from './payment-credentials-master-key';
 
 /**
  * Fails fast at boot if required environment variables are missing or malformed,
@@ -71,6 +72,13 @@ export const PRODUCTION_REQUIRED_KEYS = [
   'RAZORPAY_SAAS_KEY_ID',
   'RAZORPAY_SAAS_KEY_SECRET',
   'RAZORPAY_SAAS_WEBHOOK_SECRET',
+  // Phase 8 (docs/saas/DECISIONS.md P8-D6) — single platform-wide
+  // AES-256-GCM master key for merchant `PaymentAccount` credential
+  // encryption. Presence checked here; format (base64, decodes to exactly
+  // 32 bytes) checked separately by `invalidProductionMasterKey` below —
+  // a production boot must not silently run with a missing OR malformed
+  // key, and must never fall back to a hardcoded one.
+  'PAYMENT_CREDENTIALS_MASTER_KEY',
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
   'CLOUDINARY_API_SECRET',
@@ -91,6 +99,29 @@ function missingProductionKeys(config: Record<string, unknown>): string[] {
   }).map((key) => `${key} is required in production`);
 }
 
+/**
+ * Format check for `PAYMENT_CREDENTIALS_MASTER_KEY`, separate from the
+ * plain presence check above: a *present but malformed* value (wrong
+ * length, not base64) must also fail boot in production, not be silently
+ * accepted and only fail later at first use. Skipped when the key is
+ * blank/missing — `missingProductionKeys` already reports that case, and
+ * this function must never echo the invalid value itself into the message.
+ */
+function invalidProductionMasterKey(config: Record<string, unknown>): string[] {
+  const raw = config['PAYMENT_CREDENTIALS_MASTER_KEY'];
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    return [];
+  }
+  try {
+    resolvePaymentCredentialsMasterKey(raw);
+    return [];
+  } catch {
+    return [
+      'PAYMENT_CREDENTIALS_MASTER_KEY is not a valid AES-256 key (must be base64-encoded, decoding to exactly 32 bytes)',
+    ];
+  }
+}
+
 export function validateEnv(
   config: Record<string, unknown>,
 ): EnvironmentVariables {
@@ -106,7 +137,10 @@ export function validateEnv(
   );
 
   if (validatedConfig.NODE_ENV === 'production') {
-    messages.push(...missingProductionKeys(config));
+    messages.push(
+      ...missingProductionKeys(config),
+      ...invalidProductionMasterKey(config),
+    );
   }
 
   if (messages.length > 0) {

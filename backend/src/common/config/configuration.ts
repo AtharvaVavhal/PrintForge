@@ -34,6 +34,18 @@ export interface AppConfig {
     keySecret: string;
     webhookSecret: string;
   };
+  /**
+   * Phase 8 (P8-D6/D9, RATIFIED) — merchant `PaymentAccount` credential
+   * encryption. One platform-wide AES-256-GCM master key, base64-encoded,
+   * held as a single Render environment secret — never a per-merchant key,
+   * never an external KMS. See `CredentialEncryptionService` and
+   * `resolvePaymentCredentialsMasterKey` (this directory) for validation;
+   * there is no fallback/default value — missing or malformed input always
+   * throws, it is never silently treated as "encryption disabled."
+   */
+  paymentCredentials: {
+    masterKey: string;
+  };
   resend: {
     apiKey: string;
     emailFromAddress: string;
@@ -140,6 +152,9 @@ export default (): AppConfig => ({
     keyId: process.env.RAZORPAY_SAAS_KEY_ID ?? '',
     keySecret: process.env.RAZORPAY_SAAS_KEY_SECRET ?? '',
     webhookSecret: process.env.RAZORPAY_SAAS_WEBHOOK_SECRET ?? '',
+  },
+  paymentCredentials: {
+    masterKey: process.env.PAYMENT_CREDENTIALS_MASTER_KEY ?? '',
   },
   resend: {
     apiKey: process.env.RESEND_API_KEY ?? '',

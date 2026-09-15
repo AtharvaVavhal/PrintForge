@@ -26,6 +26,11 @@ const ALL_TABLES = [
   'order_item_customizations',
   'payment_attempts',
   'refunds',
+  // Phase 8 — merchant PaymentAccount foundation. Has FKs to `tenants`/
+  // `stores` (both listed below) so TRUNCATE...CASCADE would empty it
+  // transitively either way — listed explicitly anyway, matching this
+  // file's own "belt and suspenders" completeness philosophy.
+  'payment_accounts',
   'order_status_history',
   'webhook_events',
   'idempotency_keys',

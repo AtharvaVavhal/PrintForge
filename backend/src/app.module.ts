@@ -28,6 +28,7 @@ import { CheckoutModule } from './checkout/checkout.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
+import { PaymentAccountsModule } from './payments/payment-accounts/payment-accounts.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PlatformModule } from './platform/platform.module';
 import { PostalModule } from './postal/postal.module';
@@ -158,6 +159,7 @@ import { UsersModule } from './users/users.module';
     CartModule,
     OrdersModule,
     PaymentsModule,
+    PaymentAccountsModule,
     CheckoutModule,
     PostalModule,
     ReviewsModule,

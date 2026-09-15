@@ -150,6 +150,11 @@ const COMMERCE_PAYMENT_MODELS = [
   'PaymentAttempt',
   'Refund',
   'WebhookEvent',
+  // Phase 8 (P8-D3/P8-D6) — merchant payment account. Added here (P8-3
+  // architecture spec §10 implementation-sequence item 9) so the existing
+  // cross-model-relation checks below actually cover it in both
+  // directions, exactly as they already do for the three original models.
+  'PaymentAccount',
 ] as const;
 
 /**

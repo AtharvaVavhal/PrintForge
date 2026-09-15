@@ -3,7 +3,10 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import * as Sentry from '@sentry/node';
 import { Order } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
-import { RazorpayService } from './razorpay/razorpay.service';
+import { PaymentAccountResolutionError } from './payment-accounts/payment-account-resolution.errors';
+import { PaymentAccountResolutionService } from './payment-accounts/payment-account-resolution.service';
+import { PaymentAccountsService } from './payment-accounts/payment-accounts.service';
+import { RazorpayOrderPayment, RazorpayService } from './razorpay/razorpay.service';
 import { PaymentsService } from './payments.service';
 
 /**
@@ -59,6 +62,8 @@ export class PaymentReconciliationService {
     private readonly prisma: PrismaService,
     private readonly razorpayService: RazorpayService,
     private readonly paymentsService: PaymentsService,
+    private readonly paymentAccountResolutionService: PaymentAccountResolutionService,
+    private readonly paymentAccountsService: PaymentAccountsService,
   ) {}
 
   @Cron(CronExpression.EVERY_5_MINUTES)
@@ -69,13 +74,14 @@ export class PaymentReconciliationService {
       // API call.
       await this.failStaleOrdersWithoutRazorpayOrder();
 
-      if (!this.razorpayService.isConfigured()) {
-        this.logger.debug(
-          'Reconciliation: Razorpay not configured — skipping API reconciliation',
-        );
-        return;
-      }
-
+      // P8-10: no blanket "global Razorpay not configured -> skip
+      // everything" gate anymore — a merchant-bound order (`paymentAccountId`
+      // set) reconciles via its OWN account's adapter/credentials
+      // regardless of whether the global `RazorpayService` happens to be
+      // configured (task item 9/12: never route commerce reconciliation
+      // through the global service). Only an UNBOUND order's reconciliation
+      // still depends on the global service being configured — checked
+      // per-order, inside `fetchPayments` below.
       const candidates = await this.findReconcileCandidates();
       if (candidates.length === 0) {
         return;
@@ -138,24 +144,9 @@ export class PaymentReconciliationService {
       return;
     }
 
-    let payments;
-    try {
-      payments = await this.razorpayService.fetchOrderPayments(razorpayOrderId);
-    } catch (err) {
-      // Razorpay API failure — transition nothing, retry next run.
-      this.logger.warn(
-        `Reconciliation: fetchOrderPayments failed for order ${order.id} (${razorpayOrderId})`,
-        err instanceof Error ? err.message : err,
-      );
-      Sentry.captureException(
-        err instanceof Error ? err : new Error(String(err)),
-        {
-          level: 'warning',
-          tags: { area: 'reconciliation_razorpay_fetch' },
-          extra: this.safeContext(order),
-        },
-      );
-      return;
+    const payments = await this.fetchPayments(order, razorpayOrderId);
+    if (payments === null) {
+      return; // not configured / no credentials / provider or resolution failure — retry next run
     }
 
     const captured = payments.find(
@@ -219,6 +210,113 @@ export class PaymentReconciliationService {
       order,
       'Razorpay reports no payment for this order',
     );
+  }
+
+  /**
+   * Phase 8 (P8-10, task items 9/12) — routes to the CORRECT credential
+   * source for this specific order:
+   *
+   *  - `order.paymentAccountId` set (every order bound under P8-9+) ->
+   *    resolve that SAME bound account (`resolveForBoundAccount` — never
+   *    re-derived from `Store`) and call ITS OWN adapter's
+   *    `fetchOrderPayments` with ITS OWN decrypted credentials. The global
+   *    `RazorpayService` is never touched for these orders.
+   *  - `order.paymentAccountId` null (a legacy/unbound order — none should
+   *    exist going forward, but historical rows may) -> the pre-P8-10
+   *    global-credential path, UNCHANGED, still gated by
+   *    `razorpayService.isConfigured()`.
+   *
+   * Returns `null` to mean "skip this order this run" (not configured, no
+   * credentials, or the provider/resolution call itself failed) — the
+   * caller's existing retry-next-run semantics are unchanged either way.
+   */
+  private async fetchPayments(
+    order: Order,
+    razorpayOrderId: string,
+  ): Promise<RazorpayOrderPayment[] | null> {
+    if (order.paymentAccountId) {
+      let resolved;
+      try {
+        resolved = await this.paymentAccountResolutionService.resolveForBoundAccount(
+          order.tenantId,
+          order.paymentAccountId,
+        );
+      } catch (err) {
+        if (!(err instanceof PaymentAccountResolutionError)) {
+          throw err;
+        }
+        this.logger.warn(
+          `Reconciliation: bound PaymentAccount ${order.paymentAccountId} for order ${order.id} no longer resolves (${err.name}) — skipping this run`,
+        );
+        return null;
+      }
+
+      const encryptedCredentials = await this.paymentAccountsService.getEncryptedCredentials(
+        order.tenantId,
+        resolved.paymentAccountId,
+      );
+      if (!encryptedCredentials) {
+        this.logger.warn(
+          `Reconciliation: PaymentAccount ${resolved.paymentAccountId} has no credentials configured — skipping order ${order.id} this run`,
+        );
+        return null;
+      }
+
+      try {
+        const merchantPayments = await resolved.adapter.fetchOrderPayments(
+          encryptedCredentials,
+          razorpayOrderId,
+        );
+        return merchantPayments.map((p) => ({
+          id: p.providerPaymentId,
+          razorpayOrderId: p.providerOrderId,
+          amountPaise: p.amountPaise,
+          currency: p.currency,
+          status: p.status,
+          captured: p.captured,
+          method: p.method,
+        }));
+      } catch (err) {
+        this.logger.warn(
+          `Reconciliation: fetchOrderPayments failed for order ${order.id} (${razorpayOrderId}) via PaymentAccount ${resolved.paymentAccountId}`,
+          err instanceof Error ? err.message : err,
+        );
+        Sentry.captureException(
+          err instanceof Error ? err : new Error(String(err)),
+          {
+            level: 'warning',
+            tags: { area: 'reconciliation_razorpay_fetch' },
+            extra: this.safeContext(order),
+          },
+        );
+        return null;
+      }
+    }
+
+    // Legacy/unbound order — unchanged pre-P8-10 global-credential path.
+    if (!this.razorpayService.isConfigured()) {
+      this.logger.debug(
+        `Reconciliation: Razorpay not configured — skipping API reconciliation for unbound order ${order.id}`,
+      );
+      return null;
+    }
+    try {
+      return await this.razorpayService.fetchOrderPayments(razorpayOrderId);
+    } catch (err) {
+      this.logger.warn(
+        `Reconciliation: fetchOrderPayments failed for order ${order.id} (${razorpayOrderId})`,
+        err instanceof Error ? err.message : err,
+      );
+      Sentry.captureException(
+        err instanceof Error ? err : new Error(String(err)),
+        {
+          level: 'warning',
+          tags: { area: 'reconciliation_razorpay_fetch' },
+          extra: this.safeContext(order),
+        },
+      );
+      return null;
+    }
   }
 
   // ─── Stale-order failover (state-machine legal, non-destructive) ───────

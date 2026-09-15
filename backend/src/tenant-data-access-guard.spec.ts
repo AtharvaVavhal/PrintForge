@@ -185,6 +185,26 @@ const ALLOWLIST: ReadonlyArray<{ path: string; category: string }> = [
     category:
       'platform admin (Phase 6 W1 — SUPER_ADMIN plan/feature/limit/override catalogue CRUD, gated by PlatformGuard)',
   },
+  // "ops CLI script" — Phase 8 (P8-13, P1 #1 remediation,
+  // docs/saas/PHASE-8-SECURITY-AUDIT.md §18/§19). NOT reachable via any
+  // HTTP route, any guard, or any request context at all — a standalone,
+  // read-only operator script (`prisma/ops/payment-account-readiness-check.ts`)
+  // run manually before a Phase 8 deploy, same "cross-tenant by design"
+  // category the header above already names for cron pollers/platform
+  // admin, but with an even smaller attack surface: no controller, no
+  // guard to bypass, because there is no HTTP entry point whatsoever.
+  // Reads `Store` (id/tenantId/name/status/slug only, plus its
+  // `paymentAccounts` relation's id/status — never `credentialsEncrypted`
+  // or any other credential field) across every tenant, by design — the
+  // whole point is to report which tenants/stores are NOT yet ready for
+  // Phase 8 payment code, which is structurally impossible to answer
+  // scoped to one tenant. Never writes anything (see the file's own doc
+  // comment) and touches no other tenancy or commerce table.
+  {
+    path: 'payments/payment-accounts/payment-account-readiness.ts',
+    category:
+      'ops CLI script (P8-13 — read-only, cross-tenant PaymentAccount readiness report, no HTTP entry point)',
+  },
 ];
 
 function stripComments(code: string): string {
@@ -253,7 +273,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
     }
   });
 
-  it('the nine known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, tenant-actor-attribution.ts, and platform-plans.service.ts', () => {
+  it('the ten known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, tenant-actor-attribution.ts, platform-plans.service.ts, and payment-account-readiness.ts', () => {
     const detectedTodayFiles = ALLOWLIST.filter((a) => {
       try {
         const code = stripComments(readFileSync(join(SRC_DIR, a.path), 'utf8'));
@@ -276,6 +296,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
         'team/team.service.ts',
         'common/audit/tenant-actor-attribution.ts',
         'platform/platform-plans/platform-plans.service.ts',
+        'payments/payment-accounts/payment-account-readiness.ts',
       ].sort(),
     );
   });
