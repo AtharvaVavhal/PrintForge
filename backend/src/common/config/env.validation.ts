@@ -100,6 +100,56 @@ function missingProductionKeys(config: Record<string, unknown>): string[] {
 }
 
 /**
+ * Phase 9 (spec §5.2 / §7.3) — FORMAT check for the two storefront-domain
+ * variables, applied in every environment but only when the variable is
+ * actually present:
+ *
+ *   `PLATFORM_STOREFRONT_DOMAIN`         e.g. `stores.printforge.app`
+ *   `PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET` e.g. the hosting provider's target
+ *
+ * Both must be bare hostnames — no scheme, no port, no path, no wildcard —
+ * because `PLATFORM_STOREFRONT_DOMAIN` is string-suffix-matched against a
+ * normalised request hostname (`normaliseHost`), and a value like
+ * `https://stores.printforge.app/` or `*.stores.printforge.app` would silently
+ * match nothing at all rather than failing visibly.
+ *
+ * Deliberately NOT added to `PRODUCTION_REQUIRED_KEYS`: spec §5.2 classes
+ * `PLATFORM_STOREFRONT_DOMAIN` as Tier-2 (production-enforced), but flipping
+ * that on today would make the next production boot FAIL until ops sets the
+ * variable, and the §17.1 ops checklist that provisions it (domain ownership,
+ * wildcard DNS, Vercel configuration) is still open. The enforcement flip
+ * belongs to the ops-cutover wave, alongside the checklist — see
+ * docs/ops/ENVIRONMENT.md. Until then an unset value is a documented,
+ * fail-closed degradation: no `PLATFORM_SUBDOMAIN` row is provisioned and no
+ * host resolves, rather than a boot failure.
+ */
+const BARE_HOSTNAME =
+  /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
+
+const STOREFRONT_DOMAIN_KEYS = [
+  'PLATFORM_STOREFRONT_DOMAIN',
+  'PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET',
+] as const;
+
+function invalidStorefrontDomains(config: Record<string, unknown>): string[] {
+  const messages: string[] = [];
+  for (const key of STOREFRONT_DOMAIN_KEYS) {
+    const raw = config[key];
+    if (typeof raw !== 'string' || raw.trim() === '') {
+      continue; // optional — see the comment above.
+    }
+    // Accept the trailing dot `configuration.ts` strips, nothing else.
+    const value = raw.trim().toLowerCase().replace(/\.$/, '');
+    if (!BARE_HOSTNAME.test(value)) {
+      messages.push(
+        `${key} must be a bare hostname such as stores.example.com — no scheme, port, path or wildcard`,
+      );
+    }
+  }
+  return messages;
+}
+
+/**
  * Format check for `PAYMENT_CREDENTIALS_MASTER_KEY`, separate from the
  * plain presence check above: a *present but malformed* value (wrong
  * length, not base64) must also fail boot in production, not be silently
@@ -135,6 +185,10 @@ export function validateEnv(
   const messages = errors.map((e) =>
     Object.values(e.constraints ?? {}).join(', '),
   );
+
+  // Every environment: a PRESENT storefront-domain value must be well-formed
+  // (Phase 9 §5.2/§7.3). Absence stays legal — see invalidStorefrontDomains.
+  messages.push(...invalidStorefrontDomains(config));
 
   if (validatedConfig.NODE_ENV === 'production') {
     messages.push(

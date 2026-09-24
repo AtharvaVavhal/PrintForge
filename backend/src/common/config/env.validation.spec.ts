@@ -25,7 +25,8 @@ const PROD_INTEGRATION: Record<string, string> = {
   // 32 random bytes, base64 — a validly-SHAPED placeholder (not a real
   // secret; this exact value is also not used anywhere outside this test
   // file/`.env.test`, see ENVIRONMENT.md's own note on that distinction).
-  PAYMENT_CREDENTIALS_MASTER_KEY: 'MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=',
+  PAYMENT_CREDENTIALS_MASTER_KEY:
+    'MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=',
   CLOUDINARY_CLOUD_NAME: 'printforge',
   CLOUDINARY_API_KEY: 'placeholder',
   CLOUDINARY_API_SECRET: 'placeholder',
@@ -103,6 +104,83 @@ describe('validateEnv', () => {
 
   // ─── PAYMENT_CREDENTIALS_MASTER_KEY (P8-D6) ─────────────────────────
 
+  // ─── Phase 9 (spec §5.2 / §7.3) — storefront domain variables ──────────
+
+  describe('PLATFORM_STOREFRONT_DOMAIN / PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET', () => {
+    it.each([
+      'PLATFORM_STOREFRONT_DOMAIN',
+      'PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET',
+    ])('accepts a bare hostname for %s', (key) => {
+      expect(() =>
+        validateEnv({ ...BASE, [key]: 'stores.printforge.app' }),
+      ).not.toThrow();
+    });
+
+    it('accepts a trailing dot (configuration.ts strips it)', () => {
+      expect(() =>
+        validateEnv({
+          ...BASE,
+          PLATFORM_STOREFRONT_DOMAIN: 'Stores.PrintForge.App.',
+        }),
+      ).not.toThrow();
+    });
+
+    it('stays optional in every environment when unset or blank', () => {
+      for (const value of [undefined, '', '   ']) {
+        expect(() =>
+          validateEnv({ ...BASE, PLATFORM_STOREFRONT_DOMAIN: value }),
+        ).not.toThrow();
+      }
+    });
+
+    it.each([
+      ['a scheme', 'https://stores.printforge.app'],
+      ['a trailing path', 'stores.printforge.app/'],
+      ['a wildcard', '*.stores.printforge.app'],
+      ['a port', 'stores.printforge.app:443'],
+      ['a single label', 'localhost'],
+      ['an underscore', 'under_score.example'],
+    ])('rejects %s', (_label, value) => {
+      expect(() =>
+        validateEnv({ ...BASE, PLATFORM_STOREFRONT_DOMAIN: value }),
+      ).toThrow(/PLATFORM_STOREFRONT_DOMAIN must be a bare hostname/);
+    });
+
+    it('never echoes the offending value into the message (secret hygiene)', () => {
+      let message = '';
+      try {
+        validateEnv({
+          ...BASE,
+          PLATFORM_STOREFRONT_DOMAIN: 'https://secret-host.example/path',
+        });
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      expect(message).toContain('PLATFORM_STOREFRONT_DOMAIN');
+      expect(message).not.toContain('secret-host.example');
+    });
+
+    it('is deliberately NOT production-required yet — the §17.1 ops checklist gates that flip', () => {
+      expect(PRODUCTION_REQUIRED_KEYS).not.toContain(
+        'PLATFORM_STOREFRONT_DOMAIN',
+      );
+      expect(() =>
+        validateEnv({ ...BASE, ...PROD_INTEGRATION, NODE_ENV: 'production' }),
+      ).not.toThrow();
+    });
+
+    it('a malformed value still fails a PRODUCTION boot (format applies in every environment)', () => {
+      expect(() =>
+        validateEnv({
+          ...BASE,
+          ...PROD_INTEGRATION,
+          NODE_ENV: 'production',
+          PLATFORM_STOREFRONT_DOMAIN: 'https://stores.printforge.app',
+        }),
+      ).toThrow(/must be a bare hostname/);
+    });
+  });
+
   describe('PAYMENT_CREDENTIALS_MASTER_KEY', () => {
     it('does not require it outside production', () => {
       expect(() => validateEnv({ ...BASE })).not.toThrow();
@@ -126,9 +204,8 @@ describe('validateEnv', () => {
           ...BASE,
           NODE_ENV: 'production',
           ...PROD_INTEGRATION,
-          PAYMENT_CREDENTIALS_MASTER_KEY: Buffer.from('too-short').toString(
-            'base64',
-          ),
+          PAYMENT_CREDENTIALS_MASTER_KEY:
+            Buffer.from('too-short').toString('base64'),
         }),
       ).toThrow(/PAYMENT_CREDENTIALS_MASTER_KEY is not a valid AES-256 key/);
     });

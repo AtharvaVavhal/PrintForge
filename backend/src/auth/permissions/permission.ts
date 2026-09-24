@@ -44,6 +44,12 @@ export const PERMISSIONS = [
   'members:manage',
   'payment-account:manage',
   'billing:manage',
+  // Phase 9 (P9-S2, ratified 2026-09-20): merchant store-domain management
+  // — add / list / verify (W5), and set-primary / remove / TLS refresh
+  // (W6). OWNER-only by ratified default, excluded from ADMIN exactly like
+  // `members:manage` / `payment-account:manage`. `settings:write` is NOT
+  // reused (P9-S2: "Do not reuse an existing permission").
+  'store-domain:manage',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -60,7 +66,9 @@ const ALL_PERMISSIONS = new Set<Permission>(PERMISSIONS);
 const ADMIN_PERMISSIONS = new Set<Permission>(
   PERMISSIONS.filter(
     (p): p is Permission =>
-      p !== 'members:manage' && p !== 'payment-account:manage',
+      p !== 'members:manage' &&
+      p !== 'payment-account:manage' &&
+      p !== 'store-domain:manage',
   ),
 );
 

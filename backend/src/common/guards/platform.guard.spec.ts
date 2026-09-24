@@ -151,6 +151,12 @@ describe('PlatformGuard (Phase 2a)', () => {
         // domain-resolution kill-switch, spec §15), the fourth legitimate
         // @PlatformOnly() consumer.
         'platform/platform-config/platform-config.controller.ts',
+        // Phase 9 W5 — PlatformDomainsController is the Platform Control
+        // Plane's store-domain revoke / override / re-verify route set
+        // (spec §6.4; P9-S7 makes these the ONLY exits from FAILED, which
+        // is precisely why they must be unreachable by a tenant OWNER), the
+        // fifth legitimate @PlatformOnly() consumer.
+        'platform/platform-domains/platform-domains.controller.ts',
       ].sort(),
     );
   });

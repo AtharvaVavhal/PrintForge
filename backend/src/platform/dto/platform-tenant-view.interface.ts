@@ -31,8 +31,11 @@ export interface PlatformStoreSummaryView {
 
 /** GET /platform/tenants/:id — metadata + store list + subscription
  * status, per §11's "view a tenant's subscription + store + domain status
- * (read of *metadata*, not the tenant's business rows)". Domain status is
- * deferred — no domain-review capability exists in W3 (Phase 9 concern). */
+ * (read of *metadata*, not the tenant's business rows)". Domain status is NOT
+ * inlined here: Phase 9 W6 gives it a dedicated surface (P9-D5) —
+ * `GET /platform/domains?tenantId=<id>` lists this tenant's domains with
+ * their verification/TLS state, and `GET /platform/domains/:id` inspects one
+ * with a live provider read. */
 export interface PlatformTenantDetailView {
   id: string;
   slug: string;

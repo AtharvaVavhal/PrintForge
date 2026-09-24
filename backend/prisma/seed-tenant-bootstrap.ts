@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { seedFreePlanCatalogue } from './free-plan-catalogue';
+import { ensurePlatformSubdomain } from '../src/store-domains/platform-subdomain';
 
 /**
  * SaaS Master Plan Phase 1 — dev/test tenant bootstrap (spec §B.8 item 6,
@@ -12,7 +13,9 @@ import { seedFreePlanCatalogue } from './free-plan-catalogue';
  *   - Tenant #1 (decision D3-A: the existing deployment becomes an ordinary
  *     tenant with no implicit privileges — identified by slug in Phase 1;
  *     the real display name is a Phase 4 input)
- *   - its single primary Store
+ *   - its single primary Store, WITH its PLATFORM_SUBDOMAIN StoreDomain row
+ *     ({store-slug}.$PLATFORM_STOREFRONT_DOMAIN) in the same transaction
+ *     (Phase 9 W6, spec §5 creation point (b))
  *   - an OWNER TenantMembership for a chosen User
  *   - a Free / ACTIVE Subscription
  *
@@ -26,6 +29,9 @@ import { seedFreePlanCatalogue } from './free-plan-catalogue';
  *   SEED_TENANT_SLUG    (default: "tenant-1")
  *   SEED_STORE_SLUG     (default: "primary")
  *   SEED_STORE_NAME     (default: "PrintForge" — matches AppSetting.storeName default)
+ *   PLATFORM_STOREFRONT_DOMAIN
+ *                       (no default — when unset, the PLATFORM_SUBDOMAIN row
+ *                        is skipped and the reason is printed; §5.2)
  *   SEED_OWNER_EMAIL    (default: the first role=ADMIN user, else a created
  *                        dev user "owner@tenant-1.local")
  */
@@ -109,16 +115,31 @@ async function main(): Promise<void> {
     create: { slug: tenantSlug, status: 'ACTIVE' },
   });
 
-  const store = await prisma.store.upsert({
-    where: { tenantId_slug: { tenantId: tenant.id, slug: storeSlug } },
-    update: {},
-    create: {
+  // Phase 9 W6 (spec §5): the Store and its PLATFORM_SUBDOMAIN row are
+  // created together, in ONE transaction — a store that exists without its
+  // always-on platform hostname is a store the host_resolution pipeline
+  // cannot serve at all. Both steps are idempotent, so re-running the seed
+  // converges instead of failing.
+  const { store, subdomain } = await prisma.$transaction(async (tx) => {
+    const created = await tx.store.upsert({
+      where: { tenantId_slug: { tenantId: tenant.id, slug: storeSlug } },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        slug: storeSlug,
+        name: storeName,
+        status: 'ACTIVE',
+        isPrimary: true,
+      },
+    });
+    const result = await ensurePlatformSubdomain(tx, {
+      storeId: created.id,
       tenantId: tenant.id,
-      slug: storeSlug,
-      name: storeName,
-      status: 'ACTIVE',
-      isPrimary: true,
-    },
+      storeSlug: created.slug,
+      platformStorefrontDomain:
+        process.env.PLATFORM_STOREFRONT_DOMAIN?.trim() || null,
+    });
+    return { store: created, subdomain: result };
   });
 
   const ownerId = await resolveOwnerId();
@@ -148,10 +169,23 @@ async function main(): Promise<void> {
   console.log(
     `  plan         ${plan.key} (${plan.id}) catalogue: ${catalogue.featuresWritten} feature(s), ${catalogue.limitsWritten} limit(s)`,
   );
-  console.log(`  tenant       ${tenant.slug} (${tenant.id}) status=${tenant.status}`);
-  console.log(`  store        ${store.slug} "${store.name}" (${store.id}) isPrimary=${store.isPrimary}`);
-  console.log(`  membership   OWNER user=${ownerId} status=${membership.status} (${membership.id})`);
-  console.log(`  subscription ${subscription.status} plan=${plan.key} (${subscription.id})`);
+  console.log(
+    `  tenant       ${tenant.slug} (${tenant.id}) status=${tenant.status}`,
+  );
+  console.log(
+    `  store        ${store.slug} "${store.name}" (${store.id}) isPrimary=${store.isPrimary}`,
+  );
+  console.log(
+    subdomain.outcome === 'skipped'
+      ? `  subdomain    SKIPPED — PLATFORM_STOREFRONT_DOMAIN is not set, so no PLATFORM_SUBDOMAIN row exists for this store; host_resolution cannot serve it until one does`
+      : `  subdomain    ${subdomain.outcome} ${subdomain.hostname} (${subdomain.storeDomainId})`,
+  );
+  console.log(
+    `  membership   OWNER user=${ownerId} status=${membership.status} (${membership.id})`,
+  );
+  console.log(
+    `  subscription ${subscription.status} plan=${plan.key} (${subscription.id})`,
+  );
 }
 
 main()

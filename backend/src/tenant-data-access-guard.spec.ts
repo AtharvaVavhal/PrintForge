@@ -217,6 +217,55 @@ const ALLOWLIST: ReadonlyArray<{ path: string; category: string }> = [
     category:
       'ops CLI script (P8-13 — read-only, cross-tenant PaymentAccount readiness report, no HTTP entry point)',
   },
+  // "tenant admin" — Phase 9 W5's merchant store-domain add/list/verify
+  // (spec §6.1–§6.3), the same category already named above for
+  // `team.service.ts`. Reads/writes `StoreDomain` only, and EVERY query
+  // carries the caller's own server-derived `TenantContext.tenantId` in the
+  // query itself (`WHERE id = ? AND tenantId = ?` / `WHERE tenantId = ?`),
+  // inside `withTenantRlsContext` so the D4 RLS policy sees the same tenant —
+  // never a client-supplied tenant id, never another tenant's row (which is
+  // indistinguishable from a nonexistent one: 404). Gated entirely by
+  // PermissionsGuard's `store-domain:manage` check (P9-S2: OWNER only),
+  // never reachable without it. Touches no other D4 tenancy model and no
+  // business/commerce table anywhere in the file.
+  {
+    path: 'store-domains/store-domains.service.ts',
+    category:
+      'tenant admin (Phase 9 W5 — OWNER store-domain add/list/verify, gated by PermissionsGuard store-domain:manage)',
+  },
+  // "platform admin" — Phase 9 W5's store-domain revoke / override /
+  // re-verify surface (spec §6.4; P9-S7), same category already named above
+  // for `platform.service.ts` / `platform-plans.service.ts`: cross-tenant by
+  // design (SUPER_ADMIN + `PlatformAuditLog` with a required justification),
+  // gated entirely by `PlatformGuard`/`@PlatformOnly()` upstream
+  // (`platform-domains.controller.ts`), never reachable by a tenant user
+  // under any permission. Reaches the row through `withPlatformRlsBypass`
+  // (named as call site 5 in that helper's own doc comment) because a
+  // platform actor has no tenant of their own to scope the transaction to.
+  // Touches `StoreDomain` and nothing else — no other tenancy model, no
+  // business/commerce table, and never a tenant's own `TenantAuditLog`.
+  {
+    path: 'platform/platform-domains/platform-domains.service.ts',
+    category:
+      'platform admin (Phase 9 W5/W6 — SUPER_ADMIN store-domain list/inspect/revoke/override/re-verify/remove, gated by PlatformGuard)',
+  },
+  // "store provisioning" — Phase 9 W6's platform-subdomain creation helper
+  // (spec §5 creation point (b), S-5). Writes exactly one `StoreDomain` row
+  // for a store being created, inside the CALLER's transaction, with both
+  // `storeId` and `tenantId` supplied by that caller from the store it just
+  // created — never from a request, never resolved by this file. Its one
+  // cross-store read is the S-5 pre-insert `hostname` uniqueness check, which
+  // is unavoidably global: the constraint it is protecting (`hostname
+  // @unique`) is itself global, and the check exists precisely so a second
+  // tenant deriving the same hostname fails loudly instead of hitting the DB
+  // backstop. Reads/writes no other tenancy model and no business table. The
+  // only caller today is `prisma/seed-tenant-bootstrap.ts` (§5: no runtime
+  // code creates a Store).
+  {
+    path: 'store-domains/platform-subdomain.ts',
+    category:
+      'store provisioning (Phase 9 W6 — creation-time PLATFORM_SUBDOMAIN row + S-5 global hostname collision check)',
+  },
 ];
 
 function stripComments(code: string): string {
@@ -285,7 +334,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
     }
   });
 
-  it('the eleven known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, store-domain-resolver.service.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, tenant-actor-attribution.ts, platform-plans.service.ts, payment-account-readiness.ts, and payment-account-readiness.ts', () => {
+  it('the fourteen known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, store-domain-resolver.service.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, tenant-actor-attribution.ts, platform-plans.service.ts, payment-account-readiness.ts, store-domains.service.ts, platform-domains.service.ts, and platform-subdomain.ts', () => {
     const detectedTodayFiles = ALLOWLIST.filter((a) => {
       try {
         const code = stripComments(readFileSync(join(SRC_DIR, a.path), 'utf8'));
@@ -310,6 +359,9 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
         'common/audit/tenant-actor-attribution.ts',
         'platform/platform-plans/platform-plans.service.ts',
         'payments/payment-accounts/payment-account-readiness.ts',
+        'store-domains/store-domains.service.ts',
+        'platform/platform-domains/platform-domains.service.ts',
+        'store-domains/platform-subdomain.ts',
       ].sort(),
     );
   });

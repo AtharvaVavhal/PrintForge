@@ -30,22 +30,31 @@ describe('permission catalogue (G-13, extended by P7-D2 Part A)', () => {
         'members:manage',
         'payment-account:manage',
         'billing:manage',
+        'store-domain:manage',
       ].sort(),
     );
   });
 
-  it('OWNER holds all 14 permissions', () => {
-    expect(ROLE_PERMISSIONS.OWNER.size).toBe(14);
+  it('OWNER holds all 15 permissions (P9-S2 adds store-domain:manage)', () => {
+    expect(ROLE_PERMISSIONS.OWNER.size).toBe(15);
     for (const p of PERMISSIONS) {
       expect(ROLE_PERMISSIONS.OWNER.has(p)).toBe(true);
     }
   });
 
-  it('ADMIN holds every permission except members:manage and payment-account:manage (billing:manage included, P7-D2 Part A)', () => {
+  it('ADMIN holds every permission except members:manage, payment-account:manage and store-domain:manage (billing:manage included, P7-D2 Part A)', () => {
     expect(ROLE_PERMISSIONS.ADMIN.has('members:manage')).toBe(false);
     expect(ROLE_PERMISSIONS.ADMIN.has('payment-account:manage')).toBe(false);
+    expect(ROLE_PERMISSIONS.ADMIN.has('store-domain:manage')).toBe(false);
     expect(ROLE_PERMISSIONS.ADMIN.has('billing:manage')).toBe(true);
     expect(ROLE_PERMISSIONS.ADMIN.size).toBe(12);
+  });
+
+  it('store-domain:manage is OWNER-only (P9-S2 ratified default) — no other role holds it', () => {
+    expect(ROLE_PERMISSIONS.OWNER.has('store-domain:manage')).toBe(true);
+    for (const role of ['ADMIN', 'STAFF', 'VIEWER'] as const) {
+      expect(ROLE_PERMISSIONS[role].has('store-domain:manage')).toBe(false);
+    }
   });
 
   it('STAFF and VIEWER do not hold billing:manage (P7-D2 Part A — admin-tier only)', () => {

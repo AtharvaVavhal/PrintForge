@@ -14,6 +14,10 @@ import { CloudinaryService } from '../../../src/uploads/cloudinary/cloudinary.se
 import { FakeCloudinaryService } from './fake-cloudinary.service';
 import { BILLING_PROVIDER } from '../../../src/subscriptions/billing-provider.token';
 import { FakeBillingProvider } from '../../../src/subscriptions/fake-billing-provider';
+import { DOMAIN_DNS_RESOLVER } from '../../../src/store-domains/dns/domain-dns-resolver';
+import { DOMAIN_HOSTING_PROVIDER } from '../../../src/common/tenant/store-domain-resolution/hosting/domain-hosting-provider';
+import { FakeDomainHostingProvider } from '../../../src/common/tenant/store-domain-resolution/hosting/fake-domain-hosting.provider';
+import { FakeDnsResolver } from './fake-dns-resolver';
 
 export interface TestApp {
   app: INestApplication;
@@ -119,4 +123,60 @@ export async function createTestAppWithExtraModules(
 
   const prisma = app.get(PrismaService);
   return { app, prisma };
+}
+
+/**
+ * Phase 9 W5/W6 — identical to `createTestApp()` (same overrides, pipes,
+ * prefix and cookie setup) but additionally swaps the two Phase 9 external
+ * seams for shared, test-controlled instances, both returned alongside the
+ * app:
+ *
+ *   `DOMAIN_DNS_RESOLVER`    → `FakeDnsResolver`           (spec §6.3, §14.2)
+ *   `DOMAIN_HOSTING_PROVIDER`→ `FakeDomainHostingProvider` (spec §7.1)
+ *
+ * Both are returned rather than merely bound, because W5/W6's central
+ * assertions are about what the production code ACTUALLY did to them — that a
+ * platform-revoked row triggers zero DNS lookups (P9-S7), and that a domain
+ * only becomes serveable once the hosting provider really reports an issued
+ * certificate (§7.2). An instance whose calls are recorded is the only way to
+ * observe that.
+ *
+ * A separate entry point rather than a parameter on `createTestApp()` for the
+ * same reason `createTestAppWithExtraModules` is separate: every existing e2e
+ * file keeps its exact current wiring, unmodified. Production binds
+ * `NodeDnsResolver` and `UnprovisionedDomainHostingProvider` — no test-only
+ * provider is ever wired into the shipped app.
+ */
+export async function createTestAppWithDomainFakes(): Promise<
+  TestApp & { dns: FakeDnsResolver; hosting: FakeDomainHostingProvider }
+> {
+  const dns = new FakeDnsResolver();
+  const hosting = new FakeDomainHostingProvider();
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(CloudinaryService)
+    .useClass(FakeCloudinaryService)
+    .overrideProvider(BILLING_PROVIDER)
+    .useClass(FakeBillingProvider)
+    .overrideProvider(DOMAIN_DNS_RESOLVER)
+    .useValue(dns)
+    .overrideProvider(DOMAIN_HOSTING_PROVIDER)
+    .useValue(hosting)
+    .compile();
+
+  const app = moduleRef.createNestApplication({ rawBody: true });
+  app.setGlobalPrefix(API_PREFIX);
+  app.use(cookieParser());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  await app.init();
+
+  const prisma = app.get(PrismaService);
+  return { app, prisma, dns, hosting };
 }

@@ -82,10 +82,11 @@ describe('PermissionsGuard (Phase 3)', () => {
     );
   });
 
-  it('ADMIN cannot manage members or the payment account (OWNER-reserved)', () => {
+  it('ADMIN cannot manage members, the payment account, or store domains (OWNER-reserved)', () => {
     for (const permission of [
       'members:manage',
       'payment-account:manage',
+      'store-domain:manage',
     ] as Permission[]) {
       const { context, reflector } = makeContext(permission, {
         tenantId: 't1',
