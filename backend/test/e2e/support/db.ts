@@ -65,6 +65,9 @@ const ALL_TABLES = [
   // platform-control-plane.e2e-spec.ts (W3) onward.
   'platform_audit_logs',
   'tenant_audit_logs',
+  // Phase 9 (W1) — platform-owned runtime configuration (P9-D8). Written
+  // by storefront-resolution-mode.e2e-spec.ts (W2) onward.
+  'platform_config',
 ];
 
 /**

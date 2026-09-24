@@ -202,6 +202,9 @@ model User {
   // PlatformAuditLog.actorUserId is always a SUPER_ADMIN acting on
   // /platform/* (decision P5-D3).
   platformAuditLogs PlatformAuditLog[]
+  // Phase 9 (W1) — back-relation only; adds NO column to `users`.
+  // PlatformConfig.updatedByUserId is a SUPER_ADMIN acting on /platform/*.
+  platformConfigUpdates PlatformConfig[]
 
   // Phase 5 (W6) — back-relations only; add NO column to `users`. Every
   // SupportSession.createdByUserId is a SUPER_ADMIN at creation time
@@ -1186,6 +1189,35 @@ enum DomainVerificationStatus {
   FAILED
 }
 
+// Phase 9 W1 (decision P9-D2 — OPTION B; spec §3.1). Three NEW enums backing
+// the four nullable `StoreDomain` columns added in the same wave. The
+// G-5-ratified `DomainVerificationStatus` set above is deliberately NOT
+// amended — no `VERIFYING` (P9-D2: "DO NOT add VERIFYING"). A failed
+// merchant verification keeps `PENDING` (spec S-6); `FAILED` is entered only
+// by a platform revoke (spec S-7 / P9-S7).
+//
+// `PLATFORM_SUBDOMAIN` rows are always-on (never verification/TLS gated);
+// `CUSTOM` rows are served only when VERIFIED + ISSUED (spec §4.3).
+enum StoreDomainType {
+  PLATFORM_SUBDOMAIN
+  CUSTOM
+}
+
+// How a merchant proves ownership of a CUSTOM hostname (spec §6.3). Checked
+// on demand only in Phase 9 (P9-D7) — no scheduled worker.
+enum DomainVerificationMethod {
+  DNS_TXT
+  CNAME
+}
+
+// Certificate state reported by the hosting provider (Vercel-managed TLS,
+// P9-D3; spec §7.2). Not consulted for PLATFORM_SUBDOMAIN rows (wildcard).
+enum TlsStatus {
+  PENDING
+  ISSUED
+  ERROR
+}
+
 // SaaS subscription state — the 7 frozen states, no additions (frozen SaaS §7;
 // ratified verbatim, G-5). Billing-provider coupling is Phase 7.
 enum SubscriptionStatus {
@@ -1346,15 +1378,30 @@ model Store {
 //
 // The verification *mechanism* and host -> store -> tenant runtime resolution
 // are Phase 9 — Phase 1 stores the model + state only.
+//
+// Phase 9 W1 (P9-D2 — OPTION B; spec §3.2) adds EXACTLY four columns, each
+// nullable with NO database default (G-19 shape: one purely-additive
+// `ADD COLUMN` per statement). Application-level reading rules (P6-D1
+// pattern, spec §3.2): `type IS NULL` reads as CUSTOM (fail-closed);
+// `tlsStatus IS NULL` reads as PENDING for CUSTOM rows and is not consulted
+// for PLATFORM_SUBDOMAIN rows; `verificationMethod`/`lastCheckedAt` carry no
+// serving semantics. The W2/W8 backfill sets `type` on every existing row.
+// NOT here (P9-D2 / S-6 / S-7): no verification-reason column (the reason is
+// retained in the verify response + TenantAuditLog), no revoke marker (every
+// FAILED row is platform-revoked by construction), no `VERIFYING`.
 model StoreDomain {
-  id                 String                   @id @default(uuid())
+  id                 String                    @id @default(uuid())
   storeId            String
   tenantId           String
-  hostname           String                   @unique
-  isPrimary          Boolean                  @default(false)
-  verificationStatus DomainVerificationStatus @default(PENDING)
+  hostname           String                    @unique
+  isPrimary          Boolean                   @default(false)
+  verificationStatus DomainVerificationStatus  @default(PENDING)
   verificationToken  String?
   verifiedAt         DateTime?
+  type               StoreDomainType?
+  verificationMethod DomainVerificationMethod?
+  lastCheckedAt      DateTime?
+  tlsStatus          TlsStatus?
 
   createdAt DateTime @default(now())
 
@@ -1778,6 +1825,32 @@ model TenantCounter {
 // for OutboxEvent, and OrderStatusHistory's own append-only precedent
 // before that.
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Phase 9 W1 (decision P9-D8; spec §3.3, S-3). Platform-owned runtime
+// key/value configuration — the storage behind the storefront domain-
+// resolution kill-switch (`storefront.domain_resolution_mode`, spec §15)
+// and any future platform-level runtime switch. Platform-owned like `plans` /
+// `platform_audit_logs`: NO `tenantId`, NOT RLS-enabled, never reachable
+// through a tenant-scoped client. Keys are constants in code, never
+// client-supplied. Written only via `@PlatformOnly()` routes with a
+// PlatformAuditLog entry (spec §15); read by the resolver's cached mode-
+// reader. `updatedByUserId` is nullable so a seed/backfill row (spec §16.2
+// B-4) can exist without an actor; `onDelete: Restrict` mirrors
+// PlatformAuditLog.actorUserId. Runtime behaviour is W2 — W1 is the table
+// only.
+model PlatformConfig {
+  id              String  @id @default(uuid())
+  key             String  @unique
+  value           String
+  updatedByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  updatedBy User? @relation(fields: [updatedByUserId], references: [id], onDelete: Restrict)
+
+  @@map("platform_config")
+}
 
 // Platform-scoped audit trail — every SUPER_ADMIN action on /platform/*
 // (Phase 5 W3 onward). `tenantId` is nullable: present only when the
