@@ -15,7 +15,8 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import type { ResultWithMeta } from '../common/types/api-response.interface';
 import type { RequestWithTenantContext } from '../common/tenant/tenant-context';
-import { StorefrontTenantResolver } from '../common/tenant/storefront-tenant.resolver';
+import { StoreContextService } from '../common/tenant/store-domain-resolution/store-context.service';
+import type { StorefrontRequest } from '../common/tenant/store-domain-resolution/store-context.service';
 import { CartService } from './cart.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { CartItemView } from './dto/cart-view.interface';
@@ -40,21 +41,23 @@ type RequestWithHostname = RequestWithTenantContext & { hostname: string };
 export class CartController {
   constructor(
     private readonly cartService: CartService,
-    private readonly tenantResolver: StorefrontTenantResolver,
+    private readonly storeContext: StoreContextService,
   ) {}
 
   /**
    * A shopper (`Role.CUSTOMER`) never holds a `TenantMembership`, so
    * `TenantContextGuard` never resolves `request.tenantContext` for these
-   * routes today — `StorefrontTenantResolver` is the fallback (Phase 4 W7
-   * / P4-D2). Prefers `tenantContext` when present (e.g. an admin account
-   * exercising these same endpoints) so the merchant path never pays for
-   * a redundant lookup.
+   * routes — the storefront scope comes from `StoreContextService` (Phase
+   * 9 W3, spec §4.4): the W2 kill-switch selects the pre-Phase-9
+   * `StorefrontTenantResolver` (`legacy_single_store`) or the `Origin`-
+   * keyed `StoreDomain` pipeline (`host_resolution`). Prefers
+   * `tenantContext` when present (e.g. an admin account exercising these
+   * same endpoints) so the merchant path never pays for a redundant
+   * lookup — unchanged since Phase 4 W7 / P4-D2.
    */
   private resolveTenantId(request: RequestWithHostname): Promise<string> {
-    return this.tenantResolver.resolveActiveTenantId(
-      request.tenantContext,
-      request.hostname,
+    return this.storeContext.resolveActiveTenantId(
+      request as unknown as StorefrontRequest,
     );
   }
 

@@ -5,6 +5,16 @@ import { assertTenantActive } from './tenant-lifecycle';
 import { withPlatformRlsBypass } from './tenant-rls';
 
 /**
+ * Phase 9 W3 (spec §4.5, §4.7): this class is now the `legacy_single_store`
+ * STRATEGY behind `store-domain-resolution/store-context.service.ts` — the
+ * pre-Phase-9 behaviour kept verbatim (host lookup, else the most-recently-
+ * created tenant) and selected ONLY while the W2 kill-switch
+ * (`storefront.domain_resolution_mode`, P9-D8) is `legacy_single_store`.
+ * In `host_resolution` mode it is never called: an unresolvable storefront
+ * host is a 404 there, never the most-recent tenant (§4.3). It is not
+ * enhanced and not removed in Phase 9 (§15 "Removal"). Provided once by
+ * `StoreDomainResolutionModule`; consumers no longer inject it directly.
+ *
  * Phase 4 W7 (decision P4-D2's create-path fix). Resolves the tenant a
  * STOREFRONT (customer-facing, non-membership) write belongs to, for the
  * narrow set of call sites that have no other already-loaded, already-

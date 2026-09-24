@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ProductsModule } from '../products/products.module';
 import { UploadsModule } from '../uploads/uploads.module';
-import { StorefrontTenantResolver } from '../common/tenant/storefront-tenant.resolver';
+import { StoreDomainResolutionModule } from '../common/tenant/store-domain-resolution/store-domain-resolution.module';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
 
@@ -11,9 +11,9 @@ import { CartService } from './cart.service';
  * client-side cart context (§10/§17).
  */
 @Module({
-  imports: [ProductsModule, UploadsModule],
+  imports: [ProductsModule, UploadsModule, StoreDomainResolutionModule],
   controllers: [CartController],
-  providers: [CartService, StorefrontTenantResolver],
+  providers: [CartService],
   exports: [CartService],
 })
 export class CartModule {}

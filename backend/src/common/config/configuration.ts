@@ -46,6 +46,23 @@ export interface AppConfig {
   paymentCredentials: {
     masterKey: string;
   };
+  /**
+   * Phase 9 (spec §5.2, §7.3). Both OPTIONAL until the W8 ops cutover
+   * (§17.1 item 4 confirms them by name on the Render service); their
+   * production enforcement (Tier-2, like `FRONTEND_URL`) is added in W8,
+   * not here. Values are hostnames, never secrets.
+   *   - `platformStorefrontDomain`: the base domain under which every
+   *     store's PLATFORM_SUBDOMAIN row lives (P9-D6: `stores.printforge.app`).
+   *     When set, a merchant may not claim a CUSTOM hostname beneath it.
+   *   - `customDomainCnameTarget`: the hosting-provider CNAME target a
+   *     merchant is instructed to point a CUSTOM hostname at (P9-D3:
+   *     Vercel-provided). Unset ⇒ the CNAME verification method is
+   *     unavailable and only DNS_TXT can be chosen.
+   */
+  storefrontDomains: {
+    platformStorefrontDomain: string | null;
+    customDomainCnameTarget: string | null;
+  };
   resend: {
     apiKey: string;
     emailFromAddress: string;
@@ -129,6 +146,12 @@ function loadTenantEnforcement(): Record<
   return result;
 }
 
+/** Lower-cased, trailing-dot-stripped, or `null` when unset/blank. */
+function optionalHostname(raw: string | undefined): string | null {
+  const value = raw?.trim().toLowerCase().replace(/\.$/, '') ?? '';
+  return value.length > 0 ? value : null;
+}
+
 export default (): AppConfig => ({
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.PORT ?? '4000', 10),
@@ -155,6 +178,14 @@ export default (): AppConfig => ({
   },
   paymentCredentials: {
     masterKey: process.env.PAYMENT_CREDENTIALS_MASTER_KEY ?? '',
+  },
+  storefrontDomains: {
+    platformStorefrontDomain: optionalHostname(
+      process.env.PLATFORM_STOREFRONT_DOMAIN,
+    ),
+    customDomainCnameTarget: optionalHostname(
+      process.env.PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET,
+    ),
   },
   resend: {
     apiKey: process.env.RESEND_API_KEY ?? '',

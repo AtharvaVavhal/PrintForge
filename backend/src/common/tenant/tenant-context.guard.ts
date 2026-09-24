@@ -8,6 +8,7 @@ import { PrismaService } from '../database/prisma.service';
 import { AuthenticatedUser } from '../decorators/current-user.decorator';
 import { PLATFORM_ONLY_KEY } from '../decorators/platform-only.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { normaliseHost } from './store-domain-resolution/host-normalisation';
 import { RequestWithTenantContext, TenantContext } from './tenant-context';
 import { withPlatformRlsBypass } from './tenant-rls';
 
@@ -156,12 +157,24 @@ export class TenantContextGuard {
     if (!hostname || memberships.length === 0) {
       return undefined;
     }
+    // Phase 9 W3 (spec §4.4): the merchant path keys on the SAME normalised
+    // form as the storefront pipeline (§4.2 — lowercase, port/trailing-dot
+    // stripped, syntax-checked) so a hostname can never match a row under
+    // two spellings. Semantics are otherwise unchanged (D6): `Host`, never
+    // `Origin`, then the membership cross-check below. Loopback is
+    // tolerated here because the only possible outcome of a loopback Host
+    // is "no row → fall through" — this input is the TLS-terminated Host,
+    // not the attacker-controlled storefront Origin.
+    const host = normaliseHost(hostname, { allowLoopback: true });
+    if (host === null) {
+      return undefined;
+    }
     // Explicitly cross-tenant by design (resolving a tenant FROM a hostname
     // — no tenant is known yet) — a named platform-scoped operation, per
     // the RLS migration's own header comment.
     const domain = await withPlatformRlsBypass(this.prisma, (tx) =>
       tx.storeDomain.findUnique({
-        where: { hostname },
+        where: { hostname: host },
         select: { store: { select: { tenantId: true } } },
       }),
     );

@@ -17,7 +17,8 @@ import type { AuthenticatedUser } from '../common/decorators/current-user.decora
 import { Role } from '../common/enums/role.enum';
 import { UPLOAD_MAX_BYTES } from '../common/constants/app.constants';
 import type { RequestWithTenantContext } from '../common/tenant/tenant-context';
-import { StorefrontTenantResolver } from '../common/tenant/storefront-tenant.resolver';
+import { StoreContextService } from '../common/tenant/store-domain-resolution/store-context.service';
+import type { StorefrontRequest } from '../common/tenant/store-domain-resolution/store-context.service';
 import { UploadsService } from './uploads.service';
 import type { MulterFileLike } from './types/multer-file.interface';
 
@@ -41,7 +42,7 @@ interface UploadedFileView {
 export class UploadsController {
   constructor(
     private readonly uploadsService: UploadsService,
-    private readonly tenantResolver: StorefrontTenantResolver,
+    private readonly storeContext: StoreContextService,
   ) {}
 
   @Post()
@@ -61,15 +62,16 @@ export class UploadsController {
     // Reached by both admins (product images) and customers (customization
     // uploads) — `TenantContextGuard` only resolves a context for the
     // former (a customer holds no `TenantMembership`), so this prefers it
-    // when present and falls back to host/sole-tenant resolution
-    // otherwise (Phase 4 W7 / P4-D2). Passed as a thunk, resolved only
-    // after `create()`'s own file validation passes (see its comment).
+    // when present and otherwise resolves the storefront scope through
+    // `StoreContextService` (Phase 9 W3, spec §4.4 — legacy or `Origin`-
+    // keyed host resolution per the W2 kill-switch; Phase 4 W7 / P4-D2
+    // before that). Passed as a thunk, resolved only after `create()`'s
+    // own file validation passes (see its comment).
     const uploaded = await this.uploadsService.create(
       user.id,
       () =>
-        this.tenantResolver.resolveActiveTenantId(
-          request.tenantContext,
-          request.hostname,
+        this.storeContext.resolveActiveTenantId(
+          request as unknown as StorefrontRequest,
         ),
       file,
     );

@@ -1,7 +1,8 @@
 import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import type { RequestWithTenantContext } from '../common/tenant/tenant-context';
-import { StorefrontTenantResolver } from '../common/tenant/storefront-tenant.resolver';
+import { StoreContextService } from '../common/tenant/store-domain-resolution/store-context.service';
+import type { StorefrontRequest } from '../common/tenant/store-domain-resolution/store-context.service';
 import { AppSettingService } from './app-setting.service';
 import {
   getAdminSettingDefinition,
@@ -33,13 +34,14 @@ type RequestWithHostname = RequestWithTenantContext & { hostname: string };
 export class AppSettingController {
   constructor(
     private readonly appSettingService: AppSettingService,
-    private readonly tenantResolver: StorefrontTenantResolver,
+    private readonly storeContext: StoreContextService,
   ) {}
 
   private resolveTenantId(request: RequestWithHostname): Promise<string> {
-    return this.tenantResolver.resolveActiveTenantId(
-      request.tenantContext,
-      request.hostname,
+    // Phase 9 W3 (spec §4.4): storefront scope via `StoreContextService`
+    // — W2 kill-switch selects legacy vs `Origin`-keyed host resolution.
+    return this.storeContext.resolveActiveTenantId(
+      request as unknown as StorefrontRequest,
     );
   }
 

@@ -77,6 +77,18 @@ const ALLOWLIST: ReadonlyArray<{ path: string; category: string }> = [
     category:
       "storefront-tenant.resolver.ts (Phase 4 W7 / P4-D2 — the storefront/customer-path counterpart of tenant-context.guard.ts's own host lookup: resolves a tenant FROM a hostname, or the sole existing tenant, for a caller with no TenantMembership to resolve one from — no tenant is known yet)",
   },
+  // Phase 9 W3 (spec §4.3, §4.7) — the `host_resolution` pipeline: resolves
+  // a Store AND its Tenant FROM a browser-supplied, normalised hostname
+  // (no tenant is known yet — the same category as the two entries above),
+  // gated by StoreDomain verification/TLS and LIVE Store/Tenant/subscription
+  // status. The ONLY file in `common/tenant/store-domain-resolution/` that
+  // touches a tenancy model; every other file there is pure or delegates
+  // here. No fallback to any tenant exists in it (unknown host → 404).
+  {
+    path: 'common/tenant/store-domain-resolution/store-domain-resolver.service.ts',
+    category:
+      'store-domain-resolver.service.ts (Phase 9 W3 — resolves a Store/Tenant FROM a hostname through the verification/TLS/liveness gates; no tenant is known yet)',
+  },
   {
     path: 'auth/strategies/jwt.strategy.ts',
     category:
@@ -273,7 +285,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
     }
   });
 
-  it('the ten known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, tenant-actor-attribution.ts, platform-plans.service.ts, and payment-account-readiness.ts', () => {
+  it('the eleven known, currently-existing access sites are exactly jwt.strategy.ts, tenant-context.guard.ts, storefront-tenant.resolver.ts, store-domain-resolver.service.ts, platform.service.ts, tenant-lifecycle.ts, support-session.service.ts, team.service.ts, tenant-actor-attribution.ts, platform-plans.service.ts, payment-account-readiness.ts, and payment-account-readiness.ts', () => {
     const detectedTodayFiles = ALLOWLIST.filter((a) => {
       try {
         const code = stripComments(readFileSync(join(SRC_DIR, a.path), 'utf8'));
@@ -290,6 +302,7 @@ describe('tenant data access — PrismaService allowlist guard (D4, Phase 3)', (
         'auth/strategies/jwt.strategy.ts',
         'common/tenant/tenant-context.guard.ts',
         'common/tenant/storefront-tenant.resolver.ts',
+        'common/tenant/store-domain-resolution/store-domain-resolver.service.ts',
         'platform/platform.service.ts',
         'common/tenant/tenant-lifecycle.ts',
         'support-sessions/support-session.service.ts',
