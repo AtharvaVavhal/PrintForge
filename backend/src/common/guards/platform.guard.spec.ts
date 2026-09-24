@@ -103,7 +103,7 @@ describe('PlatformGuard (Phase 2a)', () => {
     );
   });
 
-  it('the only route(s) in src/ that apply @PlatformOnly() are the exact, known Phase 5 W3 set (comments/docs excluded)', () => {
+  it('the only route(s) in src/ that apply @PlatformOnly() are the exact, known set (comments/docs excluded)', () => {
     // Phase 2a: this test asserted @PlatformOnly() was dormant everywhere
     // ("Phase 5 is its first consumer" — platform-only.decorator.ts's own
     // header). Phase 5 W3 built that first consumer
@@ -146,6 +146,11 @@ describe('PlatformGuard (Phase 2a)', () => {
         // TenantEntitlementOverride), the third legitimate @PlatformOnly()
         // consumer.
         'platform/platform-plans/platform-plans.controller.ts',
+        // Phase 9 W2 — PlatformConfigController is the Platform Control
+        // Plane's runtime-configuration route set (the P9-D8 storefront
+        // domain-resolution kill-switch, spec §15), the fourth legitimate
+        // @PlatformOnly() consumer.
+        'platform/platform-config/platform-config.controller.ts',
       ].sort(),
     );
   });

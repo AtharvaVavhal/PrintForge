@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../common/audit/audit.module';
 import { PlatformController } from './platform.controller';
 import { PlatformService } from './platform.service';
+import { PlatformConfigModule } from './platform-config/platform-config.module';
 import { PlatformPlansModule } from './platform-plans/platform-plans.module';
 
 /**
@@ -17,9 +18,12 @@ import { PlatformPlansModule } from './platform-plans/platform-plans.module';
  * by `app.module.ts` so the whole Platform Control Plane — tenant
  * suspend/resume/audit (`PlatformController`) plus catalogue CRUD
  * (`PlatformPlansController`) — stays one composition root.
+ * `PlatformConfigModule` (Phase 9 W2 — the P9-D8 storefront domain-
+ * resolution kill-switch, `PlatformConfigController`) is composed here for
+ * the same reason.
  */
 @Module({
-  imports: [AuditModule, PlatformPlansModule],
+  imports: [AuditModule, PlatformPlansModule, PlatformConfigModule],
   controllers: [PlatformController],
   providers: [PlatformService],
 })
