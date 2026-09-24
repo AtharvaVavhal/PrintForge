@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { StoreDomainResolutionModule } from '../common/tenant/store-domain-resolution/store-domain-resolution.module';
 import { AuditModule } from '../common/audit/audit.module';
 import { LimitEnforcementModule } from '../limits/limit-enforcement.module';
 import { UploadsModule } from '../uploads/uploads.module';
@@ -24,7 +25,14 @@ import { CustomizationValidationService } from './customizations/customization-v
  * cart line and the checkout-level pricing rollup (§11/§17).
  */
 @Module({
-  imports: [UploadsModule, AuditModule, LimitEnforcementModule],
+  // Phase 9 W4: public catalog reads take their store scope from
+  // `StoreDomainResolutionModule`'s `StoreContextService`.
+  imports: [
+    UploadsModule,
+    AuditModule,
+    LimitEnforcementModule,
+    StoreDomainResolutionModule,
+  ],
   controllers: [ProductsController, CategoriesController],
   providers: [ProductsService, CustomizationValidationService],
   exports: [ProductsService, CustomizationValidationService],

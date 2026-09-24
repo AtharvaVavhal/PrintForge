@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, Review, ReviewStatus } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
+import type { PublicReadScope } from '../common/tenant/store-domain-resolution/store-context.service';
 import { PaginatedResult } from '../common/types/api-response.interface';
 import { AuditService } from '../common/audit/audit.service';
 import { resolveTenantAuditActor } from '../common/audit/tenant-actor-attribution';
@@ -180,10 +181,24 @@ export class ReviewsService {
   async listForProduct(
     productId: string,
     query: ListProductReviewsQueryDto,
+    scope?: PublicReadScope,
   ): Promise<PaginatedResult<ReviewView>> {
+    if (scope) {
+      // Phase 9 W4 (spec §4.4): anchor the client-supplied productId to
+      // the resolved store in the query itself — a product under another
+      // tenant is as absent as a nonexistent id (404, no existence leak).
+      const product = await this.prisma.product.findFirst({
+        where: { id: productId, tenantId: scope.tenantId },
+        select: { id: true },
+      });
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
+    }
     const where: Prisma.ReviewWhereInput = {
       productId,
       status: ReviewStatus.PUBLISHED,
+      ...(scope ? { tenantId: scope.tenantId } : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.review.findMany({

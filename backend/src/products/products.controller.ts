@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { RequirePermission } from '../auth/permissions/require-permission.decorator';
@@ -17,6 +18,8 @@ import { CurrentTenant } from '../common/decorators/current-tenant.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant/tenant-context';
+import { StoreContextService } from '../common/tenant/store-domain-resolution/store-context.service';
+import type { StorefrontRequest } from '../common/tenant/store-domain-resolution/store-context.service';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -41,11 +44,23 @@ import { UpdateCustomizationFieldDto } from './dto/update-customization-field.dt
  */
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly storeContext: StoreContextService,
+  ) {}
 
+  // Phase 9 W4 (spec §2 W4, §13 I-1/I-2): the two public reads below are
+  // scoped to the resolved store in `host_resolution` mode (404/503 per
+  // §4.3 when no store resolves); in `legacy_single_store` mode
+  // `resolvePublicScope` returns `undefined` and they stay unscoped,
+  // exactly as before Phase 9.
   @Public()
   @Get()
-  async list(@Query() query: ListProductsQueryDto) {
+  async list(
+    @Query() query: ListProductsQueryDto,
+    @Req() request: StorefrontRequest,
+  ) {
+    const scope = await this.storeContext.resolvePublicScope(request);
     return this.productsService.listProducts(
       query.page,
       query.limit,
@@ -55,6 +70,7 @@ export class ProductsController {
       query.maxPrice,
       query.minRating,
       query.sort,
+      scope,
     );
   }
 
@@ -90,8 +106,12 @@ export class ProductsController {
 
   @Public()
   @Get(':slug')
-  async getBySlug(@Param('slug') slug: string) {
-    return this.productsService.getProductBySlug(slug);
+  async getBySlug(
+    @Param('slug') slug: string,
+    @Req() request: StorefrontRequest,
+  ) {
+    const scope = await this.storeContext.resolvePublicScope(request);
+    return this.productsService.getProductBySlug(slug, scope);
   }
 
   @RequirePermission('products:write')

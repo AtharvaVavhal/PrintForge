@@ -62,6 +62,16 @@ interface ItemPricing {
  * was added is reflected immediately (snapshotting happens at order-
  * creation time, Phase 5+, not here).
  */
+/**
+ * Phase 9 W4 — write-path options supplied by the controller from the
+ * resolved storefront context. `requireCartInResolvedTenant` is `true`
+ * only when the request was resolved by the `host_resolution` pipeline
+ * (`request.storeContext.resolvedBy === 'origin'`).
+ */
+export interface AddCartItemOptions {
+  requireCartInResolvedTenant?: boolean;
+}
+
 @Injectable()
 export class CartService {
   constructor(
@@ -95,16 +105,40 @@ export class CartService {
     userId: string,
     tenantId: string,
     dto: AddCartItemDto,
+    options?: AddCartItemOptions,
   ): Promise<CartItemView> {
     const cart = await this.getOrCreateCart(userId, tenantId);
-    const product = await this.getActiveProductOrThrow(dto.productId);
-    const variant = await this.getActiveVariantOrThrow(product, dto.variantId);
+    if (options?.requireCartInResolvedTenant && cart.tenantId !== tenantId) {
+      // Phase 9 W4 (spec §14.1 R-14), `host_resolution` mode only: the
+      // caller's one cart (`carts.userId @unique` — store-scoped carts are
+      // Phase 12, P9-D1) lives in another tenant than the storefront this
+      // request resolved to. Nothing from THIS store can be added to THAT
+      // cart, and nothing is written. Same generic 404 as a foreign
+      // product — no existence leak. Not applied in `legacy_single_store`
+      // mode, whose "most-recent tenant" resolution is kept verbatim
+      // (spec §4.5) and never anchored a cart to the resolving tenant.
+      throw new NotFoundException('Product not found');
+    }
+    // Phase 9 W4 (spec §4.4 tenant anchoring): every client-supplied
+    // foreign id below is loaded SCOPED to the parent cart's own tenant —
+    // never by id alone. A row from any other tenant is indistinguishable
+    // from a nonexistent one (404, no existence leak).
+    const product = await this.getActiveProductOrThrow(
+      dto.productId,
+      cart.tenantId,
+    );
+    const variant = await this.getActiveVariantOrThrow(
+      product,
+      dto.variantId,
+      cart.tenantId,
+    );
 
     this.assertQuantityInBounds(product, dto.quantity);
     await this.validateCustomizationsForWrite(
       product.id,
       dto.customizations ?? [],
       userId,
+      cart.tenantId,
     );
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -235,9 +269,19 @@ export class CartService {
     return item;
   }
 
-  private async getActiveProductOrThrow(productId: string): Promise<Product> {
-    const product = await this.prisma.product.findUnique({
-      where: { id: productId },
+  /**
+   * Phase 9 W4 (spec §4.4): the lookup itself is scoped to the cart's
+   * tenant (`WHERE id = ? AND tenantId = ?`), not "load by id, then
+   * compare" — a product that exists under another tenant is exactly as
+   * absent as one that does not exist at all. A valid UUID, or the row
+   * existing somewhere in PostgreSQL, is not authorization.
+   */
+  private async getActiveProductOrThrow(
+    productId: string,
+    tenantId: string,
+  ): Promise<Product> {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, tenantId },
     });
     if (!product) {
       throw new NotFoundException('Product not found');
@@ -254,14 +298,17 @@ export class CartService {
   private async getActiveVariantOrThrow(
     product: Product,
     variantId: string | undefined,
+    tenantId: string,
   ): Promise<ProductVariant | null> {
     if (!variantId) {
       return null;
     }
-    const variant = await this.prisma.productVariant.findUnique({
-      where: { id: variantId },
+    // Phase 9 W4: scoped to BOTH the already-anchored product and the
+    // cart's tenant in the query itself (spec §4.4).
+    const variant = await this.prisma.productVariant.findFirst({
+      where: { id: variantId, productId: product.id, tenantId },
     });
-    if (!variant || variant.productId !== product.id) {
+    if (!variant) {
       throw new NotFoundException('Variant not found for this product');
     }
     if (!variant.isAvailable) {
@@ -289,9 +336,13 @@ export class CartService {
     productId: string,
     submissions: CustomizationValueDto[],
     userId: string,
+    tenantId: string,
   ): Promise<void> {
+    // Phase 9 W4: the field set is the anchored product's own fields
+    // within the cart's tenant; a submitted fieldId outside it — including
+    // another store's field definition — is "unknown for this product".
     const fields = await this.prisma.customizationField.findMany({
-      where: { productId },
+      where: { productId, tenantId },
     });
     const fieldIds = new Set(fields.map((f) => f.id));
 
@@ -312,6 +363,7 @@ export class CartService {
           uploadedFileId: submission?.uploadedFileId,
         },
         userId,
+        tenantId,
       );
       if (!result.valid) {
         throw new BadRequestException(result.error);

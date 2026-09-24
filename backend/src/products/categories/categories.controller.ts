@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Req,
 } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermission } from '../../auth/permissions/require-permission.decorator';
@@ -16,6 +17,8 @@ import { CurrentTenant } from '../../common/decorators/current-tenant.decorator'
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import type { TenantContext } from '../../common/tenant/tenant-context';
+import { StoreContextService } from '../../common/tenant/store-domain-resolution/store-context.service';
+import type { StorefrontRequest } from '../../common/tenant/store-domain-resolution/store-context.service';
 import { ProductsService } from '../products.service';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { UpdateCategoryDto } from '../dto/update-category.dto';
@@ -37,18 +40,26 @@ import { UpdateCategoryDto } from '../dto/update-category.dto';
  */
 @Controller('categories')
 export class CategoriesController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly storeContext: StoreContextService,
+  ) {}
 
+  // Phase 9 W4: scoped to the resolved store in `host_resolution` mode;
+  // unscoped (unchanged) in `legacy_single_store` mode — see
+  // `StoreContextService.resolvePublicScope`.
   @Public()
   @Get()
-  async list() {
-    return this.productsService.listCategories();
+  async list(@Req() request: StorefrontRequest) {
+    const scope = await this.storeContext.resolvePublicScope(request);
+    return this.productsService.listCategories(scope);
   }
 
   @Public()
   @Get('tree')
-  async tree() {
-    return this.productsService.getCategoryTree();
+  async tree(@Req() request: StorefrontRequest) {
+    const scope = await this.storeContext.resolvePublicScope(request);
+    return this.productsService.getCategoryTree(scope);
   }
 
   @RequirePermission('products:read')

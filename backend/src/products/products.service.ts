@@ -12,6 +12,7 @@ import {
   ProductVariant,
 } from '@prisma/client';
 import { PrismaService } from '../common/database/prisma.service';
+import type { PublicReadScope } from '../common/tenant/store-domain-resolution/store-context.service';
 import { PaginatedResult } from '../common/types/api-response.interface';
 import { assertObjectInTenant } from '../common/tenant/object-auth';
 import { AuditService } from '../common/audit/audit.service';
@@ -60,9 +61,9 @@ export class ProductsService {
 
   // ─── Categories ──────────────────────────────────────────────────────
 
-  async listCategories(): Promise<Category[]> {
+  async listCategories(scope?: PublicReadScope): Promise<Category[]> {
     return this.prisma.category.findMany({
-      where: { isActive: true },
+      where: { isActive: true, ...(scope ? { tenantId: scope.tenantId } : {}) },
       orderBy: { name: 'asc' },
     });
   }
@@ -256,9 +257,9 @@ export class ProductsService {
 
   // ─── Category Tree ──────────────────────────────────────────────────────
 
-  async getCategoryTree(): Promise<CategoryTreeNode[]> {
+  async getCategoryTree(scope?: PublicReadScope): Promise<CategoryTreeNode[]> {
     const categories = await this.prisma.category.findMany({
-      where: { isActive: true },
+      where: { isActive: true, ...(scope ? { tenantId: scope.tenantId } : {}) },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, slug: true, parentCategoryId: true },
     });
@@ -315,9 +316,14 @@ export class ProductsService {
     maxPrice?: number,
     minRating?: number,
     sort?: 'newest' | 'price_asc' | 'price_desc' | 'rating_desc',
+    scope?: PublicReadScope,
   ): Promise<PaginatedResult<ProductWithRelations>> {
+    // Phase 9 W4 (spec §2 W4, §13 I-1/I-2): in `host_resolution` mode the
+    // public catalog is the resolved store's catalog only — a client-
+    // supplied `categoryId` from another tenant simply matches nothing.
     const where: Prisma.ProductWhereInput = {
       isActive: true,
+      ...(scope ? { tenantId: scope.tenantId } : {}),
       ...(categoryId ? { categoryId } : {}),
       ...(search
         ? { name: { contains: search, mode: 'insensitive' as const } }
@@ -371,9 +377,16 @@ export class ProductsService {
     };
   }
 
-  async getProductBySlug(slug: string): Promise<ProductWithRelations> {
+  async getProductBySlug(
+    slug: string,
+    scope?: PublicReadScope,
+  ): Promise<ProductWithRelations> {
     const product = await this.prisma.product.findFirst({
-      where: { slug, isActive: true },
+      where: {
+        slug,
+        isActive: true,
+        ...(scope ? { tenantId: scope.tenantId } : {}),
+      },
       include: PRODUCT_DETAIL_INCLUDE,
     });
     if (!product) {

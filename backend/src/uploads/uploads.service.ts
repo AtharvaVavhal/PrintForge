@@ -133,6 +133,19 @@ export class UploadsService {
     return this.prisma.uploadedFile.findUnique({ where: { id } });
   }
 
+  /**
+   * Phase 9 W4 (spec §4.4): tenant-anchored lookup for a client-supplied
+   * `uploadedFileId` — `WHERE id = ? AND tenantId = ?` in the query itself,
+   * so a file belonging to another tenant is indistinguishable from a
+   * nonexistent one.
+   */
+  async findByIdInTenant(
+    id: string,
+    tenantId: string,
+  ): Promise<UploadedFile | null> {
+    return this.prisma.uploadedFile.findFirst({ where: { id, tenantId } });
+  }
+
   getSignedUrl(file: UploadedFile): string {
     return this.resolveUrl(
       file.cloudinaryPublicId,

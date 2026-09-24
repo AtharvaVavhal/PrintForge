@@ -22,10 +22,17 @@ import {
 export class CustomizationValidationService {
   constructor(private readonly uploadsService: UploadsService) {}
 
+  /**
+   * @param tenantId Phase 9 W4 (spec §4.4): the parent's tenant. When
+   *   supplied, the uploaded file is looked up scoped to it — a file from
+   *   another tenant yields the same "Uploaded file not found" as a
+   *   nonexistent id (no existence leak), before the ownership check.
+   */
   async validate(
     field: CustomizationField,
     submission: CustomizationSubmission,
     requestingUserId: string,
+    tenantId?: string,
   ): Promise<CustomizationValidationResult> {
     const shapeResult = validateCustomizationFieldShape(field, submission);
     if (!shapeResult.valid) {
@@ -35,7 +42,13 @@ export class CustomizationValidationService {
       return shapeResult;
     }
 
-    const file = await this.uploadsService.findById(submission.uploadedFileId);
+    const file =
+      tenantId === undefined
+        ? await this.uploadsService.findById(submission.uploadedFileId)
+        : await this.uploadsService.findByIdInTenant(
+            submission.uploadedFileId,
+            tenantId,
+          );
     if (!file) {
       return {
         valid: false,

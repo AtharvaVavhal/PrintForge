@@ -78,7 +78,14 @@ export class CartController {
     @Body() dto: AddCartItemDto,
   ): Promise<ResultWithMeta<CartItemView>> {
     const tenantId = await this.resolveTenantId(request);
-    const item = await this.cartService.addItem(user.id, tenantId, dto);
+    // Phase 9 W4 (R-14): only a context produced by the `host_resolution`
+    // pipeline anchors the cart to the resolving store; the legacy strategy
+    // and the merchant `tenantContext` shortcut leave `storeContext` unset
+    // or `legacy`, so the flag is false there and behaviour is unchanged.
+    const storeContext = (request as unknown as StorefrontRequest).storeContext;
+    const item = await this.cartService.addItem(user.id, tenantId, dto, {
+      requireCartInResolvedTenant: storeContext?.resolvedBy === 'origin',
+    });
     const meta = await this.cartService.getCartTotals(user.id, tenantId);
     return { data: item, meta };
   }

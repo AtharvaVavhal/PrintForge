@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { StoreDomainResolutionModule } from '../common/tenant/store-domain-resolution/store-domain-resolution.module';
 import { AuditModule } from '../common/audit/audit.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ReviewsController } from './reviews.controller';
@@ -28,7 +29,9 @@ import { ReviewsService } from './reviews.service';
  * `ProductsService`'s business logic.
  */
 @Module({
-  imports: [OrdersModule, AuditModule],
+  // Phase 9 W4: `ProductReviewsController` scopes its public read via
+  // `StoreDomainResolutionModule`'s `StoreContextService`.
+  imports: [OrdersModule, AuditModule, StoreDomainResolutionModule],
   controllers: [ReviewsController, ProductReviewsController],
   providers: [ReviewsService],
   exports: [ReviewsService],
