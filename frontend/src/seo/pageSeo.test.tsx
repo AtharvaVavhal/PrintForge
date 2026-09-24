@@ -14,6 +14,15 @@ import { AboutPage } from '@/pages/static/AboutPage'
 import { NotFoundPage } from '@/pages/not-found/NotFoundPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
 
+/**
+ * Phase 9 W7 (spec §10.2): every canonical / og:url / JSON-LD url assertion
+ * below is against THE SERVED HOST. These used to assert
+ * `${SERVED_ORIGIN}`, which is precisely the single-store assumption
+ * W7 removes — a shared frontend deployment serves each store on its own
+ * hostname, and the origin is resolved at runtime.
+ */
+const SERVED_ORIGIN = window.location.origin
+
 function robots() {
   return document.head.querySelector('meta[name="robots"]')?.getAttribute('content') ?? null
 }
@@ -83,7 +92,7 @@ describe('HomePage SEO', () => {
 
     await waitFor(() => expect(document.title).toBe('PrintForge'))
     expect(robots()).toBe('index, follow')
-    expect(canonical()).toBe('https://www.printforge.in/')
+    expect(canonical()).toBe(`${SERVED_ORIGIN}/`)
     expect(jsonLd().some((b) => b['@type'] === 'WebSite')).toBe(true)
   })
 })
@@ -99,14 +108,14 @@ describe('ProductListPage SEO', () => {
     renderPLP('/products')
     await waitFor(() => expect(document.title).toBe('All products | PrintForge'))
     expect(robots()).toBe('index, follow')
-    expect(canonical()).toBe('https://www.printforge.in/products')
+    expect(canonical()).toBe(`${SERVED_ORIGIN}/products`)
   })
 
   it('a category view uses the category name + a category canonical + Breadcrumb JSON-LD', async () => {
     renderPLP('/products?categoryId=cat-1')
     await waitFor(() => expect(document.title).toBe('Mugs | PrintForge'))
     expect(robots()).toBe('index, follow')
-    expect(canonical()).toBe('https://www.printforge.in/products?categoryId=cat-1')
+    expect(canonical()).toBe(`${SERVED_ORIGIN}/products?categoryId=cat-1`)
     await waitFor(() =>
       expect(jsonLd().some((b) => b['@type'] === 'BreadcrumbList')).toBe(true),
     )
@@ -134,7 +143,7 @@ describe('ProductDetailPage SEO', () => {
     )
 
     await waitFor(() => expect(document.title).toBe('Ceramic Mug | PrintForge'))
-    expect(canonical()).toBe('https://www.printforge.in/products/ceramic-mug')
+    expect(canonical()).toBe(`${SERVED_ORIGIN}/products/ceramic-mug`)
     expect(ogContent('og:type')).toBe('product')
     expect(ogContent('og:image')).toBe('https://cdn/mug.png')
 
@@ -142,7 +151,7 @@ describe('ProductDetailPage SEO', () => {
     const productLd = blocks.find((b) => b['@type'] === 'Product')
     expect(productLd).toMatchObject({
       name: 'Ceramic Mug',
-      url: 'https://www.printforge.in/products/ceramic-mug',
+      url: `${SERVED_ORIGIN}/products/ceramic-mug`,
       offers: { price: '150.00', priceCurrency: 'INR', availability: 'https://schema.org/InStock' },
       aggregateRating: { ratingValue: '4.50', reviewCount: 4 },
     })
@@ -187,7 +196,7 @@ describe('Private + static + 404 SEO', () => {
     renderWithProviders(<AboutPage />)
     expect(document.title).toBe('About | PrintForge')
     expect(robots()).toBe('index, follow')
-    expect(canonical()).toBe('https://www.printforge.in/about')
+    expect(canonical()).toBe(`${SERVED_ORIGIN}/about`)
   })
 
   it('the 404 page is noindex and not presented as valid content', () => {

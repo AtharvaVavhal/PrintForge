@@ -13,6 +13,7 @@ import { ProductGallery } from '@/features/catalog/ProductGallery'
 import { findCategoryPath } from '@/features/catalog/categoryTree'
 import { Seo } from '@/seo/Seo'
 import { productJsonLd, breadcrumbJsonLd, describeProduct } from '@/seo/jsonLd'
+import { useSiteOrigin } from '@/features/store-context/useSiteOrigin'
 import { VariantSelector } from '@/features/cart/VariantSelector'
 import { AddToCartControls } from '@/features/cart/AddToCartControls'
 import {
@@ -37,6 +38,7 @@ const EMPTY_CUSTOMIZATION_STATE: CustomizationFormState = {
  * unitPrice/lineTotal for whatever ends up in the cart is always whatever
  * GET /cart (or the add-to-cart response) returns, never this number. */
 export function ProductDetailPage() {
+  const siteOrigin = useSiteOrigin()
   const { slug } = useParams<{ slug: string }>()
   const { data: product, isPending, isError, error } = useProduct(slug)
   const { data: categoryTree = [] } = useCategoryTree()
@@ -114,8 +116,10 @@ export function ProductDetailPage() {
         ogType="product"
         ogImage={primaryImage}
         jsonLd={[
-          productJsonLd(product, canonicalPath),
-          ...(breadcrumbJsonLd(breadcrumbs) ? [breadcrumbJsonLd(breadcrumbs)!] : []),
+          productJsonLd(product, canonicalPath, siteOrigin),
+          ...(breadcrumbJsonLd(breadcrumbs, siteOrigin)
+            ? [breadcrumbJsonLd(breadcrumbs, siteOrigin)!]
+            : []),
         ]}
       />
       <div className={styles.breadcrumbs}>

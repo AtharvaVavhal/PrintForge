@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { queryClient } from '@/services/queryClient'
 import { AuthProvider } from '@/features/auth/AuthProvider'
+import { StoreContextProvider } from '@/features/store-context/StoreContextProvider'
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute'
 import { AdminRoute } from '@/features/auth/AdminRoute'
 import { RootLayout } from '@/layouts/RootLayout'
@@ -46,10 +47,17 @@ import { ROUTES } from '@/constants/routes'
  *     and then <AdminLayout> (the dedicated admin shell) — deliberately
  *     NOT under <RootLayout>, so admin pages never get the storefront
  *     header / search / mega-menu / cart / footer.
+ *
+ * Phase 9 W7 (spec §10.4): <StoreContextProvider> sits outside the router
+ * because "which store is this host?" is a property of the HOST, not of the
+ * route — it is fetched once per page load and must not re-run on navigation.
+ * It wraps <AuthProvider> rather than the reverse because the store bootstrap
+ * is @Public() and has no dependency on session state.
  */
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <StoreContextProvider>
       <AuthProvider>
         <BrowserRouter>
           <Routes>
@@ -103,6 +111,7 @@ function App() {
           </Routes>
         </BrowserRouter>
       </AuthProvider>
+      </StoreContextProvider>
     </QueryClientProvider>
   )
 }

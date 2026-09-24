@@ -36,6 +36,9 @@ import { ProductsModule } from './products/products.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { SupportSessionModule } from './support-sessions/support-session.module';
 import { TeamModule } from './team/team.module';
+import { StorefrontCorsModule } from './common/tenant/store-domain-resolution/cors/storefront-cors.module';
+import { StoreDomainsModule } from './store-domains/store-domains.module';
+import { StorefrontModule } from './storefront/storefront.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 
@@ -167,6 +170,16 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     SupportSessionModule,
     TeamModule,
+    // Phase 9 W4 — `GET /storefront/context` bootstrap (spec §2 W4).
+    StorefrontModule,
+    // Phase 9 W5 — merchant `/admin/store-domains` add/list/verify (spec
+    // §6.1–§6.3). The platform half (`/platform/domains`) is composed inside
+    // `PlatformModule`, not here, so the two control planes stay separate.
+    StoreDomainsModule,
+    // Phase 9 W7 — the CORS origin predicate (spec §9, S-9) + its
+    // `@PlatformOnly()` dry-run route. `main.ts` resolves the policy from the
+    // container to build `enableCors`'s origin function.
+    StorefrontCorsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

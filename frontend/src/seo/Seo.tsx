@@ -1,3 +1,4 @@
+import { useSiteOrigin } from '@/features/store-context/useSiteOrigin'
 import { SITE_NAME, absoluteUrl, clampDescription, pageTitle } from './siteConfig'
 import type { JsonLdObject } from './jsonLd'
 
@@ -27,6 +28,12 @@ interface SeoProps {
  * dependency, no second system competing with the tags already in
  * index.html.
  *
+ * Phase 9 W7 (spec §10.2): the canonical / og:url origin is the RUNTIME one
+ * (`useSiteOrigin` — the store's `canonicalOrigin` once the bootstrap has
+ * resolved, else the served host), never a build-time literal. On a
+ * non-primary served host the canonical therefore points at the primary host,
+ * which is what tells a crawler which of a store's hostnames to index.
+ *
  * SPA caveat (§16): these tags are applied after the JS bundle runs.
  * Googlebot renders the page before indexing so it sees the final values,
  * but non-rendering crawlers and social scrapers see only index.html's
@@ -42,10 +49,11 @@ export function Seo({
   ogImage,
   jsonLd,
 }: SeoProps) {
+  const origin = useSiteOrigin()
   const fullTitle = pageTitle(title)
   const desc = description ? clampDescription(description) : undefined
   const canonicalUrl =
-    !noindex && canonicalPath ? absoluteUrl(canonicalPath) : undefined
+    !noindex && canonicalPath ? absoluteUrl(canonicalPath, origin) : undefined
 
   const blocks = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []
 

@@ -157,6 +157,13 @@ describe('PlatformGuard (Phase 2a)', () => {
         // is precisely why they must be unreachable by a tenant OWNER), the
         // fifth legitimate @PlatformOnly() consumer.
         'platform/platform-domains/platform-domains.controller.ts',
+        // Phase 9 W7 — StorefrontCorsController is the CORS predicate's
+        // read-only dry-run route (`GET /platform/config/cors-check`, spec
+        // §9). It shares W2's `platform/config` prefix but lives in the W7
+        // CORS module to avoid a module cycle; SUPER_ADMIN-only because its
+        // verdicts enumerate which hostnames are registered and served
+        // platform-wide. The sixth legitimate @PlatformOnly() consumer.
+        'common/tenant/store-domain-resolution/cors/storefront-cors.controller.ts',
       ].sort(),
     );
   });

@@ -118,15 +118,16 @@ describe('HomePage — storefront layout', () => {
     ).toHaveAttribute('href', '/products')
   })
 
-  it('announces the hero loading state politely while homepage settings are in flight', async () => {
+  it('renders the static hero immediately, before homepage settings resolve', async () => {
     mock.onGet('/settings').reply(() => new Promise(() => {})) // never settles
     mock.onGet('/settings/storeName').reply(200, { success: true, data: { value: 'PrintForge' } })
     mock.onGet('/categories').reply(...ok([category()]))
     mock.onGet('/products').reply(...ok(NEW_ARRIVALS, { page: 1, limit: 12, total: 2, totalPages: 1 }))
     renderWithProviders(<HomePage />)
 
-    const label = await screen.findByText('Loading homepage')
-    expect(label.closest('[role="status"]')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /custom prints, made to order/i }),
+    ).toBeInTheDocument()
   })
 
   it('renders the configured store name as the hero eyebrow', async () => {
@@ -137,8 +138,12 @@ describe('HomePage — storefront layout', () => {
       level: 1,
       name: /custom prints, made to order/i,
     })
-    // The eyebrow sits just above the hero headline.
-    expect(heading.previousElementSibling).toHaveTextContent('Atharva Prints')
+    // The hero renders immediately, independent of settings/store-name
+    // loading — the eyebrow (just above the headline) fills in once
+    // useStoreName resolves, so wait for it rather than asserting synchronously.
+    await waitFor(() => {
+      expect(heading.previousElementSibling).toHaveTextContent('Atharva Prints')
+    })
   })
 
   it('falls back to "PrintForge" for the hero eyebrow when the store-name endpoint fails', async () => {
@@ -224,8 +229,12 @@ describe('HomePage — storefront layout', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: /custom prints, made to order/i }),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: /shop by category/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: /new arrivals/i })).not.toBeInTheDocument()
+    // The hero renders synchronously, before the (failing) categories/products
+    // queries settle — wait for those rails to actually drop out.
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: /shop by category/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: /new arrivals/i })).not.toBeInTheDocument()
+    })
   })
 })
 
@@ -238,23 +247,21 @@ describe('HomePage — heading hierarchy (UX-14)', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   })
 
-  it('keeps exactly one <h1> when a multi-slide hero carousel is configured', async () => {
+  it('ignores hero_slides and always renders the static hero (HeroCarousel is retired)', async () => {
     mockHome({
       settings: {
         hero_slides: [
           { imageUrl: '', headline: 'Summer drop', subtext: 'a', ctaText: 'Shop', ctaLink: '/products' },
           { imageUrl: '', headline: 'Winter drop', subtext: 'b', ctaText: 'Shop', ctaLink: '/products' },
-          { imageUrl: '', headline: 'Spring drop', subtext: 'c', ctaText: 'Shop', ctaLink: '/products' },
         ],
       },
     })
     renderWithProviders(<HomePage />)
 
-    // The active slide's headline is the sole <h1>; the other slides render
-    // their headline as a (hidden) <p>, not a competing heading.
     const h1s = await screen.findAllByRole('heading', { level: 1 })
     expect(h1s).toHaveLength(1)
-    expect(h1s[0]).toHaveTextContent('Summer drop')
+    expect(h1s[0]).toHaveTextContent(/custom prints, made to order/i)
+    expect(screen.queryByRole('region', { name: /hero carousel/i })).not.toBeInTheDocument()
   })
 
   it('renders configured promo-banner titles as <h2>, not <h3> (no level skip under the hero <h1>)', async () => {
@@ -271,23 +278,6 @@ describe('HomePage — heading hierarchy (UX-14)', () => {
 })
 
 describe('HomePage — configured promo content (data layer)', () => {
-  it('mounts the hero carousel from JSON-string hero_slides and hides the neutral hero', async () => {
-    mockHome({
-      settings: {
-        hero_slides: [
-          { imageUrl: '', headline: 'Summer drop', subtext: 'a', ctaText: 'Shop', ctaLink: '/products' },
-          { imageUrl: '', headline: 'Winter drop', subtext: 'b', ctaText: 'Shop', ctaLink: '/products' },
-        ],
-      },
-    })
-    renderWithProviders(<HomePage />)
-
-    expect(await screen.findByRole('region', { name: /hero carousel/i })).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { level: 1, name: /custom prints, made to order/i }),
-    ).not.toBeInTheDocument()
-  })
-
   it('renders the promo banner grid from JSON-string banners', async () => {
     mockHome({
       settings: {
@@ -300,7 +290,7 @@ describe('HomePage — configured promo content (data layer)', () => {
     expect(within(grid).getByRole('heading', { level: 2, name: 'Sitewide sale' })).toBeInTheDocument()
   })
 
-  it('renders the curated category showcase from JSON-string showcase_categories, replacing the live rail', async () => {
+  it('renders the curated category showcase from JSON-string showcase_categories, alongside the live category rail', async () => {
     mockHome({
       settings: {
         showcase_categories: [
@@ -308,7 +298,7 @@ describe('HomePage — configured promo content (data layer)', () => {
           { categoryId: 'c2', imageUrl: '', title: 'Apparel' },
         ],
       },
-      // A live category the CategoryRail would show if it were the one rendered.
+      // A live category CategoryRail shows independently of the showcase.
       categories: [category({ id: 'live-cat', name: 'Live Rail Category' })],
     })
     renderWithProviders(<HomePage />)
@@ -320,8 +310,9 @@ describe('HomePage — configured promo content (data layer)', () => {
       'href',
       '/products?categoryId=c2',
     )
-    // The live rail is not rendered when a showcase is configured.
-    expect(screen.queryByRole('link', { name: 'Live Rail Category' })).not.toBeInTheDocument()
+    // CategoryShowcase (shop-by-needs) and CategoryRail (shop-by-category
+    // nav) are independent sections — configuring one never hides the other.
+    expect(screen.getByRole('link', { name: 'Live Rail Category' })).toBeInTheDocument()
   })
 
   it('ignores a malformed hero_slides value and falls back to the neutral hero', async () => {

@@ -3,7 +3,14 @@ import type { Crumb } from '@/components/ui/Breadcrumbs'
 import { SITE_NAME, absoluteUrl } from './siteConfig'
 
 /**
- * Structured-data builders. Every field is taken verbatim from
+ * Structured-data builders. Phase 9 W7 (spec §10.2): every builder that emits
+ * a URL takes the site `origin` as an explicit argument — they stay pure
+ * functions, and the caller (a component, via `useSiteOrigin`) is what knows
+ * the runtime host. Passing it beats a module-level mutable origin, which
+ * would bake whichever host loaded first into every later page's structured
+ * data.
+ *
+ * Every other field is taken verbatim from
  * server-provided application data — nothing is inferred, defaulted, or
  * invented (§9/§22). A field the API doesn't provide is omitted, never
  * guessed. The output is a plain object; `<Seo>` serialises it with `<`
@@ -21,8 +28,12 @@ export interface JsonLdObject {
  * are included only when real data backs them. `availability` reflects the
  * same variant state the page's "Currently unavailable" badge uses.
  */
-export function productJsonLd(product: Product, productPath: string): JsonLdObject {
-  const url = absoluteUrl(productPath)
+export function productJsonLd(
+  product: Product,
+  productPath: string,
+  origin: string,
+): JsonLdObject {
+  const url = absoluteUrl(productPath, origin)
 
   const images = product.images
     .filter((img) => img.url)
@@ -101,7 +112,10 @@ export function describeProduct(product: Product): string | null {
  * `<Breadcrumbs>` renders (§10). The final crumb (current page) carries no
  * `item`, matching how it renders as plain text rather than a link.
  */
-export function breadcrumbJsonLd(items: Crumb[]): JsonLdObject | null {
+export function breadcrumbJsonLd(
+  items: Crumb[],
+  origin: string,
+): JsonLdObject | null {
   if (items.length < 2) return null
   return {
     '@context': 'https://schema.org',
@@ -112,7 +126,7 @@ export function breadcrumbJsonLd(items: Crumb[]): JsonLdObject | null {
         position: index + 1,
         name: crumb.label,
       }
-      if (crumb.to) entry.item = absoluteUrl(crumb.to)
+      if (crumb.to) entry.item = absoluteUrl(crumb.to, origin)
       return entry
     }),
   }
@@ -121,12 +135,12 @@ export function breadcrumbJsonLd(items: Crumb[]): JsonLdObject | null {
 /** WebSite entity for the home page — enables the site name in results.
  * No SearchAction (there is no stable, documented public search URL
  * contract to point a sitelinks searchbox at). */
-export function websiteJsonLd(): JsonLdObject {
+export function websiteJsonLd(origin: string): JsonLdObject {
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: SITE_NAME,
-    url: absoluteUrl('/'),
+    url: absoluteUrl('/', origin),
   }
 }
 

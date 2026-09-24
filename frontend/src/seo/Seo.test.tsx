@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import { Seo } from './Seo'
 
+/**
+ * Phase 9 W7 (spec §10.2): canonical / og:url assert THE SERVED HOST, not a
+ * frozen `printforge.in` literal — one shared frontend serves every store on
+ * its own hostname, so the origin is a runtime fact. In jsdom the served host
+ * is `window.location.origin`. The canonicalOrigin-from-context case lives in
+ * `features/store-context/StoreContextProvider.test.tsx`.
+ */
+const SERVED_ORIGIN = window.location.origin
+
 /** Read a hoisted <meta>/<link> from the live document head. */
 function meta(selector: string): string | null {
   return document.head.querySelector(selector)?.getAttribute('content') ?? null
@@ -29,10 +38,10 @@ describe('Seo', () => {
     expect(document.title).toBe('About | PrintForge')
     expect(meta('meta[name="robots"]')).toBe('index, follow')
     expect(meta('meta[name="description"]')).toBe('Line one. Line two.')
-    expect(link('canonical')).toBe('https://www.printforge.in/about')
+    expect(link('canonical')).toBe(`${SERVED_ORIGIN}/about`)
     expect(meta('meta[property="og:type"]')).toBe('article')
     expect(meta('meta[property="og:title"]')).toBe('About | PrintForge')
-    expect(meta('meta[property="og:url"]')).toBe('https://www.printforge.in/about')
+    expect(meta('meta[property="og:url"]')).toBe(`${SERVED_ORIGIN}/about`)
     expect(meta('meta[property="og:site_name"]')).toBe('PrintForge')
     cleanup()
   })
@@ -94,7 +103,7 @@ describe('Seo', () => {
   it('swaps metadata cleanly on route change and tears it down on unmount', () => {
     const { rerender, unmount } = render(<Seo title="Page A" description="A" canonicalPath="/a" />)
     expect(document.title).toBe('Page A | PrintForge')
-    expect(link('canonical')).toBe('https://www.printforge.in/a')
+    expect(link('canonical')).toBe(`${SERVED_ORIGIN}/a`)
 
     rerender(<Seo title="Page B" noindex />)
     expect(document.title).toBe('Page B | PrintForge')

@@ -14,23 +14,30 @@ interface ProductRailProps {
   params: ListProductsParams
   /** Where "View all" points — a listing-page URL carrying the same intent. */
   viewAllHref: string
+  /** Minimum result count required to render this rail at all — a shelf
+   * with only one or two items reads as broken/sparse, which is worse than
+   * no shelf. Default 1 (render on any result), matching the original
+   * "only hide on a truly empty result" behavior. Per-category rails pass
+   * a higher floor so a thin category doesn't surface a half-empty row —
+   * this holds regardless of how much catalogue data exists overall. */
+  minItems?: number
 }
 
 const SKELETON_COUNT = 5
 
 /**
  * A single horizontally-scrolling product discovery row on the homepage.
- * Backed entirely by GET /products. If the query errors or returns nothing
- * the whole section is omitted — a storefront rail should never render an
- * error or an empty shelf.
+ * Backed entirely by GET /products. If the query errors or returns fewer
+ * than `minItems` results the whole section is omitted — a storefront rail
+ * should never render an error or a shelf too thin to look intentional.
  */
-export function ProductRail({ id, title, params, viewAllHref }: ProductRailProps) {
+export function ProductRail({ id, title, params, viewAllHref, minItems = 1 }: ProductRailProps) {
   const { data, isPending, isError } = useProducts({ limit: 12, ...params })
 
   if (isError) return null
 
   const items = data?.items ?? []
-  if (!isPending && items.length === 0) return null
+  if (!isPending && items.length < minItems) return null
 
   return (
     <section className={styles.section} aria-labelledby={id}>

@@ -13,6 +13,7 @@ import { ActiveFilterChips } from '@/features/catalog/ActiveFilterChips'
 import { findCategoryPath } from '@/features/catalog/categoryTree'
 import { Seo } from '@/seo/Seo'
 import { breadcrumbJsonLd } from '@/seo/jsonLd'
+import { useSiteOrigin } from '@/features/store-context/useSiteOrigin'
 import { EmptyCatalog } from '@/features/catalog/EmptyCatalog'
 import { ProductCard } from '@/features/catalog/ProductCard'
 import { ProductGridSkeleton } from '@/features/catalog/ProductGridSkeleton'
@@ -41,6 +42,7 @@ function getSort(value: string | null): ListProductsParams['sort'] {
 }
 
 export function ProductListPage() {
+  const siteOrigin = useSiteOrigin()
   const [searchParams, setSearchParams] = useSearchParams()
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false)
   const categoryId = searchParams.get('categoryId') ?? undefined
@@ -143,7 +145,9 @@ export function ProductListPage() {
         canonicalPath={canonicalPath}
         noindex={isFilteredVariant}
         jsonLd={
-          isFilteredVariant ? undefined : (breadcrumbJsonLd(breadcrumbs) ?? undefined)
+          isFilteredVariant
+            ? undefined
+            : (breadcrumbJsonLd(breadcrumbs, siteOrigin) ?? undefined)
         }
       />
       <Breadcrumbs items={breadcrumbs} />

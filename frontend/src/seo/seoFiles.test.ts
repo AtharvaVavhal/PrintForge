@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { STATIC_PUBLIC_PATHS, buildRobotsTxt, buildSitemapXml } from './seoFiles'
 
 describe('buildRobotsTxt', () => {
-  const txt = buildRobotsTxt('https://www.printforge.in/')
+  const txt = buildRobotsTxt('https://store.example/')
 
   it('allows crawling and points at the sitemap on the given origin', () => {
     expect(txt).toContain('User-agent: *')
     expect(txt).toContain('Allow: /')
-    expect(txt).toContain('Sitemap: https://www.printforge.in/sitemap.xml')
+    expect(txt).toContain('Sitemap: https://store.example/sitemap.xml')
   })
 
   it('disallows every private / utility path', () => {
@@ -24,7 +24,7 @@ describe('buildRobotsTxt', () => {
 })
 
 describe('buildSitemapXml', () => {
-  const xml = buildSitemapXml('https://www.printforge.in')
+  const xml = buildSitemapXml('https://store.example')
 
   it('is well-formed XML with a urlset', () => {
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true)
@@ -35,13 +35,13 @@ describe('buildSitemapXml', () => {
   it('lists exactly the known static public URLs, absolute on the origin', () => {
     const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1])
     expect(locs).toEqual([
-      'https://www.printforge.in/',
-      'https://www.printforge.in/products',
-      'https://www.printforge.in/about',
-      'https://www.printforge.in/contact',
-      'https://www.printforge.in/privacy',
-      'https://www.printforge.in/terms',
-      'https://www.printforge.in/refund-policy',
+      'https://store.example/',
+      'https://store.example/products',
+      'https://store.example/about',
+      'https://store.example/contact',
+      'https://store.example/privacy',
+      'https://store.example/terms',
+      'https://store.example/refund-policy',
     ])
   })
 

@@ -7,6 +7,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AppConfig } from './common/config/configuration';
 import { API_PREFIX } from './common/constants/app.constants';
+import { buildCorsOptions } from './common/tenant/store-domain-resolution/cors/cors-options';
+import { StorefrontCorsPolicy } from './common/tenant/store-domain-resolution/cors/storefront-cors.policy';
 
 // §30 "Sentry (both apps)" — initialized before Nest bootstraps (so it's
 // live for any error during module init too), guarded by SENTRY_DSN: a
@@ -35,11 +37,19 @@ async function bootstrap(): Promise<void> {
   app.use(helmet());
   app.use(cookieParser());
 
-  // Exact origin, credentialed — never a wildcard (§23).
-  app.enableCors({
-    origin: configService.get('frontendUrl', { infer: true }),
-    credentials: true,
-  });
+  // Phase 9 W7 (spec §9, ⚖️ S-9) — an origin PREDICATE in place of the single
+  // static `frontendUrl` string. Still credentialed, still never a wildcard:
+  // the `cors` package echoes the request's own origin only when the
+  // predicate returns true, and adds `Vary: Origin` for us.
+  //
+  // In `legacy_single_store` mode the predicate admits only the `FRONTEND_URL`
+  // origin, which is byte-for-byte the previous behaviour — the dynamic
+  // storefront allow-list activates only once the resolver is flipped to
+  // `host_resolution` (mode coupling; see the policy's own doc comment).
+  //
+  // The options live in `buildCorsOptions` so the e2e harness can install the
+  // identical wiring rather than a look-alike (see that function's comment).
+  app.enableCors(buildCorsOptions(app.get(StorefrontCorsPolicy)));
 
   // whitelist + forbidNonWhitelisted: unexpected/extra fields are rejected,
   // never silently dropped or trusted (§23).

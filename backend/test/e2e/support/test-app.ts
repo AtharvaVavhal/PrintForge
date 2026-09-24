@@ -15,6 +15,8 @@ import { FakeCloudinaryService } from './fake-cloudinary.service';
 import { BILLING_PROVIDER } from '../../../src/subscriptions/billing-provider.token';
 import { FakeBillingProvider } from '../../../src/subscriptions/fake-billing-provider';
 import { DOMAIN_DNS_RESOLVER } from '../../../src/store-domains/dns/domain-dns-resolver';
+import { buildCorsOptions } from '../../../src/common/tenant/store-domain-resolution/cors/cors-options';
+import { StorefrontCorsPolicy } from '../../../src/common/tenant/store-domain-resolution/cors/storefront-cors.policy';
 import { DOMAIN_HOSTING_PROVIDER } from '../../../src/common/tenant/store-domain-resolution/hosting/domain-hosting-provider';
 import { FakeDomainHostingProvider } from '../../../src/common/tenant/store-domain-resolution/hosting/fake-domain-hosting.provider';
 import { FakeDnsResolver } from './fake-dns-resolver';
@@ -168,6 +170,53 @@ export async function createTestAppWithDomainFakes(): Promise<
   const app = moduleRef.createNestApplication({ rawBody: true });
   app.setGlobalPrefix(API_PREFIX);
   app.use(cookieParser());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  await app.init();
+
+  const prisma = app.get(PrismaService);
+  return { app, prisma, dns, hosting };
+}
+
+/**
+ * Phase 9 W7 — `createTestAppWithDomainFakes()` PLUS the real CORS wiring
+ * (`buildCorsOptions`, the same function `main.ts` installs). Separate because
+ * every other e2e file must keep its exact current wiring: those suites send
+ * `Origin` headers constantly, and while a CORS denial never blocks a request
+ * server-side (it only omits the response header), installing middleware into
+ * their apps for no reason is churn this repo's harness convention avoids.
+ *
+ * This is what makes the W7 assertions real: the suite reads
+ * `Access-Control-Allow-Origin` off actual responses and preflights rather
+ * than trusting the predicate's unit-level verdict.
+ */
+export async function createTestAppWithCors(): Promise<
+  TestApp & { dns: FakeDnsResolver; hosting: FakeDomainHostingProvider }
+> {
+  const dns = new FakeDnsResolver();
+  const hosting = new FakeDomainHostingProvider();
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(CloudinaryService)
+    .useClass(FakeCloudinaryService)
+    .overrideProvider(BILLING_PROVIDER)
+    .useClass(FakeBillingProvider)
+    .overrideProvider(DOMAIN_DNS_RESOLVER)
+    .useValue(dns)
+    .overrideProvider(DOMAIN_HOSTING_PROVIDER)
+    .useValue(hosting)
+    .compile();
+
+  const app = moduleRef.createNestApplication({ rawBody: true });
+  app.setGlobalPrefix(API_PREFIX);
+  app.use(cookieParser());
+  app.enableCors(buildCorsOptions(app.get(StorefrontCorsPolicy)));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

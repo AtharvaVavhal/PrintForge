@@ -3,6 +3,14 @@ import type { Product } from '@/types/catalog'
 import type { Crumb } from '@/components/ui/Breadcrumbs'
 import { breadcrumbJsonLd, describeProduct, productJsonLd, websiteJsonLd } from './jsonLd'
 
+/**
+ * Phase 9 W7 (spec §10.2): the builders take the site origin as an argument
+ * now, so these assertions use an arbitrary served host — proving the output
+ * follows whatever host the store is served on, which is the whole point. No
+ * `printforge.in` literal remains anywhere under `src/seo/` (§14.6).
+ */
+const SERVED_ORIGIN = 'https://shop.example'
+
 function buildProduct(overrides: Partial<Product> = {}): Product {
   return {
     id: 'p1',
@@ -27,19 +35,19 @@ function buildProduct(overrides: Partial<Product> = {}): Product {
 
 describe('productJsonLd', () => {
   it('emits only real, server-provided fields', () => {
-    const ld = productJsonLd(buildProduct(), '/products/ceramic-mug')
+    const ld = productJsonLd(buildProduct(), '/products/ceramic-mug', SERVED_ORIGIN)
 
     expect(ld).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'Product',
       name: 'Ceramic Mug',
-      url: 'https://www.printforge.in/products/ceramic-mug',
+      url: `${SERVED_ORIGIN}/products/ceramic-mug`,
       offers: {
         '@type': 'Offer',
         price: '150.00',
         priceCurrency: 'INR',
         availability: 'https://schema.org/InStock',
-        url: 'https://www.printforge.in/products/ceramic-mug',
+        url: `${SERVED_ORIGIN}/products/ceramic-mug`,
       },
     })
     // Nothing fabricated.
@@ -59,6 +67,7 @@ describe('productJsonLd', () => {
         ],
       }),
       '/products/ceramic-mug',
+      SERVED_ORIGIN,
     )
     expect(ld.image).toEqual(['https://cdn/a.png', 'https://cdn/b.png'])
   })
@@ -67,6 +76,7 @@ describe('productJsonLd', () => {
     const withReviews = productJsonLd(
       buildProduct({ avgRating: '4.50', reviewCount: 8 }),
       '/products/ceramic-mug',
+      SERVED_ORIGIN,
     )
     expect(withReviews.aggregateRating).toEqual({
       '@type': 'AggregateRating',
@@ -74,7 +84,11 @@ describe('productJsonLd', () => {
       reviewCount: 8,
     })
 
-    const noReviews = productJsonLd(buildProduct({ avgRating: null, reviewCount: 0 }), '/x')
+    const noReviews = productJsonLd(
+      buildProduct({ avgRating: null, reviewCount: 0 }),
+      '/x',
+      SERVED_ORIGIN,
+    )
     expect(noReviews).not.toHaveProperty('aggregateRating')
   })
 
@@ -87,6 +101,7 @@ describe('productJsonLd', () => {
         ],
       }),
       '/x',
+      SERVED_ORIGIN,
     )
     expect((out.offers as Record<string, unknown>).availability).toBe('https://schema.org/OutOfStock')
 
@@ -98,6 +113,7 @@ describe('productJsonLd', () => {
         ],
       }),
       '/x',
+      SERVED_ORIGIN,
     )
     expect((partial.offers as Record<string, unknown>).availability).toBe('https://schema.org/InStock')
   })
@@ -127,31 +143,31 @@ describe('breadcrumbJsonLd', () => {
       { label: 'All products', to: '/products' },
       { label: 'Ceramic Mug' },
     ]
-    const ld = breadcrumbJsonLd(crumbs)
+    const ld = breadcrumbJsonLd(crumbs, SERVED_ORIGIN)
     expect(ld).toEqual({
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
       itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://www.printforge.in/' },
-        { '@type': 'ListItem', position: 2, name: 'All products', item: 'https://www.printforge.in/products' },
+        { '@type': 'ListItem', position: 1, name: 'Home', item: `${SERVED_ORIGIN}/` },
+        { '@type': 'ListItem', position: 2, name: 'All products', item: `${SERVED_ORIGIN}/products` },
         { '@type': 'ListItem', position: 3, name: 'Ceramic Mug' },
       ],
     })
   })
 
   it('returns null for a trivial (single-item) trail', () => {
-    expect(breadcrumbJsonLd([{ label: 'Home', to: '/' }])).toBeNull()
+    expect(breadcrumbJsonLd([{ label: 'Home', to: '/' }], SERVED_ORIGIN)).toBeNull()
   })
 })
 
 describe('websiteJsonLd', () => {
   it('is a plain WebSite entity with no invented SearchAction or Organization data', () => {
-    const ld = websiteJsonLd()
+    const ld = websiteJsonLd(SERVED_ORIGIN)
     expect(ld).toEqual({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: 'PrintForge',
-      url: 'https://www.printforge.in/',
+      url: `${SERVED_ORIGIN}/`,
     })
   })
 })
