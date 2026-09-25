@@ -104,13 +104,13 @@ function missingProductionKeys(config: Record<string, unknown>): string[] {
  * variables, applied in every environment but only when the variable is
  * actually present:
  *
- *   `PLATFORM_STOREFRONT_DOMAIN`         e.g. `stores.printforge.app`
+ *   `PLATFORM_STOREFRONT_DOMAIN`         e.g. `stores.printforge.world`
  *   `PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET` e.g. the hosting provider's target
  *
  * Both must be bare hostnames — no scheme, no port, no path, no wildcard —
  * because `PLATFORM_STOREFRONT_DOMAIN` is string-suffix-matched against a
  * normalised request hostname (`normaliseHost`), and a value like
- * `https://stores.printforge.app/` or `*.stores.printforge.app` would silently
+ * `https://stores.printforge.world/` or `*.stores.printforge.world` would silently
  * match nothing at all rather than failing visibly.
  *
  * Deliberately NOT added to `PRODUCTION_REQUIRED_KEYS`: spec §5.2 classes
@@ -147,6 +147,43 @@ function invalidStorefrontDomains(config: Record<string, unknown>): string[] {
     }
   }
   return messages;
+}
+
+/**
+ * Phase 9 §7.3 — the Vercel project-domain credentials (⚖️ P9-D3). Required in
+ * production **only when `PLATFORM_STOREFRONT_DOMAIN` is set**, exactly as the
+ * spec words it: that variable is what switches on platform-subdomain
+ * serving, and once storefront hostnames are being served on Vercel the
+ * adapter must be able to attach them and read their certificate state.
+ *
+ * Conditional rather than unconditional on purpose. `PLATFORM_STOREFRONT_DOMAIN`
+ * is itself deliberately not yet production-required (see
+ * `invalidStorefrontDomains` above and docs/ops/ENVIRONMENT.md), so a
+ * production boot that has configured neither must keep working — it simply
+ * has no storefront-domain feature, and the DI seam binds a non-issuing
+ * hosting provider. `VERCEL_TEAM_ID` stays optional in every case: it applies
+ * only to a team-owned Vercel project.
+ *
+ * Presence only. No format assertion is made about the token or the ids, and
+ * no value is ever echoed into a message.
+ */
+const VERCEL_KEYS_REQUIRED_WITH_PLATFORM_DOMAIN = [
+  'VERCEL_API_TOKEN',
+  'VERCEL_PROJECT_ID',
+] as const;
+
+function missingVercelKeys(config: Record<string, unknown>): string[] {
+  const platformDomain = config['PLATFORM_STOREFRONT_DOMAIN'];
+  if (typeof platformDomain !== 'string' || platformDomain.trim() === '') {
+    return [];
+  }
+  return VERCEL_KEYS_REQUIRED_WITH_PLATFORM_DOMAIN.filter((key) => {
+    const value = config[key];
+    return typeof value !== 'string' || value.trim() === '';
+  }).map(
+    (key) =>
+      `${key} is required in production when PLATFORM_STOREFRONT_DOMAIN is set`,
+  );
 }
 
 /**
@@ -194,6 +231,8 @@ export function validateEnv(
     messages.push(
       ...missingProductionKeys(config),
       ...invalidProductionMasterKey(config),
+      // Phase 9 §7.3 — conditional on PLATFORM_STOREFRONT_DOMAIN being set.
+      ...missingVercelKeys(config),
     );
   }
 

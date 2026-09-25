@@ -109,7 +109,7 @@ Verify only once the production domain is actually cut over. See
 
 | # | Check | Marking |
 |---|---|---|
-| D1 | `FRONTEND_URL` and `BACKEND_URL` share the registrable domain `printforge.in` (e.g. `www.printforge.in` + `api.printforge.in`) | Manual — **Not yet verified** |
+| D1 | `FRONTEND_URL` and `BACKEND_URL` share the registrable domain `printforge.in` (e.g. `www.printforge.in` + `api.printforge.in`) | Manual — **Not yet verified.** 2026-09-25: `printforge.in` is registered but **not delegated** (`NXDOMAIN`); production runs on the platform-provided Vercel + Render origins, i.e. the D3 case below. ⚖️ **P9-D10** moved Phase 9's Tenant #1 custom-domain canary to `www.printforge.world` and does **not** satisfy this check — D1–D3 remain an open launch prerequisite. |
 | D2 | With that setup, `SameSite=Strict` refresh cookie is sent on the refresh call and rotation works cross-subdomain | Manual — **Not yet verified** |
-| D3 | If frontend and backend are **not** same-site (e.g. `*.vercel.app` + `*.onrender.com`), refresh will fail — cookie not sent. This is the known reason the domain cutover is a launch prerequisite. | — |
+| D3 | ⚖️ **P9-D11 does not affect this finding, which stands as written.** If frontend and backend are **not** same-site (e.g. `*.vercel.app` + `*.onrender.com`), refresh will fail — cookie not sent. This is the known reason the domain cutover is a launch prerequisite. | — |
 | D4 | Razorpay dashboard webhook URL updated to the new `BACKEND_URL` after cutover | Manual — **Not yet verified** |

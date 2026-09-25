@@ -29,9 +29,12 @@ this repo). Topology is frozen — see [`README.md`](./README.md).
 See [`ENVIRONMENT.md`](./ENVIRONMENT.md). Summary of what MUST be present in
 production: `NODE_ENV=production`, `PORT`, `DATABASE_URL`,
 `JWT_ACCESS_SECRET`, `REFRESH_TOKEN_SECRET`, `RAZORPAY_KEY_ID`,
-`RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `CLOUDINARY_CLOUD_NAME`,
-`CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `RESEND_API_KEY`,
-`EMAIL_FROM_ADDRESS`, `FRONTEND_URL`, `BACKEND_URL`. `SENTRY_DSN` recommended.
+`RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`,
+`PAYMENT_CREDENTIALS_MASTER_KEY` (Phase 8 merchant-credential encryption
+master key — base64, exactly 32 bytes; generate with `openssl rand -base64
+32`), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`,
+`RESEND_API_KEY`, `EMAIL_FROM_ADDRESS`, `FRONTEND_URL`, `BACKEND_URL`.
+`SENTRY_DSN` recommended.
 
 ## 3. Database backup / check
 
@@ -80,9 +83,22 @@ in production — it can generate/rename migrations).
 1. Push to the deploy branch, or **Redeploy** in the Vercel dashboard.
 2. Build: `npm run build` (`tsc -b && vite build`) with `VITE_*` from the
    Vercel project settings.
-3. `robots.txt` / `sitemap.xml` are emitted at build time from `VITE_SITE_URL`
-   (or the default `https://www.printforge.in`).
+3. `robots.txt` / `sitemap.xml` are **no longer emitted at build time**. Phase 9
+   §10.3 retired the build-time generator: one shared deployment serves every
+   store, so both files are served per-host by the backend SEO routes, reached
+   through `vercel.json`'s rewrites (§12.2). `VITE_SITE_URL` is now only a
+   dev/preview override and has no production default — the site origin is
+   resolved at runtime from the served host.
 4. Vercel promotes the new deployment atomically; rollback is instant (step 10).
+
+⚖️ **P9-D11 — the Vercel deployment URL is not a customer-facing storefront.** The project's
+`*.vercel.app` deployment origin is an internal deployment origin and the platform/admin console
+origin. It has **no** `StoreDomain` row, so once `host_resolution` is active, storefront requests
+made straight to it return the generic unknown-host **404 by design** (Phase 9 spec §4.1.3a).
+`/admin/*` and `/platform/*` are unaffected — they never derive a store from `Origin`. Customers
+must reach a storefront on its configured hostname: `{store.slug}.stores.printforge.world`, or a
+`VERIFIED` + `ISSUED` custom domain. **Do not** publish or link the deployment URL as a storefront,
+and **do not** "fix" that 404 by registering the origin — that is the coupling P9-D11 declines.
 
 ## 7. Health checks
 
@@ -104,6 +120,20 @@ checklist. Minimum before declaring a deploy good:
   registered user's `role` is set to `ADMIN` directly in the database
   (`UPDATE users SET role='ADMIN' WHERE email='...'`, or via Prisma Studio
   against production). Registration always creates `CUSTOMER`.
+- (Phase 5 — SaaS Master Plan §11, decision P5-D1) promote the first
+  `SUPER_ADMIN` — no platform super-admin exists until a registered user's
+  `platformRole` is set to `SUPER_ADMIN` directly in the database
+  (`UPDATE users SET "platformRole"='SUPER_ADMIN' WHERE email='...'`, or via
+  Prisma Studio against production). This is independent of `role`/`ADMIN`
+  above and of any `TenantMembership` (frozen SaaS invariant 4) — the
+  existing Tenant #1 `OWNER` is **not** automatically promoted; identify and
+  promote only the one specific, intended platform-operator account.
+  Immediately verify with
+  `SELECT id, email, "platformRole" FROM users WHERE "platformRole" IS NOT NULL;`
+  and confirm it returns exactly the intended user, nothing more. Any later
+  grant or revocation of `platformRole` is the same kind of deliberate,
+  single-row, verified administrative action — never scripted, never
+  automatic at boot or on deploy.
 
 ## 9. Post-deployment verification
 

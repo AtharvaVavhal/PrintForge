@@ -6,7 +6,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { resolvePrimaryStoreId } from '../primary-store';
 import { StorefrontTenantResolver } from '../storefront-tenant.resolver';
 import type { TenantContext } from '../tenant-context';
-import { parseStorefrontOrigin } from './host-normalisation';
+import { normaliseHost, parseStorefrontOrigin } from './host-normalisation';
 import { RequestWithStoreContext, StoreContext } from './store-context';
 import { StoreDomainResolver } from './store-domain-resolver.service';
 import { StoreNotFoundException } from './store-resolution.exceptions';
@@ -31,7 +31,11 @@ export interface PublicReadScope {
 
 export interface StorefrontRequest extends RequestWithStoreContext {
   hostname?: string;
-  headers: { origin?: string | string[] };
+  headers: {
+    origin?: string | string[];
+    /** §12.2 / S-12 fallback signal for the two crawler routes only. */
+    'x-forwarded-host'?: string | string[];
+  };
   tenantContext?: TenantContext;
 }
 
@@ -136,6 +140,62 @@ export class StoreContextService {
     }
     const context = await this.resolve(request);
     return { tenantId: context.tenantId, storeId: context.storeId };
+  }
+
+  /**
+   * Phase 9 §12.1 — the storefront scope for the two crawler routes
+   * (`/storefront/seo/robots.txt`, `/storefront/seo/sitemap.xml`).
+   *
+   * Those routes are reached through a Vercel edge rewrite that carries the
+   * matched storefront host as a query parameter (§12.2), because a crawler's
+   * request has no `Origin` header at all — so for them, and only for them,
+   * the signal order is: edge-captured host, else `x-forwarded-host`, else
+   * `Origin`, else unresolved.
+   *
+   * 🔎 **S-12 contingency, implemented.** The `x-forwarded-host` step is the
+   * documented fallback for the case where Vercel's host-capture rewrite
+   * syntax is unavailable: a rewrite without capture still arrives with the
+   * originally-requested host in that header. It is trusted exactly as much as
+   * `?host=` — which is to say not at all beyond being a lookup key.
+   *
+   * The captured host gets exactly the same treatment as every other signal
+   * (§4.1 trust model): normalised, then looked up against `StoreDomain` and
+   * run through the §4.3 serving gate and liveness checks. It is an UNTRUSTED
+   * LOOKUP KEY, never an identifier — a forged `?host=` can only ever select a
+   * store whose PUBLIC robots/sitemap content it could have fetched by asking
+   * that host directly, and it grants nothing else.
+   *
+   * Mode-coupled like every other consumer (§15 lists the SEO routes
+   * explicitly): in `legacy_single_store` the pre-Phase-9 resolver answers, so
+   * these routes behave as a single-store site until the W8 flip.
+   */
+  async resolveForSeo(
+    request: StorefrontRequest,
+    hostParam?: string,
+  ): Promise<StoreContext> {
+    const { mode } = await this.modeService.getMode();
+    if (mode !== 'host_resolution') {
+      return this.resolveLegacy(request);
+    }
+
+    const forwarded = request.headers['x-forwarded-host'];
+    for (const candidate of [
+      hostParam,
+      Array.isArray(forwarded) ? forwarded[0] : forwarded,
+    ]) {
+      const host = normaliseHost(candidate, {
+        allowLoopback: this.allowLoopback,
+      });
+      if (host !== null) {
+        return this.domainResolver.resolveHost(
+          host,
+          this.requireHttps ? 'https' : 'http',
+        );
+      }
+    }
+    // No usable captured host — fall back to the `Origin` signal, which is
+    // the same path every other storefront read takes.
+    return this.resolveByOrigin(request);
   }
 
   private async resolveByOrigin(

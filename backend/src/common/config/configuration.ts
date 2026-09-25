@@ -52,7 +52,7 @@ export interface AppConfig {
    * production enforcement (Tier-2, like `FRONTEND_URL`) is added in W8,
    * not here. Values are hostnames, never secrets.
    *   - `platformStorefrontDomain`: the base domain under which every
-   *     store's PLATFORM_SUBDOMAIN row lives (P9-D6: `stores.printforge.app`).
+   *     store's PLATFORM_SUBDOMAIN row lives (P9-D6: `stores.printforge.world`).
    *     When set, a merchant may not claim a CUSTOM hostname beneath it.
    *   - `customDomainCnameTarget`: the hosting-provider CNAME target a
    *     merchant is instructed to point a CUSTOM hostname at (P9-D3:
@@ -62,6 +62,20 @@ export interface AppConfig {
   storefrontDomains: {
     platformStorefrontDomain: string | null;
     customDomainCnameTarget: string | null;
+  };
+  /**
+   * Phase 9 §7.3 — the Vercel project the storefront hostnames are attached
+   * to (⚖️ P9-D3). Names fixed by the spec; values are Render secrets
+   * provisioned by ops and never recorded in this repository. All three are
+   * optional at the type level: when `apiToken`/`projectId` are absent the DI
+   * seam binds a non-issuing provider instead, so a boot without them is a
+   * documented fail-closed degradation rather than a crash (§17.1 item 4 is a
+   * W8 gate, so production may legitimately boot before they exist).
+   */
+  vercel: {
+    apiToken: string | null;
+    projectId: string | null;
+    teamId: string | null;
   };
   resend: {
     apiKey: string;
@@ -147,6 +161,17 @@ function loadTenantEnforcement(): Record<
 }
 
 /** Lower-cased, trailing-dot-stripped, or `null` when unset/blank. */
+/**
+ * Trim-and-null for an optional opaque value (Phase 9 §7.3). Deliberately
+ * NOT `optionalHostname` — these are a bearer token and provider ids, so no
+ * normalisation (lower-casing, dot-stripping) may be applied to them, and the
+ * value is never logged or echoed anywhere.
+ */
+function optionalSecret(raw: string | undefined): string | null {
+  const value = raw?.trim() ?? '';
+  return value.length > 0 ? value : null;
+}
+
 function optionalHostname(raw: string | undefined): string | null {
   const value = raw?.trim().toLowerCase().replace(/\.$/, '') ?? '';
   return value.length > 0 ? value : null;
@@ -186,6 +211,11 @@ export default (): AppConfig => ({
     customDomainCnameTarget: optionalHostname(
       process.env.PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET,
     ),
+  },
+  vercel: {
+    apiToken: optionalSecret(process.env.VERCEL_API_TOKEN),
+    projectId: optionalSecret(process.env.VERCEL_PROJECT_ID),
+    teamId: optionalSecret(process.env.VERCEL_TEAM_ID),
   },
   resend: {
     apiKey: process.env.RESEND_API_KEY ?? '',

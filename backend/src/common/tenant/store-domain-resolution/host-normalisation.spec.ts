@@ -7,8 +7,8 @@ const dev = { allowLoopback: true, requireHttps: false };
 describe('normaliseHost (spec §4.2)', () => {
   it('lowercases, strips a trailing dot, keeps a valid multi-label hostname', () => {
     expect(normaliseHost('Shop-A.Example.', prod)).toBe('shop-a.example');
-    expect(normaliseHost('a.stores.printforge.app', prod)).toBe(
-      'a.stores.printforge.app',
+    expect(normaliseHost('a.stores.printforge.world', prod)).toBe(
+      'a.stores.printforge.world',
     );
   });
 

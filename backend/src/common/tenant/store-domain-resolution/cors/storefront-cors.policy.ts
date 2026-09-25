@@ -55,7 +55,7 @@ const ORIGIN_WITH_PORT = /^https?:\/\/[^/?#]*:\d{1,5}$/i;
  * activates only in `host_resolution`, in the same TTL window as the resolver
  * flip. That coupling is the point: with the allow-list live while the
  * resolver was still in legacy mode, a request from
- * `x.stores.printforge.app` would be CORS-admitted and then answered by the
+ * `x.stores.printforge.world` would be CORS-admitted and then answered by the
  * legacy resolver with Tenant #1's data — the §15 KEY RISKS *domain
  * misrouting* (Critical), manufactured for a testability benefit.
  *

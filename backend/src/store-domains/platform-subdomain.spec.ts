@@ -16,21 +16,21 @@ import {
 describe('Phase 9 W6 — platform subdomain provisioning (spec §5 / S-5)', () => {
   describe('derivePlatformSubdomain', () => {
     it('joins slug and platform domain into the normalised lookup key', () => {
-      expect(derivePlatformSubdomain('acme', 'stores.printforge.app')).toBe(
-        'acme.stores.printforge.app',
+      expect(derivePlatformSubdomain('acme', 'stores.printforge.world')).toBe(
+        'acme.stores.printforge.world',
       );
     });
 
     it('normalises case and a trailing dot, matching the resolver key', () => {
-      expect(derivePlatformSubdomain('ACME', 'Stores.PrintForge.App.')).toBe(
-        'acme.stores.printforge.app',
+      expect(derivePlatformSubdomain('ACME', 'Stores.PrintForge.World.')).toBe(
+        'acme.stores.printforge.world',
       );
     });
 
     it('returns null for a slug that cannot form a valid hostname', () => {
       for (const slug of ['bad slug', 'under_score', '', '-leading']) {
         expect(
-          derivePlatformSubdomain(slug, 'stores.printforge.app'),
+          derivePlatformSubdomain(slug, 'stores.printforge.world'),
         ).toBeNull();
       }
     });
@@ -79,7 +79,7 @@ describe('Phase 9 W6 — platform subdomain provisioning (spec §5 / S-5)', () =
       storeId: 'store-1',
       tenantId: 'tenant-1',
       storeSlug: 'acme',
-      platformStorefrontDomain: 'stores.printforge.app',
+      platformStorefrontDomain: 'stores.printforge.world',
     };
 
     it('creates an always-on VERIFIED row with a null tlsStatus and no token', async () => {
@@ -88,12 +88,12 @@ describe('Phase 9 W6 — platform subdomain provisioning (spec §5 / S-5)', () =
 
       expect(result).toEqual({
         outcome: 'created',
-        hostname: 'acme.stores.printforge.app',
+        hostname: 'acme.stores.printforge.world',
         storeDomainId: 'new-row',
       });
       expect(created).toHaveLength(1);
       expect(created[0]).toMatchObject({
-        hostname: 'acme.stores.printforge.app',
+        hostname: 'acme.stores.printforge.world',
         type: 'PLATFORM_SUBDOMAIN',
         verificationStatus: 'VERIFIED',
         verificationMethod: null,
@@ -122,14 +122,14 @@ describe('Phase 9 W6 — platform subdomain provisioning (spec §5 / S-5)', () =
         {
           id: 'existing',
           storeId: 'store-1',
-          hostname: 'acme.stores.printforge.app',
+          hostname: 'acme.stores.printforge.world',
           isPrimary: true,
         },
       ]);
       const result = await ensurePlatformSubdomain(tx, base);
       expect(result).toEqual({
         outcome: 'existing',
-        hostname: 'acme.stores.printforge.app',
+        hostname: 'acme.stores.printforge.world',
         storeDomainId: 'existing',
       });
       expect(created).toHaveLength(0);
@@ -140,7 +140,7 @@ describe('Phase 9 W6 — platform subdomain provisioning (spec §5 / S-5)', () =
         {
           id: 'other',
           storeId: 'store-OTHER',
-          hostname: 'acme.stores.printforge.app',
+          hostname: 'acme.stores.printforge.world',
           isPrimary: true,
         },
       ]);

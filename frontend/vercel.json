@@ -4,6 +4,16 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    {
+      "source": "/robots.txt",
+      "has": [{ "type": "host", "value": "(?<storehost>.*)" }],
+      "destination": "https://printforge-8c9m.onrender.com/api/v1/storefront/seo/robots.txt?host=:storehost"
+    },
+    {
+      "source": "/sitemap.xml",
+      "has": [{ "type": "host", "value": "(?<storehost>.*)" }],
+      "destination": "https://printforge-8c9m.onrender.com/api/v1/storefront/seo/sitemap.xml?host=:storehost"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

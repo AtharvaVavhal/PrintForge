@@ -359,6 +359,85 @@ describe('Phase 9 W7 — StorefrontCorsPolicy (spec §9)', () => {
     });
   });
 
+  // ─── ⚖️ P9-D11: CORS admission is NOT storefront resolution ─────────────
+
+  /**
+   * ⚖️ **P9-D11 (OPTION C, 2026-09-25)** — spec §4.1.3a. The frontend's Vercel
+   * deployment origin (`FRONTEND_URL`) is an internal deployment origin and the
+   * platform/admin console origin. It is NOT a customer-facing storefront
+   * hostname and must never receive a `StoreDomain` row.
+   *
+   * These cases pin the distinction that section exists to prevent an operator
+   * from misreading: this policy admits that origin in BOTH modes, while the
+   * resolver — which owns storefront resolution and is deliberately not
+   * consulted here — has no corresponding exemption and answers the generic 404
+   * (proven in `store-domain-resolver.service.spec.ts` and
+   * `test/e2e/domain-resolution.e2e-spec.ts`). A CORS header on that origin is
+   * therefore NOT evidence that it resolves to a store.
+   */
+  describe('⚖️ P9-D11 — the deployment origin is admitted but never resolved', () => {
+    it('admits FRONTEND_URL in host_resolution WITHOUT any StoreDomain row', async () => {
+      lookup.mockResolvedValue(null); // no row exists, and none is wanted
+      mode.mockResolvedValue({ mode: 'host_resolution', source: 'row' });
+
+      expect(await makePolicy('production').evaluate(FRONTEND_URL)).toEqual({
+        allowed: true,
+        reason: 'platform_admin_origin',
+      });
+      // The decisive assertion: admission did not consult StoreDomain at all,
+      // so it cannot be read as "this host is registered as a storefront".
+      expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('admits FRONTEND_URL in legacy_single_store too — admission is mode-independent', async () => {
+      mode.mockResolvedValue({ mode: 'legacy_single_store', source: 'row' });
+      expect(await makePolicy('production').evaluate(FRONTEND_URL)).toEqual({
+        allowed: true,
+        reason: 'platform_admin_origin',
+      });
+      expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('never classifies the deployment origin as a platform subdomain or a served custom domain', async () => {
+      const verdict = await makePolicy('production').evaluate(FRONTEND_URL);
+      expect(verdict.reason).toBe('platform_admin_origin');
+      expect(verdict.reason).not.toBe('platform_subdomain');
+      expect(verdict.reason).not.toBe('custom_domain_served');
+    });
+
+    it('is not under PLATFORM_STOREFRONT_DOMAIN, so it can never match the always-on pattern', () => {
+      const host = new URL(FRONTEND_URL).hostname;
+      expect(host.endsWith(`.${PLATFORM_DOMAIN}`)).toBe(false);
+    });
+
+    it('a customer-facing storefront host with no row is DENIED — the contrast case', async () => {
+      lookup.mockResolvedValue(null);
+      mode.mockResolvedValue({ mode: 'host_resolution', source: 'row' });
+      // Same "no row" state as the deployment origin, but no admin-origin
+      // exemption applies, so this one is denied as an unknown host.
+      expect(
+        await makePolicy('production').evaluate(
+          'https://not-registered.example',
+        ),
+      ).toEqual({ allowed: false, reason: 'unknown_host' });
+    });
+
+    it('platform-subdomain behaviour is unchanged by P9-D11', async () => {
+      mode.mockResolvedValue({ mode: 'host_resolution', source: 'row' });
+      const policy = makePolicy('production');
+      expect(
+        await policy.evaluate(`https://shop-a.${PLATFORM_DOMAIN}`),
+      ).toEqual({
+        allowed: true,
+        reason: 'platform_subdomain',
+      });
+      expect(await policy.evaluate(`https://a.b.${PLATFORM_DOMAIN}`)).toEqual({
+        allowed: false,
+        reason: 'platform_subdomain_too_deep',
+      });
+    });
+  });
+
   // ─── configuration edge case ───────────────────────────────────────────
 
   it('with PLATFORM_STOREFRONT_DOMAIN unset, no host is admitted by pattern', async () => {

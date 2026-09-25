@@ -112,7 +112,7 @@ describe('validateEnv', () => {
       'PLATFORM_CUSTOM_DOMAIN_CNAME_TARGET',
     ])('accepts a bare hostname for %s', (key) => {
       expect(() =>
-        validateEnv({ ...BASE, [key]: 'stores.printforge.app' }),
+        validateEnv({ ...BASE, [key]: 'stores.printforge.world' }),
       ).not.toThrow();
     });
 
@@ -120,7 +120,7 @@ describe('validateEnv', () => {
       expect(() =>
         validateEnv({
           ...BASE,
-          PLATFORM_STOREFRONT_DOMAIN: 'Stores.PrintForge.App.',
+          PLATFORM_STOREFRONT_DOMAIN: 'Stores.PrintForge.World.',
         }),
       ).not.toThrow();
     });
@@ -134,10 +134,10 @@ describe('validateEnv', () => {
     });
 
     it.each([
-      ['a scheme', 'https://stores.printforge.app'],
-      ['a trailing path', 'stores.printforge.app/'],
-      ['a wildcard', '*.stores.printforge.app'],
-      ['a port', 'stores.printforge.app:443'],
+      ['a scheme', 'https://stores.printforge.world'],
+      ['a trailing path', 'stores.printforge.world/'],
+      ['a wildcard', '*.stores.printforge.world'],
+      ['a port', 'stores.printforge.world:443'],
       ['a single label', 'localhost'],
       ['an underscore', 'under_score.example'],
     ])('rejects %s', (_label, value) => {
@@ -175,9 +175,104 @@ describe('validateEnv', () => {
           ...BASE,
           ...PROD_INTEGRATION,
           NODE_ENV: 'production',
-          PLATFORM_STOREFRONT_DOMAIN: 'https://stores.printforge.app',
+          PLATFORM_STOREFRONT_DOMAIN: 'https://stores.printforge.world',
         }),
       ).toThrow(/must be a bare hostname/);
+    });
+  });
+
+  // ─── Phase 9 §7.3 — Vercel project-domain credentials ──────────────────
+
+  describe('VERCEL_API_TOKEN / VERCEL_PROJECT_ID / VERCEL_TEAM_ID', () => {
+    const PROD = { ...BASE, ...PROD_INTEGRATION, NODE_ENV: 'production' };
+    const VERCEL = {
+      VERCEL_API_TOKEN: 'token-placeholder-not-a-secret',
+      VERCEL_PROJECT_ID: 'prj_placeholder',
+    };
+
+    it('stay optional in production while PLATFORM_STOREFRONT_DOMAIN is unset', () => {
+      expect(() => validateEnv({ ...PROD })).not.toThrow();
+    });
+
+    it('become required in production once PLATFORM_STOREFRONT_DOMAIN is set', () => {
+      expect(() =>
+        validateEnv({
+          ...PROD,
+          PLATFORM_STOREFRONT_DOMAIN: 'stores.example.com',
+        }),
+      ).toThrow(
+        /VERCEL_API_TOKEN is required in production when PLATFORM_STOREFRONT_DOMAIN is set/,
+      );
+    });
+
+    it('names every missing one', () => {
+      let message = '';
+      try {
+        validateEnv({
+          ...PROD,
+          PLATFORM_STOREFRONT_DOMAIN: 'stores.example.com',
+        });
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      expect(message).toContain('VERCEL_API_TOKEN');
+      expect(message).toContain('VERCEL_PROJECT_ID');
+    });
+
+    it('accepts production with the platform domain AND the credentials set', () => {
+      expect(() =>
+        validateEnv({
+          ...PROD,
+          PLATFORM_STOREFRONT_DOMAIN: 'stores.example.com',
+          ...VERCEL,
+        }),
+      ).not.toThrow();
+    });
+
+    it('VERCEL_TEAM_ID stays optional — it only applies to a team-owned project', () => {
+      expect(() =>
+        validateEnv({
+          ...PROD,
+          PLATFORM_STOREFRONT_DOMAIN: 'stores.example.com',
+          ...VERCEL,
+        }),
+      ).not.toThrow();
+      expect(PRODUCTION_REQUIRED_KEYS).not.toContain('VERCEL_TEAM_ID');
+    });
+
+    it('a whitespace-only credential counts as missing', () => {
+      expect(() =>
+        validateEnv({
+          ...PROD,
+          PLATFORM_STOREFRONT_DOMAIN: 'stores.example.com',
+          VERCEL_API_TOKEN: '   ',
+          VERCEL_PROJECT_ID: 'prj_placeholder',
+        }),
+      ).toThrow(/VERCEL_API_TOKEN is required in production/);
+    });
+
+    it('never echoes a credential value into the message', () => {
+      let message = '';
+      try {
+        validateEnv({
+          ...PROD,
+          PLATFORM_STOREFRONT_DOMAIN: 'stores.example.com',
+          VERCEL_PROJECT_ID: 'prj_super_secret_value',
+        });
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      expect(message).toContain('VERCEL_API_TOKEN');
+      expect(message).not.toContain('prj_super_secret_value');
+    });
+
+    it('are not enforced outside production', () => {
+      expect(() =>
+        validateEnv({
+          ...BASE,
+          PLATFORM_STOREFRONT_DOMAIN: 'stores.example.com',
+        }),
+      ).not.toThrow();
     });
   });
 

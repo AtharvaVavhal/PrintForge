@@ -1,2 +1,20 @@
 .env
 backend/*.tar.gz
+
+# Database dumps / snapshots — NEVER commit.
+# `BACKUP-RESTORE.md` §5: a pg_dump "contains all customer PII and password
+# hashes — treat as a secret". These are pre-migration restore points (e.g. the
+# Phase 9 §17.2 step-1 G-9 snapshot) and belong in access-controlled storage,
+# not in git.
+*.dump
+*.sql.gz
+*.dump.gz
+
+# OS
+.DS_Store
+
+# Local archives (source/UX bundles, never part of a release)
+*.zip
+
+# Root-level node_modules (e.g. from an `npx vercel` run) — never part of a release
+node_modules/

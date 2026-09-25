@@ -18,9 +18,16 @@ const REFRESH_PATH = '/auth/refresh'
 /**
  * The one axios instance every API call in this app goes through
  * (BLUEPRINT-v1.2.md §18). `withCredentials: true` is required for the
- * HttpOnly refresh cookie to be sent/received on cross-subdomain requests
- * (www.printforge.in <-> api.printforge.in — same registrable domain, so
- * SameSite=Strict still applies, see auth.service.ts's cookie config).
+ * HttpOnly refresh cookie to be sent/received at all.
+ *
+ * ⚠️ That cookie is `SameSite=Strict` (auth.service.ts), which only works when
+ * the frontend and the API share a registrable domain — the intended
+ * `www.printforge.in` <-> `api.printforge.in` setup. That cutover has NOT
+ * happened, so production currently runs the frontend and API on different
+ * registrable domains (Vercel + Render), where a Strict cookie is not sent
+ * cross-site. This is the pre-existing, already-recorded launch prerequisite in
+ * docs/ops/PRODUCTION-SMOKE-TEST.md checks D1–D3 — not a Phase 9 change, and
+ * cookie handling on non-shared domains is Phase 12's (⚖️ P9-D4).
  */
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

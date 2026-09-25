@@ -10,7 +10,8 @@ import { StorefrontCorsPolicy } from './storefront-cors.policy';
  * Read-only and side-effect free: it returns the FULL `host_resolution`
  * verdict for the supplied origin whatever mode is actually in force, so W8
  * step 5 can verify the allow-list against the platform origin,
- * `www.printforge.in`, `<tenant1-slug>.stores.<platform>` and an unknown host
+ * `www.printforge.world` (⚖️ P9-D10 — Tenant #1's custom canary, only if B-3
+ * ran; §16.2a), `<tenant1-slug>.stores.<platform>` and an unknown host
  * BEFORE flipping the resolver — while live CORS is still legacy-restricted
  * (S-9). It emits no CORS header of its own and changes no state.
  *
